@@ -1,0 +1,1929 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>창호 실측 입력</title>
+<style>
+  :root {
+    --bg: #eceae6;
+    --panel: #ffffff;
+    --panel-2: #f6f4f1;
+    --ink: #23232a;
+    --ink-2: #5d5d67;
+    --ink-3: #8d8d97;
+    --line: #d9d5cf;
+    --accent: #d8442420;
+    --accent-solid: #d84424;
+    --accent-ink: #ffffff;
+    --mullion: #52565c;
+    --mullion-soft: #52565c1f;
+    --turn: #2f8577;
+    --turn-soft: #2f85771f;
+    --ok: #2f7d5a;
+    --shadow: 0 1px 2px rgba(35,35,42,.06), 0 8px 24px rgba(35,35,42,.06);
+    --r: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1a1e; --panel: #232329; --panel-2: #2b2b32;
+      --ink: #eceaea; --ink-2: #a8a8b2; --ink-3: #7c7c86; --line: #3a3a43;
+      --accent: #ff6a4520; --accent-solid: #ff6a45; --accent-ink: #1a1a1e;
+      --mullion: #9a9fa8; --mullion-soft: #9a9fa826;
+      --turn: #5fb8a8; --turn-soft: #5fb8a826; --ok: #62c398;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1a1a1e; --panel: #232329; --panel-2: #2b2b32;
+    --ink: #eceaea; --ink-2: #a8a8b2; --ink-3: #7c7c86; --line: #3a3a43;
+    --accent: #ff6a4520; --accent-solid: #ff6a45; --accent-ink: #1a1a1e;
+    --mullion: #9a9fa8; --mullion-soft: #9a9fa826;
+    --turn: #5fb8a8; --turn-soft: #5fb8a826; --ok: #62c398;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.55 "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 18px 22px 0; }
+  header h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
+  header p { margin: 0; color: var(--ink-3); font-size: 13px; }
+
+  .wrap {
+    display: grid; gap: 16px; padding: 16px 22px 40px;
+    grid-template-columns: minmax(0, 1fr) minmax(430px, 480px);
+    align-items: start;
+  }
+  @media (max-width: 1000px) { .wrap { grid-template-columns: minmax(0,1fr); } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden;
+  }
+  .card > h2 {
+    margin: 0; padding: 12px 16px; font-size: 13px; font-weight: 700;
+    letter-spacing: .04em; color: var(--ink-2); text-transform: uppercase;
+    border-bottom: 1px solid var(--line); background: var(--panel-2);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .card > h2 .hint { font-weight: 400; text-transform: none; letter-spacing: 0;
+                     color: var(--ink-3); font-size: 12px; margin-left: auto; }
+  #scalehint { color: var(--ink-3); font-size: 12.5px; align-self: center; }
+  .body { padding: 16px; }
+
+  label.field { display: block; margin-bottom: 6px; font-size: 12.5px; color: var(--ink-2); }
+  input[type="text"], input[type="number"], select {
+    width: 100%; padding: 8px 10px; font: inherit; color: var(--ink);
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  }
+  select { cursor: pointer; }
+  input:focus-visible, select:focus-visible, button:focus-visible, .marker:focus-visible {
+    outline: 2px solid var(--accent-solid); outline-offset: 2px;
+  }
+  input.dim { text-align: right; font-variant-numeric: tabular-nums; }
+
+  button {
+    font: inherit; padding: 8px 13px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+  }
+  button:hover { border-color: var(--ink-3); }
+  button:disabled { opacity: .35; cursor: default; }
+  button:disabled:hover { border-color: var(--line); }
+  button.primary { background: var(--accent-solid); border-color: var(--accent-solid);
+                   color: var(--accent-ink); font-weight: 700; }
+  button.primary:hover { filter: brightness(1.06); }
+  button.tiny { padding: 5px 10px; font-size: 13px; }
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ---- 평면도 ---- */
+  #drop {
+    position: relative; border: 2px dashed var(--line); border-radius: 10px;
+    background: var(--panel-2); min-height: 300px; display: grid; place-items: center;
+    text-align: center; color: var(--ink-3); padding: 30px 20px;
+  }
+  #drop.hasimg { border-style: solid; padding: 0; background: none; display: block; }
+  #drop.drag { border-color: var(--accent-solid); background: var(--accent); }
+  #stage { position: relative; line-height: 0; overflow: hidden; border-radius: 8px; }
+  #plan { width: 100%; display: block; }
+
+  .marker {
+    position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+    border-radius: 50%; display: grid; place-items: center;
+    font: 700 14px/1 system-ui, sans-serif; cursor: grab;
+    border: 2px solid var(--accent-solid); background: var(--panel); color: var(--accent-solid);
+    box-shadow: 0 2px 6px rgba(0,0,0,.28); touch-action: none; user-select: none; padding: 0;
+    z-index: 4;
+  }
+  .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
+  .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
+
+  /* ---- 실제 비율 폭 표시 막대(축척 설정 후) — 각진 직사각형(둥근 모서리 아님) ---- */
+  .span-bar {
+    position: absolute; transform: translate(-50%, -50%);
+    background: var(--accent-solid); opacity: .5; border-radius: 0;
+    pointer-events: none; z-index: 3; min-width: 10px; min-height: 10px;
+  }
+  .span-bar.sel { opacity: .8; }
+  .pick-dot {
+    position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+    border: 3px solid #fff; border-radius: 50%; background: var(--accent-solid);
+    box-shadow: 0 1px 5px rgba(0,0,0,.4); z-index: 8; pointer-events: none;
+  }
+
+  /* ---- 개소 카드 (아코디언, VS Code 트리 스타일) ---- */
+  .op {
+    border: 1px solid var(--line); border-radius: 10px;
+    margin-bottom: 6px; background: var(--panel-2); overflow: hidden;
+  }
+  .op.open { border-color: var(--accent-solid); box-shadow: 0 0 0 3px var(--accent); }
+  .op.dragging-row { opacity: .9; box-shadow: 0 8px 22px rgba(20,20,25,.22); position: relative; z-index: 6; }
+  .op-head { padding: 8px 10px; cursor: pointer; }
+  .op-head-row { display: flex; align-items: center; gap: 6px; }
+
+  .drag-handle {
+    flex: none; width: 30px; height: 30px; padding: 0; display: grid; place-items: center;
+    font-size: 17px; line-height: 1; color: var(--ink-3); cursor: grab; touch-action: none;
+    background: none; border: none; border-radius: 8px;
+  }
+  .drag-handle:hover { background: var(--line); color: var(--ink); }
+  .drag-handle:active { cursor: grabbing; }
+
+  .chev-ico {
+    flex: none; width: 22px; height: 22px; display: grid; place-items: center;
+    color: var(--ink-3); font-size: 15px; transition: transform .15s;
+  }
+  .op.open .chev-ico { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .chev-ico { transition: none; } }
+
+  .no {
+    flex: none; display: grid; place-items: center; width: 24px; height: 24px;
+    border-radius: 50%; border: 2px solid var(--accent-solid); color: var(--accent-solid);
+    font: 700 12px/1 system-ui, sans-serif; background: var(--panel);
+  }
+  .no.done { background: var(--accent-solid); color: var(--accent-ink); }
+
+  .nm { flex: 1; min-width: 0; }
+
+  .reorder { display: flex; flex-direction: column; gap: 2px; flex: none; }
+  .reorder button {
+    width: 24px; height: 18px; padding: 0; font-size: 9px; line-height: 1;
+    border-radius: 4px; display: grid; place-items: center;
+  }
+  .x { flex: none; border: none; background: none; color: var(--ink-3); font-size: 17px; padding: 2px 6px; }
+  .x:hover { color: var(--accent-solid); }
+
+  .op-sum {
+    margin: 4px 0 0 58px; font-size: 12px; color: var(--ink-3);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .op.open .op-sum { display: none; }
+
+  .op-body { display: none; padding: 0 12px 12px; }
+  .op.open .op-body { display: block; }
+
+  .frame-row { margin-top: 10px; }
+  .frame-row .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
+  .grid2 .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
+
+  .parts { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+  .parts > .cap { font-size: 11.5px; color: var(--ink-3); margin-bottom: 8px; }
+
+  .part {
+    border: 1.5px solid var(--line); border-radius: 9px; padding: 8px 9px;
+    margin-bottom: 10px; background: var(--panel);
+    box-shadow: 0 1px 2px rgba(20,20,25,.05);
+  }
+  .part.mullion { border-color: var(--mullion); background: var(--mullion-soft); }
+  .part.turn { border-color: var(--turn); background: var(--turn-soft); }
+  .part-top { display: flex; align-items: center; gap: 7px; }
+  .part-top .pno { flex: none; width: 16px; color: var(--ink-3); font-size: 11.5px;
+                    font-variant-numeric: tabular-nums; }
+  .part-top .tag { flex: none; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .part.mullion .tag { background: var(--mullion); color: #fff; }
+  .part.turn .tag { background: var(--turn); color: #fff; }
+  .part.sash .tag { background: var(--accent-solid); color: var(--accent-ink); }
+  .part-top .sp { margin-left: auto; }
+  .part-top select.spec { max-width: 140px; }
+
+  .part.sash .grid2, .part.turn .grid2 { grid-template-columns: 1fr 1fr; }
+
+  .startchoice { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .startchoice button { flex: 1; min-width: 120px; padding: 12px; font-weight: 700; }
+  .startchoice .cap2 { width: 100%; font-size: 12.5px; color: var(--ink-3); margin-bottom: 2px; }
+
+  /* ---- 개소별 3D 미리보기 ---- */
+  .mini3d-wrap { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+  .mini3d-wrap > .cap { font-size: 11.5px; color: var(--ink-3); margin-bottom: 7px; }
+  .mini3d { position: relative; border: 1px solid var(--line); border-radius: 8px;
+            background: var(--panel); overflow: hidden; min-height: 170px;
+            display: flex; align-items: center; justify-content: center; }
+  .mini3d canvas { display: block; width: 100%; height: 170px; touch-action: none; }
+  .admin-result { width: min(1180px, calc(100vw - 28px)); max-height: 92vh; }
+  #project3d { position: relative; min-height: 440px; border: 1px solid var(--line);
+    border-radius: 10px; background: #eef1f3; overflow: hidden; }
+  #project3d canvas { display: block; width: 100%; height: 440px; touch-action: none; }
+  .admin-badge { display: inline-block; margin-left: 8px; padding: 3px 7px; border-radius: 999px;
+    background: #3f4850; color: #fff; font-size: 11px; vertical-align: middle; }
+  dialog { width: min(620px, calc(100vw - 28px)); max-height: 78vh; padding: 0;
+    border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--panel); }
+  dialog::backdrop { background: rgba(20,24,28,.45); }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .dialog-body { padding: 12px 16px 16px; overflow: auto; }
+  .saved-row { display: grid; grid-template-columns: 130px minmax(0,1fr) auto; gap: 8px;
+    align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .saved-row:last-child { border-bottom: 0; }
+  @media (max-width: 600px) { .saved-row { grid-template-columns: 1fr auto; }
+    .saved-row .saved-date { grid-column: 1; } }
+  .mini3d-empty { color: var(--ink-3); font-size: 12.5px; padding: 18px; text-align: center; }
+
+  .empty { color: var(--ink-3); font-size: 13.5px; padding: 18px 4px; text-align: center; }
+  .status { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            padding: 10px 16px; border-top: 1px solid var(--line);
+            background: var(--panel-2); font-size: 13px; color: var(--ink-2); }
+  .status b { color: var(--ink); }
+  .status .done { color: var(--ok); font-weight: 700; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(12px);
+    background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px;
+    font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+    z-index: 50; max-width: 86vw; text-align: center;
+  }
+  #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>창호 실측 입력</h1>
+  <p>평면도에 번호를 찍고, 그 번호대로 치수를 입력합니다.</p>
+</header>
+
+<div class="wrap">
+
+  <section class="card">
+    <h2>평면도 <span class="hint" id="planhint">이미지를 올린 뒤 클릭하면 번호가 찍힙니다</span></h2>
+    <div class="body">
+      <div id="drop">
+        <div id="ph">
+          <p style="margin:0 0 10px"><b>평면도 이미지를 끌어다 놓거나</b></p>
+          <button type="button" id="pick">파일 선택</button>
+          <p style="margin:10px 0 0; font-size:12.5px">PNG · JPG</p>
+        </div>
+        <div id="stage" hidden><img id="plan" alt="평면도"></div>
+      </div>
+      <input type="file" id="file" accept="image/*" class="sr">
+      <div class="btnrow" style="margin-top:12px">
+        <button type="button" id="addnum">+ 번호 추가</button>
+        <button type="button" id="addentry">+ 현관문 지정</button>
+        <button type="button" id="clearpins">번호 전체 삭제</button>
+        <button type="button" id="repick">평면도 교체</button>
+      </div>
+      <div class="btnrow" style="margin-top:8px">
+        <button type="button" id="flipv">상하반전</button>
+        <button type="button" id="fliph">좌우반전</button>
+      </div>
+      <div class="btnrow" style="margin-top:8px">
+        <button type="button" id="calibrate">축척 설정 (도면의 두 점 지정)</button>
+        <span id="scalehint" style="margin-left:2px">미설정 — 번호가 점으로만 표시됩니다</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>현장 정보 · 실측값</h2>
+    <div class="body">
+      <label class="field" for="site">현장명</label>
+      <input type="text" id="site" placeholder="예: 구의아차산한라 102동 202호">
+      <label class="field" for="surveydate" style="margin-top:12px">실측 날짜</label>
+      <input type="date" id="surveydate">
+
+      <div id="ops" style="margin-top:16px"></div>
+      <div class="empty" id="empty">평면도에서 창호 위치를 클릭하면(또는 "+ 번호 추가") 여기에 입력칸이 생깁니다.</div>
+
+      <div class="btnrow" style="margin-top:14px">
+        <button type="button" class="primary" id="generate3d">3D 생성</button>
+        <button type="button" id="save">실측파일 저장</button>
+        <button type="button" id="load">실측파일 열기</button>
+      </div>
+    </div>
+    <div class="status">
+      <span>실측 <b id="cdone">0</b> / <b id="ctotal">0</b></span>
+      <span id="cmsg"></span>
+    </div>
+  </section>
+
+</div>
+
+<dialog class="admin-result" id="adminresult">
+  <div class="dialog-head"><b>3D 생성 결과 <span class="admin-badge">관리자 전용</span></b><button type="button" class="x" id="close3d">×</button></div>
+  <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div></div>
+</dialog>
+
+<dialog id="savedialog">
+  <div class="dialog-head"><b>저장된 실측파일</b><button type="button" class="x" id="closesaved">×</button></div>
+  <div class="dialog-body">
+    <div id="savedlist"></div>
+    <div class="btnrow" style="margin-top:14px"><button type="button" id="openlegacy">기존 JSON 파일 선택</button></div>
+    <input type="file" id="loadfile" accept="application/json,.json" class="sr">
+  </div>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  window.__THREE = THREE;
+  window.__OrbitControls = OrbitControls;
+  window.dispatchEvent(new Event('mini3d-ready'));
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =========================================================
+     선택 목록 — 항목을 추가/수정하려면 아래 배열만 고치면 된다.
+     ========================================================= */
+  var FRAME_TYPES   = ["B/F250", "B/F235", "B/F140", "W/B"];       // 프레임 두께
+  var MULLION_SPECS = ["100×100", "40×105"];                        // 통바 규격
+  var PANEL_TYPES   = ["2짝", "3짝", "4짝", "고정"];                 // 창 짝수
+  var PRIMARY_TYPES = [["left", "왼쪽"], ["right", "오른쪽"],
+                       ["both", "양쪽"], ["none", "없음"]];          // 주 사용문
+  var SWING_TYPES   = [["out", "외여닫이 (미는 방향)"],
+                       ["in", "내여닫이 (당기는 방향)"]];             // 터닝도어 개폐 방향
+  var HANDLE_TYPES  = [["left", "좌측"], ["right", "우측"]];         // 터닝도어 손잡이 위치
+  /* ========================================================= */
+
+  var KEY = "yk-survey-input-v3";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function todayLocal() {
+    var d = new Date(), z = function (v) { return String(v).padStart(2, "0"); };
+    return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
+  }
+  var state = { site: "", surveyDate: todayLocal(), planName: "", planData: "", pins: [], scale: null,
+                flipV: false, flipH: false };
+  var sel = null;
+  var pickMode = null;
+  var activeMini3D = null;   // 현재 열린 카드의 3D 프리뷰 정리 함수 보관(WebGL 컨텍스트 누수 방지)
+  var activeProject3D = null;
+  var planPixels = null;     // 업로드한 원본 평면도의 굵은 벽선 방향 판별용
+
+  // 평면도를 화면에 뒤집어 보여줄 때(상하/좌우), 저장되는 좌표는 항상 "원본 이미지
+  // 기준"으로 유지한다 — 화면표시용 변환과 클릭입력 역변환에 같은 공식(자기 자신의 역)을 쓴다.
+  function dispX(fx) { return state.flipH ? (1 - fx) : fx; }
+  function dispY(fy) { return state.flipV ? (1 - fy) : fy; }
+  var realX = dispX, realY = dispY;   // 뒤집기는 대칭이라 정방향/역방향 공식이 같다
+
+  function newSash() { return { kind: "sash", w: "0", h: "0", panels: "2짝", primary: "right" }; }
+  function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0] }; }
+  function newTurn() { return { kind: "turn", w: "0", h: "0", swing: "push", handle: "right" }; }
+  function newEntry() { return { kind: "entry", w: "900", h: "2100" }; }
+  function edgeFallbackAngle(x, y) {
+    var toLR = Math.min(x, 1 - x);   // 좌/우 가장자리까지 거리 — 가까우면 세로벽(세로 막대)
+    var toTB = Math.min(y, 1 - y);   // 상/하 가장자리까지 거리 — 가까우면 가로벽(가로 막대)
+    return toLR < toTB ? 90 : 0;
+  }
+  function isWallPixel(x, y) {
+    if (!planPixels || x < 0 || y < 0 || x >= planPixels.w || y >= planPixels.h) return false;
+    var k = (Math.floor(y) * planPixels.w + Math.floor(x)) * 4, d = planPixels.data;
+    // 평면도의 검은/진회색 벽선만 잡고 바닥무늬·방 색상·글자는 최대한 제외한다.
+    return d[k + 3] > 100 && (d[k] + d[k + 1] + d[k + 2]) / 3 < 72;
+  }
+  function stripScore(cx, cy, horizontal) {
+    if (!planPixels) return 0;
+    var longR = Math.max(14, Math.round((horizontal ? planPixels.w : planPixels.h) * .045));
+    var band = 2, hit = 0, total = 0;
+    for (var a = -longR; a <= longR; a += 2) {
+      var found = false;
+      for (var b = -band; b <= band; b++) {
+        var x = horizontal ? cx + a : cx + b, y = horizontal ? cy + b : cy + a;
+        if (isWallPixel(x, y)) { found = true; break; }
+      }
+      if (found) hit++; total++;
+    }
+    return total ? hit / total : 0;
+  }
+  function rayToWall(cx, cy, dx, dy) {
+    if (!planPixels) return null;
+    var max = Math.round((dx ? planPixels.w : planPixels.h) * .22);
+    for (var n = 6; n <= max; n++) {
+      var hits = 0;
+      for (var b = -2; b <= 2; b++) {
+        var x = cx + dx * n + (dy ? b : 0), y = cy + dy * n + (dx ? b : 0);
+        if (isWallPixel(x, y)) hits++;
+      }
+      if (hits >= 3) return n;
+    }
+    return null;
+  }
+  function nearestWallLine(cx, cy, vertical) {
+    if (!planPixels) return null;
+    var across = vertical ? planPixels.w : planPixels.h;
+    var along = vertical ? planPixels.h : planPixels.w;
+    var searchR = Math.max(10, Math.round(across * .035));
+    var longR = Math.max(14, Math.round(along * .045));
+    var best = null;
+    for (var off = -searchR; off <= searchR; off++) {
+      var hit = 0, total = 0;
+      for (var a = -longR; a <= longR; a += 2) {
+        var found = false;
+        for (var band = -1; band <= 1; band++) {
+          var x = vertical ? cx + off + band : cx + a;
+          var y = vertical ? cy + a : cy + off + band;
+          if (isWallPixel(x, y)) { found = true; break; }
+        }
+        if (found) hit++; total++;
+      }
+      var score = total ? hit / total : 0;
+      var rank = score - Math.abs(off) / searchR * .12;
+      if (!best || rank > best.rank) best = { off: off, score: score, rank: rank };
+    }
+    if (!best || best.score < .28) return null;
+
+    // 굵은 벽의 한쪽 모서리가 아니라 검은 선 덩어리의 중앙에 맞춘다.
+    var weighted = 0, weight = 0;
+    for (var d = -5; d <= 5; d++) {
+      var pos = best.off + d, localHit = 0, localTotal = 0;
+      for (var q = -longR; q <= longR; q += 3) {
+        var px = vertical ? cx + pos : cx + q;
+        var py = vertical ? cy + q : cy + pos;
+        if (isWallPixel(px, py)) localHit++;
+        localTotal++;
+      }
+      var localScore = localTotal ? localHit / localTotal : 0;
+      if (localScore >= best.score * .55) { weighted += pos * localScore; weight += localScore; }
+    }
+    return { coordinate: (vertical ? cx : cy) + (weight ? weighted / weight : best.off),
+             score: best.score, distance: Math.abs(best.off) };
+  }
+  function analyzePlacement(x, y) {
+    if (!planPixels) return { x: x, y: y, angle: edgeFallbackAngle(x, y), mode: "free", wallLock: null };
+    var cx = x * planPixels.w, cy = y * planPixels.h;
+    var vertical = nearestWallLine(cx, cy, true), horizontal = nearestWallLine(cx, cy, false);
+    if (vertical || horizontal) {
+      var useVertical = vertical && (!horizontal || vertical.score >= horizontal.score);
+      if (useVertical) {
+        var sx = Math.min(1, Math.max(0, vertical.coordinate / planPixels.w));
+        return { x: sx, y: y, angle: 90, mode: "wall", wallLock: { angle: 90, coordinate: sx } };
+      }
+      var sy = Math.min(1, Math.max(0, horizontal.coordinate / planPixels.h));
+      return { x: x, y: sy, angle: 0, mode: "wall", wallLock: { angle: 0, coordinate: sy } };
+    }
+    return { x: x, y: y, angle: guessAngle(x, y), mode: "free", wallLock: null };
+  }
+  function applyPlacement(p) {
+    var a = analyzePlacement(p.x, p.y);
+    p.x = a.x; p.y = a.y; p.angle = a.angle;
+    p.placementMode = a.mode; p.wallLock = a.wallLock;
+  }
+  function guessAngle(x, y) {
+    if (!planPixels) return edgeFallbackAngle(x, y);
+    var cx = x * planPixels.w, cy = y * planPixels.h;
+    var hs = stripScore(cx, cy, true), vs = stripScore(cx, cy, false);
+    // 번호가 굵은 벽선 위에 있으면 그 벽선 자체의 방향을 따른다.
+    if (Math.max(hs, vs) >= .30 && Math.abs(hs - vs) >= .08) return vs > hs ? 90 : 0;
+
+    // 터닝도어처럼 개구부의 허공을 찍으면 서로 마주 보는 가장 가까운 두 벽을 찾는다.
+    var left = rayToWall(cx, cy, -1, 0), right = rayToWall(cx, cy, 1, 0);
+    var up = rayToWall(cx, cy, 0, -1), down = rayToWall(cx, cy, 0, 1);
+    var horizontalGap = left !== null && right !== null ? (left + right) / planPixels.w : Infinity;
+    var verticalGap = up !== null && down !== null ? (up + down) / planPixels.h : Infinity;
+    if (horizontalGap !== Infinity || verticalGap !== Infinity) return horizontalGap <= verticalGap ? 0 : 90;
+    return edgeFallbackAngle(x, y);
+  }
+  function newPin(x, y) {
+    var p = { name: "", frame: "", parts: [], x: x, y: y, angle: 0,
+              placementMode: "free", wallLock: null };
+    applyPlacement(p);
+    return p;
+  }
+
+  /* ---------------- 저장 / 복원 ---------------- */
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  function restore() {
+    var raw;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return; }
+    if (!raw) return;
+    try {
+      var s = JSON.parse(raw);
+      if (s && Array.isArray(s.pins)) {
+        state = { site: s.site || "", planName: s.planName || "",
+                  surveyDate: s.surveyDate || todayLocal(),
+                  planData: s.planData || "", pins: s.pins,
+                  scale: s.scale && (s.scale.mmPerPixel || s.scale.mmPerFracX) ? s.scale : null,
+                  flipV: !!s.flipV, flipH: !!s.flipH };
+        state.pins.forEach(function (p) {
+          if (!Array.isArray(p.parts)) p.parts = [];
+          p.parts.forEach(function (t) {
+            if (t.kind === "mullion" && t.spec === "100×45") t.spec = "40×105";
+            if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
+            if (t.kind === "entry") { t.w = "900"; t.h = "2100"; }
+          });
+          if (/현관/.test(p.name || "")) p.parts = p.parts.map(function (t) {
+            return t.kind === "turn" ? newEntry() : t;
+          });
+          if (typeof p.frame !== "string") p.frame = "";
+          if (typeof p.angle !== "number") p.angle = 0;
+          if (p.placementMode !== "wall") p.placementMode = "free";
+          if (!p.wallLock || typeof p.wallLock.coordinate !== "number") p.wallLock = null;
+          delete p.span;
+        });
+      }
+    } catch (e) {}
+  }
+
+  function toast(msg) {
+    var t = $("toast");
+    t.textContent = msg; t.classList.add("on");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.classList.remove("on"); }, 2100);
+  }
+
+  /* ---------------- 평면도 ---------------- */
+  function applyFlip() {
+    $("plan").style.transform =
+      "scale(" + (state.flipH ? -1 : 1) + "," + (state.flipV ? -1 : 1) + ")";
+  }
+  function showPlan(dataUrl, name) {
+    state.planData = dataUrl;
+    state.planName = name || state.planName;
+    $("plan").src = dataUrl;
+    $("stage").hidden = false;
+    $("ph").hidden = true;
+    $("drop").classList.add("hasimg");
+    applyFlip();
+    persist();
+  }
+  $("plan").addEventListener("load", function () {
+    try {
+      var maxSide = 1400, ratio = Math.min(1, maxSide / Math.max(this.naturalWidth, this.naturalHeight));
+      var c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(this.naturalWidth * ratio));
+      c.height = Math.max(1, Math.round(this.naturalHeight * ratio));
+      var ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(this, 0, 0, c.width, c.height);
+      planPixels = { w: c.width, h: c.height, data: ctx.getImageData(0, 0, c.width, c.height).data };
+      state.pins.forEach(applyPlacement);
+      persist(); render();
+      if (state.pins.length) toast("기존 번호 " + state.pins.length + "곳의 방향을 자동 적용했습니다");
+    } catch (e) { planPixels = null; }
+  });
+  function readFile(f) {
+    if (!f || !/^image\//.test(f.type)) { toast("이미지 파일만 올릴 수 있습니다"); return; }
+    var r = new FileReader();
+    r.onload = function () {
+      state.flipV = false; state.flipH = false;
+      state.scale = null;
+      state.pins.forEach(function (p) { p.span = null; });
+      showPlan(r.result, f.name); toast("평면도를 불러왔습니다");
+    };
+    r.readAsDataURL(f);
+  }
+  $("pick").addEventListener("click", function () { $("file").click(); });
+  $("repick").addEventListener("click", function () { $("file").click(); });
+  $("file").addEventListener("change", function (e) {
+    if (e.target.files && e.target.files[0]) readFile(e.target.files[0]);
+    e.target.value = "";
+  });
+  var drop = $("drop");
+  ["dragenter", "dragover"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+  });
+  drop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+  });
+
+  $("flipv").addEventListener("click", function () {
+    if (!state.planData) { toast("평면도를 먼저 올려주세요"); return; }
+    state.flipV = !state.flipV; applyFlip(); persist(); render();
+  });
+  $("fliph").addEventListener("click", function () {
+    if (!state.planData) { toast("평면도를 먼저 올려주세요"); return; }
+    state.flipH = !state.flipH; applyFlip(); persist(); render();
+  });
+
+  /* ---------------- 아코디언 열기(공용) ---------------- */
+  function openCard(i, focusName) {
+    sel = i;
+    render();
+    requestAnimationFrame(function () {
+      var card = document.querySelectorAll(".op")[i];
+      if (!card) return;
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (focusName) {
+        var nm = card.querySelector(".nm");
+        if (nm) nm.focus();
+      }
+    });
+  }
+
+  /* ---------------- 핀 추가 ---------------- */
+  $("stage").addEventListener("click", function (e) {
+    if (e.target.classList.contains("marker")) return;
+    if (dragMoved) return;
+    var r = this.getBoundingClientRect();
+    var fx = realX((e.clientX - r.left) / r.width);
+    var fy = realY((e.clientY - r.top) / r.height);
+    if (pickMode) {
+      if (pickMode.type === "entry") {
+        var entryPin = newPin(fx, fy); entryPin.name = "현관"; entryPin.parts = [newEntry()];
+        state.pins.push(entryPin); pickMode = null; persist(); openCard(state.pins.length - 1, false);
+        toast("현관 위치를 지정했습니다"); return;
+      }
+      pickMode.points.push({ x: fx, y: fy });
+      if (pickMode.points.length === 1) {
+        render(); toast("두 번째 점을 눌러주세요"); return;
+      }
+      var a = pickMode.points[0], b = pickMode.points[1];
+      if (pickMode.type === "scale") {
+        var px = imagePixelDistance(a, b);
+        if (px < 5) { pickMode = null; render(); toast("두 점이 너무 가깝습니다. 다시 설정해주세요"); return; }
+        state.scale = { mmPerPixel: pickMode.mm / px, referenceMm: pickMode.mm,
+          a: a, b: b, imageWidth: $("plan").naturalWidth, imageHeight: $("plan").naturalHeight };
+        pickMode = null; updateScaleHint(); persist(); render(); toast("축척을 설정했습니다"); return;
+      }
+      pickMode = null; render(); return;
+    }
+    state.pins.push(newPin(fx, fy));
+    openCard(state.pins.length - 1, false);
+  });
+
+  function updateScaleHint() {
+    var h = $("scalehint");
+    h.textContent = state.scale
+      ? "설정됨 — 지정한 벽 길이와 실측 폭을 비교합니다"
+      : "미설정 — 도면의 치수선 양끝을 지정해주세요";
+  }
+
+  function imagePixelDistance(a, b) {
+    var w = $("plan").naturalWidth || (state.scale && state.scale.imageWidth) || 1;
+    var h = $("plan").naturalHeight || (state.scale && state.scale.imageHeight) || 1;
+    return Math.hypot((b.x - a.x) * w, (b.y - a.y) * h);
+  }
+  $("calibrate").addEventListener("click", function () {
+    if (!state.planData) { toast("평면도를 먼저 올려주세요"); return; }
+    if (state.scale && !confirm("이미 축척이 설정되어 있습니다. 다시 설정할까요?")) return;
+    var mmStr = prompt("도면에 표시된 기준 치수를 입력하세요(mm)\n예: 7200");
+    var mm = parseFloat(mmStr);
+    if (!mm || mm <= 0) { toast("취소되었습니다"); return; }
+    pickMode = { type: "scale", mm: mm, points: [] };
+    $("planhint").textContent = "기준 치수선의 첫 번째 점을 눌러주세요";
+    toast("기준 치수선의 첫 번째 점을 눌러주세요");
+    render();
+  });
+
+  $("addnum").addEventListener("click", function () {
+    if (!state.planData) { toast("평면도를 먼저 올려주세요"); return; }
+    var n = state.pins.length;
+    var offsets = [[0, 0], [0.06, 0.04], [-0.06, 0.04], [0.06, -0.04], [-0.06, -0.04]];
+    var off = offsets[n % offsets.length];
+    var x = Math.min(0.94, Math.max(0.06, 0.5 + off[0]));
+    var y = Math.min(0.94, Math.max(0.06, 0.5 + off[1]));
+    state.pins.push(newPin(x, y));
+    openCard(state.pins.length - 1, false);
+    toast((state.pins.length) + "번을 추가했습니다 — 평면도에서 위치를 드래그해 옮기세요");
+  });
+
+  $("addentry").addEventListener("click", function () {
+    if (!state.planData) { toast("평면도를 먼저 올려주세요"); return; }
+    pickMode = { type: "entry", points: [] }; render();
+    toast("평면도에서 현관 위치를 한 번 눌러주세요");
+  });
+
+  $("clearpins").addEventListener("click", function () {
+    if (!state.pins.length) return;
+    if (!confirm("번호 " + state.pins.length + "개를 모두 지울까요? 입력한 값도 함께 사라집니다.")) return;
+    state.pins = []; sel = null; render();
+  });
+
+  /* ---------------- 개소 순서 바꾸기(드래그) / 개별 삭제 ---------------- */
+  function removePin(i) {
+    state.pins.splice(i, 1);
+    if (sel === i) sel = null; else if (sel !== null && sel > i) sel -= 1;
+    render();
+  }
+
+  var rdIdx = -1, rdStartY = 0, rdRowH = 44, rdEl = null;
+  function onHandleDown(e) {
+    e.stopPropagation();
+    rdIdx = +this.dataset.i;
+    if (activeMini3D) { activeMini3D.cancel(); activeMini3D = null; }
+    document.querySelectorAll(".op.open").forEach(function (el) { el.classList.remove("open"); });
+    sel = null;
+    var rows = document.querySelectorAll(".op");
+    rdEl = rows[rdIdx];
+    rdRowH = rdEl.getBoundingClientRect().height + 6;
+    rdStartY = e.clientY;
+    rdEl.classList.add("dragging-row");
+    this.setPointerCapture(e.pointerId);
+  }
+  function onHandleMove(e) {
+    if (rdIdx < 0 || !rdEl) return;
+    var dy = e.clientY - rdStartY;
+    rdEl.style.transform = "translateY(" + dy + "px)";
+  }
+  function onHandleUp(e) {
+    if (rdIdx < 0) return;
+    var dy = e.clientY - rdStartY;
+    var shift = Math.round(dy / rdRowH);
+    var target = Math.min(state.pins.length - 1, Math.max(0, rdIdx + shift));
+    if (rdEl) { rdEl.style.transform = ""; rdEl.classList.remove("dragging-row"); }
+    if (target !== rdIdx) {
+      var item = state.pins.splice(rdIdx, 1)[0];
+      state.pins.splice(target, 0, item);
+      sel = target;
+    }
+    rdIdx = -1; rdEl = null;
+    render();
+  }
+
+  /* ---------------- 구성(통바/창) 순서 바꾸기 / 삭제 — 카드 안에서만 ---------------- */
+  function movePartUp(p, k) {
+    if (k <= 0) return;
+    var t = p.parts[k]; p.parts[k] = p.parts[k - 1]; p.parts[k - 1] = t;
+    render();
+  }
+  function movePartDown(p, k) {
+    if (k >= p.parts.length - 1) return;
+    var t = p.parts[k]; p.parts[k] = p.parts[k + 1]; p.parts[k + 1] = t;
+    render();
+  }
+  function removePart(p, k) {
+    p.parts.splice(k, 1);
+    render();
+  }
+
+  /* ---------------- 마커 드래그 ---------------- */
+  var dragIdx = -1, dragMoved = false;
+  function onDown(e) {
+    dragIdx = +this.dataset.i; dragMoved = false;
+    this.setPointerCapture(e.pointerId);
+  }
+  function onMove(e) {
+    if (dragIdx < 0) return;
+    dragMoved = true;
+    var r = $("stage").getBoundingClientRect(), p = state.pins[dragIdx];
+    var rawX = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    var rawY = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    var nx = realX(rawX), ny = realY(rawY);
+    if (p.placementMode === "wall" && p.wallLock) {
+      if (p.wallLock.angle === 90) { p.x = p.wallLock.coordinate; p.y = ny; }
+      else { p.x = nx; p.y = p.wallLock.coordinate; }
+      rawX = dispX(p.x); rawY = dispY(p.y);
+    } else { p.x = nx; p.y = ny; }
+    var el = document.querySelector('.marker[data-i="' + dragIdx + '"]');
+    if (el) { el.style.left = (rawX * 100) + "%"; el.style.top = (rawY * 100) + "%"; }
+    var bar = document.querySelector('.span-bar[data-i="' + dragIdx + '"]');
+    if (bar) { bar.style.left = (rawX * 100) + "%"; bar.style.top = (rawY * 100) + "%"; }
+  }
+  function onUp() {
+    if (dragIdx < 0) return;
+    var p = state.pins[dragIdx];
+    var moved = dragMoved;
+    if (p && moved && p.placementMode !== "wall") p.angle = guessAngle(p.x, p.y);
+    dragIdx = -1; persist();
+    if (moved) render();
+    setTimeout(function () { dragMoved = false; }, 0);
+  }
+  function onMarkerClick(ev) {
+    ev.stopPropagation();
+    if (dragMoved) return;
+    openCard(+this.dataset.i, false);
+  }
+
+  /* ---------------- 판정 / 요약 ---------------- */
+  // 폭·높이 치수가 필요한 구성(창/터닝도어/현관문). 통바는 폭 규격만 있고 실측 완료 판정에서 제외.
+  function sizedParts(p) {
+    return p.parts.filter(function (t) { return t.kind === "sash" || t.kind === "turn" || t.kind === "entry"; });
+  }
+  // "0"은 기본입력값일 뿐 실제 실측 아님 — 0보다 커야 완료로 판정한다.
+  function hasSize(t) { return Number(t.w) > 0 && Number(t.h) > 0; }
+  function isDone(p) {
+    var s = sizedParts(p);
+    return s.length > 0 && s.every(hasSize);
+  }
+  function summarize(p) {
+    if (!p.parts.length) return "구성 선택 전";
+    var s = sizedParts(p);
+    var base = (s.length && hasSize(s[0])) ? (s[0].w + "×" + s[0].h) : "치수 미입력";
+    var extra = p.parts.length > 1 ? (" 외 " + (p.parts.length - 1) + "개 구성") : "";
+    var frame = p.frame ? (" · " + p.frame) : "";
+    return base + extra + frame;
+  }
+
+  /* ---------------- 요소 생성 헬퍼 ---------------- */
+  function sel1(options, value, onChange, cls, placeholder) {
+    var s = document.createElement("select");
+    if (cls) s.className = cls;
+    if (placeholder !== undefined) {
+      var o0 = document.createElement("option");
+      o0.value = ""; o0.textContent = placeholder;
+      s.appendChild(o0);
+    }
+    options.forEach(function (o) {
+      var val = Array.isArray(o) ? o[0] : o, txt = Array.isArray(o) ? o[1] : o;
+      var op = document.createElement("option");
+      op.value = val; op.textContent = txt;
+      s.appendChild(op);
+    });
+    s.value = value;
+    s.addEventListener("change", function () { onChange(this.value, this); });
+    return s;
+  }
+  function numInput(val, ph, onInput, cls) {
+    var i = document.createElement("input");
+    i.type = "number"; i.value = val; i.placeholder = ph;
+    i.className = "dim" + (cls ? " " + cls : "");
+    i.min = "0"; i.step = "1"; i.inputMode = "numeric";
+    i.addEventListener("input", function () { onInput(this.value); persist(); refreshDone(); });
+    i.addEventListener("change", function () {
+      // 숫자 입력을 마친 뒤 평면도와 3D 미리보기도 새 값으로 다시 그린다.
+      // 다음 버튼의 click을 가로채지 않도록 현재 이벤트가 끝난 뒤 실행한다.
+      setTimeout(function () { render(); }, 0);
+    });
+    return i;
+  }
+  function labeled(text, el) {
+    var d = document.createElement("div");
+    var l = document.createElement("span");
+    l.className = "lab"; l.textContent = text;
+    d.appendChild(l); d.appendChild(el);
+    return d;
+  }
+  function reorderButtons(disabledUp, disabledDown, onUp, onDown, labelPrefix) {
+    var w = document.createElement("div");
+    w.className = "reorder";
+    var up = document.createElement("button");
+    up.type = "button"; up.textContent = "▲"; up.title = "위로"; up.disabled = disabledUp;
+    up.setAttribute("aria-label", labelPrefix + " 위로 이동");
+    up.addEventListener("click", function (e) { e.stopPropagation(); onUp(); });
+    var down = document.createElement("button");
+    down.type = "button"; down.textContent = "▼"; down.title = "아래로"; down.disabled = disabledDown;
+    down.setAttribute("aria-label", labelPrefix + " 아래로 이동");
+    down.addEventListener("click", function (e) { e.stopPropagation(); onDown(); });
+    w.appendChild(up); w.appendChild(down);
+    return w;
+  }
+  function applyPanelRule(sash, primarySelect) {
+    if (sash.panels === "3짝") {
+      sash.primary = "both";
+      if (primarySelect) primarySelect.value = "both";
+    } else if (sash.panels === "고정") {
+      sash.primary = "none";
+      if (primarySelect) primarySelect.value = "none";
+    }
+  }
+
+  /* ---------------- 렌더 ---------------- */
+  function render() {
+    if (activeMini3D) { activeMini3D.cancel(); activeMini3D = null; }
+
+    var stage = $("stage");
+    Array.prototype.slice.call(stage.querySelectorAll(".marker, .span-bar, .pick-dot")).forEach(function (n) { n.remove(); });
+    state.pins.forEach(function (p, i) {
+      var sx = dispX(p.x), sy = dispY(p.y);
+      if (state.scale) {
+        var totalMm = opGeometryBoxes(p).width;
+        if (totalMm > 0) {
+          var horiz = (p.angle || 0) === 0;
+          var bar = document.createElement("div");
+          bar.className = "span-bar" + (sel === i ? " sel" : "");
+          bar.dataset.i = i;
+          bar.style.left = (sx * 100) + "%";
+          bar.style.top = (sy * 100) + "%";
+          if (horiz) { bar.style.width = "10px"; bar.style.height = "12px"; }
+          else { bar.style.height = "10px"; bar.style.width = "12px"; }
+          stage.appendChild(bar);
+          refreshSpanBar(i);
+        }
+      }
+      var m = document.createElement("button");
+      m.type = "button";
+      m.className = "marker" + (isDone(p) ? " done" : "") + (sel === i ? " sel" : "");
+      m.style.left = (sx * 100) + "%";
+      m.style.top = (sy * 100) + "%";
+      m.textContent = String(i + 1);
+      m.dataset.i = i;
+      m.title = (p.name || "이름 없음") + " — 드래그해서 위치 조정";
+      m.setAttribute("aria-label", (i + 1) + "번 " + (p.name || "이름 없음"));
+      m.addEventListener("pointerdown", onDown);
+      m.addEventListener("pointermove", onMove);
+      m.addEventListener("pointerup", onUp);
+      m.addEventListener("pointercancel", onUp);
+      m.addEventListener("click", onMarkerClick);
+      stage.appendChild(m);
+    });
+    if (pickMode && pickMode.points.length === 1) appendPickDot(stage, pickMode.points[0]);
+    $("planhint").textContent = pickMode
+      ? (pickMode.type === "entry" ? "현관 위치를 한 번 눌러주세요" :
+        (pickMode.points.length ? "두 번째 점을 눌러주세요" : "첫 번째 점을 눌러주세요"))
+      : "번호 위치의 벽선을 읽어 가로·세로를 자동 판별합니다";
+
+    var host = $("ops");
+    host.textContent = "";
+    state.pins.forEach(function (p, i) { host.appendChild(buildCard(p, i)); });
+
+    $("empty").hidden = state.pins.length > 0;
+    refreshDone();
+    persist();
+
+    if (sel !== null && state.pins[sel]) {
+      var openCardEl = document.querySelectorAll(".op")[sel];
+      var openBody = openCardEl && openCardEl.querySelector(".mini3d");
+      if (openBody) activeMini3D = mountMini3D(openBody, state.pins[sel]);
+    }
+  }
+
+  function appendPickDot(stage, pt) {
+    var d = document.createElement("div"); d.className = "pick-dot";
+    d.style.left = (dispX(pt.x) * 100) + "%"; d.style.top = (dispY(pt.y) * 100) + "%";
+    stage.appendChild(d);
+  }
+  function buildCard(p, i) {
+    var card = document.createElement("div");
+    card.className = "op" + (sel === i ? " open" : "");
+    card.dataset.i = i;
+
+    // ---- 헤더: 드래그핸들 + 화살표 + 번호 + 이름 + 삭제 (VS Code 트리 스타일) ----
+    var head = document.createElement("div");
+    head.className = "op-head";
+    var row = document.createElement("div");
+    row.className = "op-head-row";
+
+    var handle = document.createElement("button");
+    handle.type = "button"; handle.className = "drag-handle"; handle.textContent = "≡";
+    handle.title = "눌러서 드래그하면 순서를 바꿀 수 있습니다";
+    handle.setAttribute("aria-label", (i + 1) + "번 순서 옮기기(드래그)");
+    handle.dataset.i = i;
+    handle.addEventListener("pointerdown", onHandleDown);
+    handle.addEventListener("pointermove", onHandleMove);
+    handle.addEventListener("pointerup", onHandleUp);
+    handle.addEventListener("pointercancel", onHandleUp);
+    row.appendChild(handle);
+
+    var chev = document.createElement("span");
+    chev.className = "chev-ico"; chev.textContent = "▸"; chev.setAttribute("aria-hidden", "true");
+    row.appendChild(chev);
+
+    var badge = document.createElement("span");
+    badge.className = "no" + (isDone(p) ? " done" : "");
+    badge.textContent = String(i + 1);
+    row.appendChild(badge);
+
+    var nm = document.createElement("input");
+    nm.type = "text"; nm.className = "nm"; nm.value = p.name;
+    nm.placeholder = "창호명 (예: 거실외창)";
+    nm.addEventListener("input", function () { p.name = this.value; persist();
+      var s = document.querySelectorAll(".op")[i].querySelector(".op-sum");
+      if (s) s.textContent = summarize(p);
+    });
+    nm.addEventListener("change", function () {
+      if (/현관/.test(p.name || "")) {
+        var changed = false;
+        p.parts = p.parts.map(function (t) {
+          if (t.kind !== "turn") return t;
+          changed = true; return newEntry();
+        });
+        if (changed) { persist(); render(); }
+      }
+    });
+    row.appendChild(nm);
+
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "x"; del.textContent = "×";
+    del.title = (i + 1) + "번 삭제";
+    del.setAttribute("aria-label", (i + 1) + "번 삭제");
+    del.addEventListener("click", function (e) { e.stopPropagation(); removePin(i); });
+    row.appendChild(del);
+
+    head.appendChild(row);
+
+    var sum = document.createElement("div");
+    sum.className = "op-sum"; sum.textContent = summarize(p);
+    head.appendChild(sum);
+
+    // 행 전체 클릭 = 펼치기/접기 토글(VS Code와 동일). 이름 입력창 클릭은 예외(펼치기만, 편집 중 접히지 않게).
+    head.addEventListener("click", function (e) {
+      if (e.target === nm) { if (sel !== i) openCard(i, true); return; }
+      sel = (sel === i) ? null : i;
+      render();
+      if (sel === i) {
+        requestAnimationFrame(function () {
+          var c = document.querySelectorAll(".op")[i];
+          if (c) c.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      }
+    });
+    card.appendChild(head);
+
+    // ---- 펼침 영역 ----
+    var body = document.createElement("div");
+    body.className = "op-body";
+
+    // 아직 구성이 없으면(새로 추가된 번호) 창/통바 중 무엇으로 시작할지 먼저 고른다
+    // — 통바를 나중에 앞으로 옮길 필요 없이, 원하는 순서 그대로 쌓아갈 수 있다.
+    if (!p.parts.length) {
+      var sc = document.createElement("div");
+      sc.className = "startchoice";
+      var scCap = document.createElement("div");
+      scCap.className = "cap2"; scCap.textContent = "실내에서 볼 때 왼쪽부터, 첫 구성을 선택하세요";
+      sc.appendChild(scCap);
+      var scSash = document.createElement("button");
+      scSash.type = "button"; scSash.textContent = "＋ 창으로 시작";
+      scSash.addEventListener("click", function (e) { e.stopPropagation(); p.parts.push(newSash()); render(); });
+      var scMul = document.createElement("button");
+      scMul.type = "button"; scMul.textContent = "＋ 통바로 시작";
+      scMul.addEventListener("click", function (e) { e.stopPropagation(); p.parts.push(newMullion()); render(); });
+      var scTurn = document.createElement("button");
+      scTurn.type = "button"; scTurn.textContent = "＋ 터닝도어로 시작";
+      scTurn.addEventListener("click", function (e) { e.stopPropagation(); p.parts.push(newTurn()); render(); });
+      sc.appendChild(scSash); sc.appendChild(scMul); sc.appendChild(scTurn);
+      body.appendChild(sc);
+      card.appendChild(body);
+      return card;
+    }
+
+    var fr = document.createElement("div");
+    fr.className = "frame-row";
+    fr.appendChild(labeled("프레임", sel1(FRAME_TYPES, p.frame, function (v) {
+      p.frame = v; persist(); refreshDone();
+    }, null, "선택 안 함")));
+    body.appendChild(fr);
+
+    var wrap = document.createElement("div");
+    wrap.className = "parts";
+    var cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = "구성 — 실내에서 볼 때 왼쪽부터. 순서는 ▲▼로 바꿀 수 있습니다.";
+    wrap.appendChild(cap);
+
+    p.parts.forEach(function (t, k) { wrap.appendChild(buildPart(p, t, k, i)); });
+
+    var prow = document.createElement("div");
+    prow.className = "btnrow";
+    var bm = document.createElement("button");
+    bm.type = "button"; bm.className = "tiny"; bm.textContent = "+ 통바";
+    bm.addEventListener("click", function () { p.parts.push(newMullion()); render(); });
+    var bs = document.createElement("button");
+    bs.type = "button"; bs.className = "tiny"; bs.textContent = "+ 창";
+    bs.addEventListener("click", function () { p.parts.push(newSash()); render(); });
+    var bt = document.createElement("button");
+    bt.type = "button"; bt.className = "tiny"; bt.textContent = "+ 터닝도어";
+    bt.addEventListener("click", function () { p.parts.push(newTurn()); render(); });
+    prow.appendChild(bm); prow.appendChild(bs); prow.appendChild(bt);
+    wrap.appendChild(prow);
+    body.appendChild(wrap);
+
+    // ---- 3D 미리보기 ----
+    var m3wrap = document.createElement("div");
+    m3wrap.className = "mini3d-wrap";
+    var m3cap = document.createElement("div");
+    m3cap.className = "cap";
+    m3cap.textContent = "실측 미리보기 · 개략도(짝 폭은 균등 분할 가정, 실제와 다를 수 있음)";
+    m3wrap.appendChild(m3cap);
+    var m3box = document.createElement("div");
+    m3box.className = "mini3d";
+    m3box.innerHTML = '<div class="mini3d-empty">치수를 입력하면 미리보기가 나타납니다</div>';
+    m3wrap.appendChild(m3box);
+    body.appendChild(m3wrap);
+
+    card.appendChild(body);
+    return card;
+  }
+
+  var PART_TAGS = { mullion: "통바", turn: "터닝도어", entry: "현관문", sash: "창" };
+
+  function buildPart(p, t, k, pinIndex) {
+    var d = document.createElement("div");
+    d.className = "part " + t.kind;
+
+    var top = document.createElement("div");
+    top.className = "part-top";
+    var no = document.createElement("span");
+    no.className = "pno"; no.textContent = (k + 1) + ".";
+    top.appendChild(no);
+    var tag = document.createElement("span");
+    tag.className = "tag"; tag.textContent = PART_TAGS[t.kind] || t.kind;
+    top.appendChild(tag);
+
+    if (t.kind === "mullion") {
+      var specSel = sel1(MULLION_SPECS, t.spec, function (v) { t.spec = v; persist(); refreshDone(); }, "spec");
+      top.appendChild(specSel);
+    }
+
+    var sp = document.createElement("span"); sp.className = "sp"; top.appendChild(sp);
+    top.appendChild(reorderButtons(k === 0, k === p.parts.length - 1,
+      function () { movePartUp(p, k); }, function () { movePartDown(p, k); }, (k + 1) + "번 구성을"));
+
+    var x = document.createElement("button");
+    x.type = "button"; x.className = "x"; x.textContent = "×";
+    x.title = "이 구성 삭제";
+    x.setAttribute("aria-label", "구성 " + (k + 1) + " 삭제");
+    x.addEventListener("click", function () { removePart(p, k); });
+    top.appendChild(x);
+    d.appendChild(top);
+
+    if (t.kind === "sash") {
+      var g = document.createElement("div");
+      g.className = "grid2";
+      g.appendChild(labeled("폭 (mm)", numInput(t.w, "4170", function (v) { t.w = v; persist(); refreshSpanBar(pinIndex); })));
+      g.appendChild(labeled("높이 (mm)", numInput(t.h, "2250", function (v) { t.h = v; })));
+      var pr = sel1(PRIMARY_TYPES, t.primary, function (v) { t.primary = v; persist(); refreshDone(); });
+      g.appendChild(labeled("짝수", sel1(PANEL_TYPES, t.panels, function (v) {
+        t.panels = v; applyPanelRule(t, pr); persist(); refreshDone();
+      })));
+      g.appendChild(labeled("주 사용문", pr));
+      d.appendChild(g);
+    } else if (t.kind === "turn") {
+      var g2 = document.createElement("div");
+      g2.className = "grid2";
+      g2.appendChild(labeled("폭 (mm)", numInput(t.w, "900", function (v) { t.w = v; persist(); refreshSpanBar(pinIndex); })));
+      g2.appendChild(labeled("높이 (mm)", numInput(t.h, "2100", function (v) { t.h = v; })));
+      t.swing = "push"; t.handle = "right";
+      var turnFixed = document.createElement("div"); turnFixed.className = "cap2";
+      turnFixed.textContent = "미는 문 · 오른쪽 손잡이 · 15° 열림";
+      g2.appendChild(turnFixed);
+      d.appendChild(g2);
+    } else if (t.kind === "entry") {
+      t.w = "900"; t.h = "2100";
+      var fixed = document.createElement("div"); fixed.className = "cap2";
+      fixed.textContent = "현관 위치 표시 · 벽 개구부 900×2100mm";
+      d.appendChild(fixed);
+    }
+    return d;
+  }
+
+  function refreshSpanBar(i) {
+    var p = state.pins[i], bar = document.querySelector('.span-bar[data-i="' + i + '"]');
+    if (!p || !bar || !state.scale) return;
+    var totalMm = opGeometryBoxes(p).width;
+    var horiz = (p.angle || 0) === 0;
+    var denominator = horiz ? state.scale.mmPerFracX : state.scale.mmPerFracY;
+    // 새 2점 축척은 이미지 픽셀 기준이므로 현재 화면의 픽셀 길이로 환산한다.
+    if (state.scale.mmPerPixel) {
+      var stageRect = $("stage").getBoundingClientRect();
+      var natural = horiz ? ($("plan").naturalWidth || state.scale.imageWidth) :
+                            ($("plan").naturalHeight || state.scale.imageHeight);
+      var shown = horiz ? stageRect.width : stageRect.height;
+      var px = totalMm / state.scale.mmPerPixel * (shown / natural);
+      if (horiz) bar.style.width = px + "px"; else bar.style.height = px + "px";
+    } else if (denominator) {
+      var pct = totalMm / denominator * 100;
+      if (horiz) bar.style.width = pct + "%"; else bar.style.height = pct + "%";
+    }
+  }
+
+  function refreshDone() {
+    var done = state.pins.filter(isDone).length;
+    $("cdone").textContent = done;
+    $("ctotal").textContent = state.pins.length;
+    var msg = $("cmsg");
+    if (!state.pins.length) { msg.textContent = ""; msg.className = ""; }
+    else if (done === state.pins.length) { msg.textContent = "✓ 전부 입력 완료"; msg.className = "done"; }
+    else { msg.textContent = "미입력 " + (state.pins.length - done) + "곳"; msg.className = ""; }
+
+    var cards = document.querySelectorAll(".op");
+    state.pins.forEach(function (p, i) {
+      var d = isDone(p);
+      var mk = document.querySelector('.marker[data-i="' + i + '"]');
+      if (mk) mk.classList.toggle("done", d);
+      var op = cards[i];
+      if (op) {
+        var b = op.querySelector(".no");
+        if (b) b.classList.toggle("done", d);
+        var s = op.querySelector(".op-sum");
+        if (s) s.textContent = summarize(p);
+      }
+    });
+
+    if (sel !== null && state.pins[sel]) {
+      if (activeMini3D) { activeMini3D.cancel(); activeMini3D = null; }
+      var host = cards[sel] && cards[sel].querySelector(".mini3d");
+      if (host) activeMini3D = mountMini3D(host, state.pins[sel]);
+    }
+    persist();
+  }
+
+  $("site").addEventListener("input", function () { state.site = this.value; persist(); });
+  $("surveydate").addEventListener("input", function () { state.surveyDate = this.value; persist(); });
+
+  /* ============================================================
+     개소별 3D 미리보기 — 3d_generator.py(창호3D_생성.py)와 같은
+     치수 상수(T_OUTER/T_PANEL/D_PANEL/GLASS_T/RAIL_OFF)와 같은
+     재질(프레임=은회색, 통바=진회색)을 써서 같은 룩으로 보이게 함.
+     벽/방 위치 정보가 없어 그 창호 하나만 정면에서 보여주는 개략도이며,
+     실제 3D 생성(전체 세대)과는 별개.
+     ============================================================ */
+  var MINI3D_LAST_ID = 0;
+  function opGeometryBoxes(p) {
+    var T_OUTER = 60, T_PANEL = 50, D_PANEL = 70, GLASS_T = 8, RAIL_OFF = 18;
+    var PRIMARY_MAP = {
+      2: { left: [0], right: [1], both: [0, 1], none: [] },
+      3: { left: [0], right: [2], both: [0, 2], none: [] },
+      4: { left: [0], right: [3], both: [0, 3], none: [] }
+    };
+    var boxes = [];
+    var maxH = 0;
+    sizedParts(p).forEach(function (s) { var h = Number(s.h) || 0; if (h > maxH) maxH = h; });
+    if (!maxH) maxH = 1200;
+
+    function ring(u0, v0, w, h, t, d, noff, mat) {
+      boxes.push({ mat: mat, pos: [u0 + w / 2, v0 + t / 2, noff], size: [w, t, d] });
+      boxes.push({ mat: mat, pos: [u0 + w / 2, v0 + h - t / 2, noff], size: [w, t, d] });
+      boxes.push({ mat: mat, pos: [u0 + t / 2, v0 + h / 2, noff], size: [t, h - 2 * t, d] });
+      boxes.push({ mat: mat, pos: [u0 + w - t / 2, v0 + h / 2, noff], size: [t, h - 2 * t, d] });
+    }
+
+    var x = 0;
+    var previousKind = null;
+    p.parts.forEach(function (t) {
+      if (t.kind === "mullion" && previousKind === "mullion") {
+        boxes.push({ mat: "divider", pos: [x, maxH / 2, 72], size: [8, maxH, 5] });
+      }
+      if (t.kind === "mullion") {
+        var mw = parseInt((t.spec || "100").split("×")[0], 10) || 100;
+        var mullionMat = /40×105/.test(t.spec || "") ? "mullion40105" : "mullion100";
+        boxes.push({ mat: mullionMat, pos: [x + mw / 2, maxH / 2, 0], size: [mw, maxH, 140] });
+        x += mw;
+      } else if (t.kind === "turn" || t.kind === "entry") {
+        var isEntry = t.kind === "entry";
+        var tw = Number(t.w) || (isEntry ? 900 : 0), th = Number(t.h) || (isEntry ? 2100 : maxH);
+        if (!tw || !th) { return; }
+        ring(x, 0, tw, th, T_OUTER, 140, 0, isEntry ? "entry" : "frame");
+        if (isEntry) { x += tw; previousKind = t.kind; return; }
+        var leafT = 45, innerW = tw - 2 * T_OUTER, innerH = th - 2 * T_OUTER;
+        var handle = isEntry ? "left" : "right";
+        var outsideSign = typeof p.outsideSign === "number" ? p.outsideSign :
+          (((p.angle || 0) === 90) ? (p.x < .5 ? 1 : -1) : (p.y < .5 ? -1 : 1));
+        // 외부에서 바라볼 때 왼쪽 손잡이 → 오른쪽 경첩. 보는 면이 바뀌면 로컬 좌우도 뒤집힌다.
+        var interiorSign = -outsideSign;
+        var hingeAtLeft = isEntry ? outsideSign < 0 : interiorSign > 0;
+        var hingeX = hingeAtLeft ? (x + T_OUTER) : (x + tw - T_OUTER);
+        var signX = hingeAtLeft ? 1 : -1;
+        // 터닝도어는 15°만 살짝, 현관문은 식별이 되도록 55° 연다.
+        // 현관문은 외부에서 볼 때 당기는 문·왼쪽 손잡이로 고정한다.
+        var openDeg = isEntry ? 55 : 15;
+        // 두 문 모두 손잡이가 있는 자유단이 열리는 구조. 터닝도어는 실내에서 바깥으로 민다.
+        var rotY = -outsideSign * signX * openDeg * Math.PI / 180;
+        var vx = signX * innerW / 2;
+        var leafCx = hingeX + vx * Math.cos(rotY);
+        var leafCz = -vx * Math.sin(rotY);
+        boxes.push({ mat: isEntry ? "entry" : "turn",
+                     pos: [leafCx, T_OUTER + innerH / 2, leafCz],
+                     size: [innerW, innerH, leafT], rotY: rotY });
+        if (isEntry || t.kind === "turn") {
+          var hxv = signX * innerW * .84;
+          boxes.push({ mat: "handle",
+            pos: [hingeX + hxv * Math.cos(rotY), T_OUTER + innerH * .52, -hxv * Math.sin(rotY)],
+            size: [24, 130, 55], rotY: rotY });
+        }
+        x += tw;
+      } else {
+        var w = Number(t.w) || 0, h = Number(t.h) || maxH;
+        if (!w || !h) { return; }
+        var sashY = maxH - h;                         // 창은 공통 상단선부터 아래로 배치
+        ring(x, sashY, w, h, T_OUTER, 140, 0, "frame");
+        var iw = w - 2 * T_OUTER, ih = h - 2 * T_OUTER;
+        var n = (t.panels === "fix" || t.panels === "고정") ? 1 : (parseInt(t.panels, 10) || 2);
+        var ratios = n === 3 ? [1, 2, 1] : new Array(n).fill(1);
+        var ratioTotal = ratios.reduce(function (a, b) { return a + b; }, 0), panelX = 0;
+        var prim = (PRIMARY_MAP[n] && PRIMARY_MAP[n][t.primary]) || [];
+        for (var k = 0; k < n; k++) {
+          var noff = (k % 2 === 0) ? -RAIL_OFF : RAIL_OFF;
+          var pw = iw * ratios[k] / ratioTotal;
+          var px = x + T_OUTER + panelX; panelX += pw;
+          ring(px, sashY + T_OUTER, pw, ih, T_PANEL, D_PANEL, noff, "frame");
+          boxes.push({ mat: "glass", pos: [px + pw / 2, sashY + T_OUTER + ih / 2, noff],
+                       size: [pw - 2 * T_PANEL, ih - 2 * T_PANEL, GLASS_T] });
+          if (prim.indexOf(k) >= 0) {
+            var s = Math.min(pw, ih) * 0.34, tt = s * 0.12, off = s * 0.18;
+            var cx = px + pw / 2, cy = sashY + T_OUTER + ih / 2, cz = noff + D_PANEL / 2 + 15;
+            [-off, off].forEach(function (dd) {
+              boxes.push({ mat: "marker", pos: [cx + dd, cy, cz], size: [tt, s, 12] });
+              boxes.push({ mat: "marker", pos: [cx, cy + dd, cz], size: [s, tt, 12] });
+            });
+          }
+        }
+        x += w;
+      }
+      previousKind = t.kind;
+    });
+    return { boxes: boxes, width: x, height: maxH };
+  }
+
+  function mountMini3D(container, p) {
+    var myId = ++MINI3D_LAST_ID;
+    var geo = opGeometryBoxes(p);
+    if (!geo.boxes.length || !geo.width) {
+      container.innerHTML = '<div class="mini3d-empty">치수를 입력하면 미리보기가 나타납니다</div>';
+      return { cancel: function () {} };
+    }
+    if (!window.__THREE) {
+      container.innerHTML = '<div class="mini3d-empty">미리보기 준비 중…</div>';
+      var handler = function () {
+        window.removeEventListener("mini3d-ready", handler);
+        if (myId === MINI3D_LAST_ID) render();
+      };
+      window.addEventListener("mini3d-ready", handler);
+      return { cancel: function () { window.removeEventListener("mini3d-ready", handler); } };
+    }
+
+    var THREE = window.__THREE, OrbitControls = window.__OrbitControls;
+    var W = container.clientWidth || 380, H = 170, mm = 0.001;
+    container.innerHTML = "";
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(W, H);
+    container.appendChild(renderer.domElement);
+
+    var scene = new THREE.Scene();
+    var matMap = {
+      frame:   new THREE.MeshStandardMaterial({ color: 0xfff3cf, roughness: .5, metalness: .03 }),  // 밝은 아이보리
+      mullion100: new THREE.MeshStandardMaterial({ color: 0x75c9ec, roughness: .5 }),                // 하늘색
+      mullion40105: new THREE.MeshStandardMaterial({ color: 0xc8ebfa, roughness: .55 }),             // 연한 하늘색
+      turn:    new THREE.MeshStandardMaterial({ color: 0x2f8577, roughness: .5, metalness: .1 }),    // 터닝도어(청록)
+      entry:   new THREE.MeshStandardMaterial({ color: 0x7b573d, roughness: .62, metalness: .05 }),  // 현관문
+      handle:  new THREE.MeshStandardMaterial({ color: 0x22262a, roughness: .35, metalness: .65 }),
+      divider: new THREE.MeshStandardMaterial({ color: 0x4c7182, roughness: .6 }),
+      glass:   new THREE.MeshStandardMaterial({ color: 0x6bb0d9, roughness: .05, transparent: true, opacity: .30 }),
+      marker:  new THREE.MeshStandardMaterial({ color: 0xdc4a29, roughness: .6 })
+    };
+    geo.boxes.forEach(function (b) {
+      var g = new THREE.BoxGeometry(b.size[0] * mm, b.size[1] * mm, Math.max(b.size[2] * mm, 0.001));
+      var mesh = new THREE.Mesh(g, matMap[b.mat]);
+      mesh.position.set(b.pos[0] * mm, b.pos[1] * mm, b.pos[2] * mm);
+      if (b.rotY) mesh.rotation.y = b.rotY;
+      scene.add(mesh);
+    });
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a80, 1.15));
+    var d1 = new THREE.DirectionalLight(0xffffff, 1.05); d1.position.set(1, 1.6, 2.2); scene.add(d1);
+
+    var cw = geo.width * mm, ch = geo.height * mm, cx = cw / 2, cy = ch / 2;
+    var cam = new THREE.PerspectiveCamera(32, W / H, 0.01, 50);
+    // 살짝 정면(사시)보다 각도를 더 줘서 통바·터닝도어처럼 깊이(Z)가 있는
+    // 구성도 형태가 드러나게 함(2026-08-18, 터닝도어 리프가 거의 안 보이던 문제 수정).
+    var dist = Math.max(cw, ch) * 1.55 + 0.4;
+    cam.position.set(cx - cw * 0.38, cy + ch * 0.2, dist);
+    cam.lookAt(cx, cy, 0);
+
+    var controls = new OrbitControls(cam, renderer.domElement);
+    controls.enableDamping = true; controls.enablePan = false;
+    controls.target.set(cx, cy, 0);
+    controls.minDistance = dist * 0.45; controls.maxDistance = dist * 2.4;
+
+    var raf = null, disposed = false;
+    function loop() { if (disposed) return; controls.update(); renderer.render(scene, cam); raf = requestAnimationFrame(loop); }
+    loop();
+
+    return {
+      cancel: function () {
+        disposed = true;
+        if (raf) cancelAnimationFrame(raf);
+        controls.dispose();
+        renderer.dispose();
+      }
+    };
+  }
+
+  function parseFloorplanStructure() {
+    if (!planPixels) return null;
+    var gw = 96, gh = Math.max(48, Math.round(gw * planPixels.h / planPixels.w));
+    var occupied = new Array(gw * gh).fill(false), line = new Array(gw * gh).fill(false);
+    function at(a, x, y) { return x >= 0 && y >= 0 && x < gw && y < gh && a[y * gw + x]; }
+    function detailAt(x, y) {
+      if (x < 0 || y < 0 || x >= gw || y >= gh) return false;
+      for (var sy = 1; sy <= 5; sy++) for (var sx = 1; sx <= 5; sx++) {
+        if (isWallPixel((x + sx / 6) / gw * planPixels.w, (y + sy / 6) / gh * planPixels.h)) return true;
+      }
+      return false;
+    }
+    for (var y = 0; y < gh; y++) for (var x = 0; x < gw; x++) {
+      var hits = 0, total = 0;
+      for (var sy = 1; sy <= 4; sy++) for (var sx = 1; sx <= 4; sx++) {
+        var px = (x + sx / 5) / gw * planPixels.w, py = (y + sy / 5) / gh * planPixels.h;
+        if (isWallPixel(px, py)) hits++; total++;
+      }
+      occupied[y * gw + x] = hits / total >= .16;
+    }
+    // 글자와 치수 숫자는 버리고, 일정 길이 이상 이어지는 수평·수직 검은 선만 벽 후보로 둔다.
+    for (var ry = 0; ry < gh; ry++) {
+      var start = -1;
+      for (var rx = 0; rx <= gw; rx++) {
+        if (rx < gw && at(occupied, rx, ry)) { if (start < 0) start = rx; }
+        else if (start >= 0) { if (rx - start >= 3) for (var q = start; q < rx; q++) line[ry * gw + q] = true; start = -1; }
+      }
+    }
+    for (var cx = 0; cx < gw; cx++) {
+      var top = -1;
+      for (var cy = 0; cy <= gh; cy++) {
+        if (cy < gh && at(occupied, cx, cy)) { if (top < 0) top = cy; }
+        else if (top >= 0) { if (cy - top >= 3) for (var v = top; v < cy; v++) line[v * gw + cx] = true; top = -1; }
+      }
+    }
+    // 외부 치수선처럼 떨어진 선은 제외하고, 서로 연결된 가장 큰 벽망만 남긴다.
+    var seen = new Uint8Array(gw * gh), best = [];
+    for (var i = 0; i < line.length; i++) if (line[i] && !seen[i]) {
+      var stack = [i], comp = []; seen[i] = 1;
+      while (stack.length) {
+        var n = stack.pop(), nx = n % gw, ny = Math.floor(n / gw); comp.push(n);
+        for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) {
+          var xx = nx + dx, yy = ny + dy, ni = yy * gw + xx;
+          if ((dx || dy) && at(line, xx, yy) && !seen[ni]) { seen[ni] = 1; stack.push(ni); }
+        }
+      }
+      if (comp.length > best.length) best = comp;
+    }
+    if (best.length < 20) return null;
+    var mask = new Uint8Array(gw * gh), minX = gw, maxX = 0, minY = gh, maxY = 0;
+    best.forEach(function (n) { mask[n] = 1; var x = n % gw, y = Math.floor(n / gw);
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
+
+    // 외벽의 빈 구간 중 바깥쪽에 문짝/호가 있는 곳을 현관 후보로 선택한다.
+    var candidates = [];
+    function scanSide(side) {
+      var vertical = side === "left" || side === "right";
+      var fixed = side === "left" ? minX : side === "right" ? maxX : side === "top" ? minY : maxY;
+      var from = vertical ? minY : minX, to = vertical ? maxY : maxX, run = -1;
+      function wallAt(t) {
+        for (var b = -1; b <= 1; b++) {
+          var x = vertical ? fixed + b : t, y = vertical ? t : fixed + b;
+          if (at(mask, x, y)) return true;
+        }
+        return false;
+      }
+      for (var t = from + 1; t <= to; t++) {
+        if (!wallAt(t)) { if (run < 0) run = t; }
+        else if (run >= 0) {
+          var len = t - run;
+          if (len >= 3 && len <= 18) {
+            var score = 0, outward = (side === "left" || side === "top") ? -1 : 1;
+            for (var a = run - 2; a <= t + 2; a++) for (var o = 2; o <= 6; o++) {
+              var xx = vertical ? fixed + outward * o : a;
+              var yy = vertical ? a : fixed + outward * o;
+              if (detailAt(xx, yy)) score++;
+            }
+            if (score >= 1) candidates.push({ side: side, mid: (run + t - 1) / 2, len: len, score: score });
+          }
+          run = -1;
+        }
+      }
+    }
+    ["left", "right", "top", "bottom"].forEach(scanSide);
+
+    // 오목하게 들어간 현관도 찾기 위해 외곽 네 면뿐 아니라 전체 벽망의 모든 개구부를 조사한다.
+    // 먼저 작은 문/창 틈을 임시로 막은 벽망에서 바깥 공기를 flood-fill해 실내·실외를 구분한다.
+    var sealed = new Uint8Array(mask);
+    function sealShortGaps(vertical) {
+      var outer = vertical ? gw : gh, inner = vertical ? gh : gw;
+      for (var a = 0; a < outer; a++) {
+        var last = -1;
+        for (var b = 0; b < inner; b++) {
+          var x = vertical ? a : b, y = vertical ? b : a;
+          if (at(mask, x, y)) {
+            if (last >= 0 && b - last - 1 >= 1 && b - last - 1 <= 18) {
+              for (var f = last + 1; f < b; f++) {
+                var fx = vertical ? a : f, fy = vertical ? f : a; sealed[fy * gw + fx] = 1;
+              }
+            }
+            last = b;
+          }
+        }
+      }
+    }
+    sealShortGaps(true); sealShortGaps(false);
+    var outside = new Uint8Array(gw * gh), queue = [], qhead = 0;
+    function pushOutside(x, y) {
+      if (x < 0 || y < 0 || x >= gw || y >= gh) return;
+      var n = y * gw + x;
+      if (!sealed[n] && !outside[n]) { outside[n] = 1; queue.push(n); }
+    }
+    for (var bx = 0; bx < gw; bx++) { pushOutside(bx, 0); pushOutside(bx, gh - 1); }
+    for (var by = 0; by < gh; by++) { pushOutside(0, by); pushOutside(gw - 1, by); }
+    while (qhead < queue.length) {
+      var qn = queue[qhead++], qx = qn % gw, qy = Math.floor(qn / gw);
+      pushOutside(qx - 1, qy); pushOutside(qx + 1, qy); pushOutside(qx, qy - 1); pushOutside(qx, qy + 1);
+    }
+
+    function inspectWallOpenings(vertical) {
+      var fixedFrom = vertical ? minX : minY, fixedTo = vertical ? maxX : maxY;
+      var alongFrom = vertical ? minY : minX, alongTo = vertical ? maxY : maxX;
+      for (var fixed = fixedFrom; fixed <= fixedTo; fixed++) {
+        var gapStart = -1;
+        function wallAtAlong(t) {
+          for (var band = -1; band <= 1; band++) {
+            var x = vertical ? fixed + band : t, y = vertical ? t : fixed + band;
+            if (at(mask, x, y)) return true;
+          }
+          return false;
+        }
+        for (var along = alongFrom; along <= alongTo + 1; along++) {
+          var wallHere = along <= alongTo && wallAtAlong(along);
+          if (!wallHere) { if (gapStart < 0) gapStart = along; continue; }
+          if (gapStart >= 0) {
+            var gapLen = along - gapStart, mid = Math.round((gapStart + along - 1) / 2);
+            if (gapLen >= 3 && gapLen <= 18 && gapStart > alongFrom) {
+              var negX = vertical ? fixed - 3 : mid, negY = vertical ? mid : fixed - 3;
+              var posX = vertical ? fixed + 3 : mid, posY = vertical ? mid : fixed + 3;
+              var negOutside = at(outside, negX, negY), posOutside = at(outside, posX, posY);
+              if (!!negOutside !== !!posOutside) {
+                var detail = 0;
+                for (var ga = gapStart - 1; ga <= along + 1; ga++) for (var go = -8; go <= 8; go++) {
+                  var gx = vertical ? fixed + go : ga, gy = vertical ? ga : fixed + go;
+                  if (detailAt(gx, gy)) detail++;
+                }
+                // 벽 끝점만 있는 단순 틈은 제외하고, 틈 안쪽에 문짝 직선/개폐 호 흔적이 있어야 한다.
+                if (detail >= gapLen + 3) {
+                  candidates.push({ side: vertical ? (negOutside ? "left" : "right") : (negOutside ? "top" : "bottom"),
+                    mid: mid, fixed: fixed, len: gapLen, score: detail + 40, recessed: true });
+                }
+              }
+            }
+            gapStart = -1;
+          }
+        }
+      }
+    }
+    inspectWallOpenings(true); inspectWallOpenings(false);
+
+    // 같은 문을 벽 두께의 여러 격자선에서 찾은 중복 후보는 최고 점수 하나만 남긴다.
+    candidates.sort(function (a, b) { return b.score - a.score; });
+    var uniqueCandidates = [];
+    candidates.forEach(function (candidate) {
+      var duplicate = uniqueCandidates.some(function (u) {
+        return u.side === candidate.side && Math.abs(u.mid - candidate.mid) <= 3 &&
+          Math.abs((u.fixed || 0) - (candidate.fixed || 0)) <= 3;
+      });
+      if (!duplicate) uniqueCandidates.push(candidate);
+    });
+    candidates = uniqueCandidates;
+    var entrance = null, c = candidates[0];
+    if (c) {
+      if (c.side === "left" || c.side === "right") entrance = {
+        x: (c.recessed ? c.fixed : (c.side === "left" ? minX : maxX)) / gw, y: c.mid / gh, angle: 90,
+        outsideSign: c.side === "left" ? 1 : -1, width: Math.round(c.len / gh * planPixels.h * (state.scale && state.scale.mmPerPixel || 1))
+      };
+      else entrance = { x: c.mid / gw, y: (c.recessed ? c.fixed : (c.side === "top" ? minY : maxY)) / gh, angle: 0,
+        outsideSign: c.side === "top" ? -1 : 1, width: Math.round(c.len / gw * planPixels.w * (state.scale && state.scale.mmPerPixel || 1)) };
+      entrance.width = 900;
+    }
+    return { gw: gw, gh: gh, mask: mask, entrance: entrance };
+  }
+
+  function makeLabelSprite(THREE, text) {
+    var c = document.createElement("canvas"), ctx = c.getContext("2d");
+    ctx.font = "700 34px system-ui, sans-serif";
+    var textW = Math.ceil(ctx.measureText(text).width), padX = 22;
+    c.width = Math.max(180, textW + padX * 2); c.height = 82;
+    ctx.font = "700 34px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = "#4f5961"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+    ctx.fillStyle = "#20262b"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(text, c.width / 2, c.height / 2);
+    var mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true });
+    var s = new THREE.Sprite(mat); s.scale.set(c.width * .0051, .42, 1); s.renderOrder = 10; return s;
+  }
+
+  function mountProject3D(container) {
+    if (!window.__THREE) {
+      container.innerHTML = '<div class="mini3d-empty">3D 엔진을 불러오는 중입니다. 잠시 후 다시 눌러주세요.</div>';
+      return { cancel: function () {} };
+    }
+    var THREE = window.__THREE, OrbitControls = window.__OrbitControls, mm = .001;
+    var W = container.clientWidth || 900, H = 440;
+    container.innerHTML = "";
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(W, H); renderer.shadowMap.enabled = false;
+    container.appendChild(renderer.domElement);
+    var scene = new THREE.Scene(); scene.background = new THREE.Color(0xeef1f3);
+    var matMap = {
+      frame: new THREE.MeshStandardMaterial({ color: 0xfff3cf, roughness: .5, metalness: .03 }),
+      mullion100: new THREE.MeshStandardMaterial({ color: 0x75c9ec, roughness: .5 }),
+      mullion40105: new THREE.MeshStandardMaterial({ color: 0xc8ebfa, roughness: .55 }),
+      turn: new THREE.MeshStandardMaterial({ color: 0x2f8577, roughness: .5 }),
+      entry: new THREE.MeshStandardMaterial({ color: 0x7b573d, roughness: .62 }),
+      handle: new THREE.MeshStandardMaterial({ color: 0x22262a, roughness: .35, metalness: .65 }),
+      divider: new THREE.MeshStandardMaterial({ color: 0x4c7182, roughness: .6 }),
+      glass: new THREE.MeshStandardMaterial({ color: 0x6bb0d9, roughness: .05, transparent: true, opacity: .30 }),
+      marker: new THREE.MeshStandardMaterial({ color: 0xdc4a29, roughness: .6 })
+    };
+    var naturalW = $("plan").naturalWidth || (state.scale && state.scale.imageWidth) || 1000;
+    var naturalH = $("plan").naturalHeight || (state.scale && state.scale.imageHeight) || 700;
+    var planWmm, planHmm;
+    if (state.scale && state.scale.mmPerPixel) {
+      planWmm = naturalW * state.scale.mmPerPixel; planHmm = naturalH * state.scale.mmPerPixel;
+    } else if (state.scale && state.scale.mmPerFracX) {
+      planWmm = state.scale.mmPerFracX; planHmm = state.scale.mmPerFracY;
+    } else {
+      planWmm = 10000; planHmm = planWmm * naturalH / naturalW;
+    }
+    var structure = parseFloorplanStructure();
+    if (structure) {
+      var wallCells = [];
+      for (var wi = 0; wi < structure.mask.length; wi++) if (structure.mask[wi]) wallCells.push(wi);
+      var wallOpenings = state.pins.map(function (p) {
+        var geo = opGeometryBoxes(p);
+        return { p: p, width: geo.width, height: geo.height,
+          hasDoor: p.parts.some(function (t) { return t.kind === "turn" || t.kind === "entry"; }) };
+      });
+      function openingAt(n) {
+        var cellXn = ((n % structure.gw) + .5) / structure.gw;
+        var cellYn = (Math.floor(n / structure.gw) + .5) / structure.gh;
+        for (var oi = 0; oi < wallOpenings.length; oi++) {
+          var o = wallOpenings[oi];
+          if (!o.width) continue;
+          var hit = (o.p.angle || 0) === 90
+            ? Math.abs(cellXn - o.p.x) * planWmm <= 230 && Math.abs(cellYn - o.p.y) * planHmm <= o.width / 2 + 45
+            : Math.abs(cellYn - o.p.y) * planHmm <= 230 && Math.abs(cellXn - o.p.x) * planWmm <= o.width / 2 + 45;
+          if (hit) return o;
+        }
+        return null;
+      }
+      var cellW = planWmm * mm / structure.gw, cellD = planHmm * mm / structure.gh;
+      var wallPieces = [];
+      wallCells.forEach(function (n) {
+        var opening = openingAt(n);
+        if (!opening) { wallPieces.push({ n: n, y: 1.2, h: 2.4 }); return; }
+        var openingH = Math.min(2400, Math.max(0, opening.height || 0)) * mm;
+        if (opening.hasDoor) {
+          var above = 2.4 - openingH;
+          if (above > .015) wallPieces.push({ n: n, y: openingH + above / 2, h: above });
+        } else {
+          var below = 2.4 - openingH;
+          if (below > .015) wallPieces.push({ n: n, y: below / 2, h: below });
+        }
+      });
+      var wallGeo = new THREE.BoxGeometry(1, 1, 1);
+      var wallMat = new THREE.MeshStandardMaterial({ color: 0xe8edf0, roughness: .88,
+        transparent: true, opacity: .40, depthWrite: false, side: THREE.DoubleSide });
+      var walls = new THREE.InstancedMesh(wallGeo, wallMat, wallPieces.length), matrix = new THREE.Matrix4();
+      wallPieces.forEach(function (piece, idx) {
+        var wx = piece.n % structure.gw, wy = Math.floor(piece.n / structure.gw);
+        matrix.makeScale(cellW * 1.08, piece.h, cellD * 1.08);
+        matrix.setPosition((wx + .5) * cellW, piece.y, (wy + .5) * cellD); walls.setMatrixAt(idx, matrix);
+      });
+      walls.instanceMatrix.needsUpdate = true;
+      scene.add(walls);
+    }
+    var renderPins = state.pins.slice();
+    renderPins.forEach(function (p, pinIndex) {
+      var geo = opGeometryBoxes(p); if (!geo.boxes.length || !geo.width) return;
+      var group = new THREE.Group();
+      geo.boxes.forEach(function (b) {
+        var g = new THREE.BoxGeometry(b.size[0] * mm, b.size[1] * mm, Math.max(b.size[2] * mm, .001));
+        var mesh = new THREE.Mesh(g, matMap[b.mat]);
+        mesh.position.set((b.pos[0] - geo.width / 2) * mm, b.pos[1] * mm, b.pos[2] * mm);
+        if (b.rotY) mesh.rotation.y = b.rotY;
+        group.add(mesh);
+      });
+      var hasDoor = p.parts.some(function (t) { return t.kind === "turn" || t.kind === "entry"; });
+      var baseY = hasDoor ? 0 : Math.max(0, 2.4 - geo.height * mm);
+      group.position.set(p.x * planWmm * mm, baseY, p.y * planHmm * mm);
+      if ((p.angle || 0) === 90) group.rotation.y = -Math.PI / 2;
+      // 통바/창 구성 순서는 언제나 실내에서 바라본 왼쪽부터 유지한다.
+      var pOutside = typeof p.outsideSign === "number" ? p.outsideSign :
+        (((p.angle || 0) === 90) ? (p.x < .5 ? 1 : -1) : (p.y < .5 ? -1 : 1));
+      if (!hasDoor && pOutside > 0) group.scale.x = -1;
+      scene.add(group);
+      var labelName = p.name || ((pinIndex + 1) + "번");
+      var frameName = p.frame || (p.parts.some(function (t) { return t.kind === "entry"; }) ? "현관문" : "프레임 미선택");
+      var label = makeLabelSprite(THREE, labelName + " · " + frameName + " · " + Math.round(geo.width) + "×" + Math.round(geo.height));
+      label.position.set(p.x * planWmm * mm, baseY + geo.height * mm + .95, p.y * planHmm * mm);
+      scene.add(label);
+    });
+    var floor = new THREE.Mesh(new THREE.PlaneGeometry(planWmm * mm, planHmm * mm),
+      new THREE.MeshStandardMaterial({ color: 0xd9dde0, roughness: .95, transparent: true, opacity: .55 }));
+    floor.rotation.x = -Math.PI / 2; floor.position.set(planWmm * mm / 2, -.01, planHmm * mm / 2);
+    scene.add(floor);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x7a7a72, 1.25));
+    var light = new THREE.DirectionalLight(0xffffff, 1.4);
+    light.position.set(-4, 9, 6); scene.add(light);
+    var cx = planWmm * mm / 2, cz = planHmm * mm / 2, span = Math.max(planWmm, planHmm) * mm;
+    var cam = new THREE.PerspectiveCamera(38, W / H, .01, 100);
+    cam.position.set(cx - span * .55, span * .72, cz + span * .82); cam.lookAt(cx, 1, cz);
+    var controls = new OrbitControls(cam, renderer.domElement);
+    controls.enableDamping = true; controls.target.set(cx, 1, cz);
+    var stopped = false, raf;
+    function loop() { if (stopped) return; controls.update(); renderer.render(scene, cam); raf = requestAnimationFrame(loop); }
+    loop();
+    return { cancel: function () { stopped = true; if (raf) cancelAnimationFrame(raf); controls.dispose(); renderer.dispose(); } };
+  }
+
+  /* ---------------- 내보내기 / 불러오기 ---------------- */
+  function panelsOut(v) {
+    if (v === "고정") return "fix";
+    var n = parseInt(v, 10);
+    return isNaN(n) ? v : n;
+  }
+  function num(v) { return v === "" || v === null || v === undefined ? null : Number(v); }
+
+  function buildJSON() {
+    return {
+      schemaVersion: "0.2-draft",
+      project: { name: state.site || "(현장명 없음)", surveyDate: state.surveyDate || todayLocal(), unit: "mm" },
+      floorplan: { file: state.planName || "", scale: state.scale || null },
+      openings: state.pins.map(function (p, i) {
+        return {
+          no: i + 1,
+          name: p.name || "",
+          frame: p.frame || null,
+          parts: p.parts.map(function (t) {
+            if (t.kind === "mullion") return { kind: "mullion", spec: t.spec };
+            if (t.kind === "entry") return { kind: "entry", width: 900, height: 2100 };
+            if (t.kind === "turn") return { kind: "turn", width: num(t.w), height: num(t.h),
+                                             swing: t.swing, handle: t.handle, openDegrees: 15 };
+            return { kind: "sash", width: num(t.w), height: num(t.h),
+                     panels: panelsOut(t.panels), primary: t.primary };
+          }),
+          plan: { x: Math.round(p.x * 10000) / 10000, y: Math.round(p.y * 10000) / 10000,
+                  angle: p.angle || 0, placementMode: p.placementMode || "free" }
+        };
+      })
+    };
+  }
+
+  // 로컬 개발 화면은 관리자 테스트로 열고, 웹 배포 시에는 홈페이지 로그인 코드가
+  // window.YK_CURRENT_USER_ROLE = "admin"을 주입한 경우에만 버튼을 표시한다.
+  var IS_ADMIN = location.protocol === "file:" || window.YK_CURRENT_USER_ROLE === "admin" ||
+    new URLSearchParams(location.search).get("testAdmin") === "1";
+  $("generate3d").hidden = !IS_ADMIN;
+  $("generate3d").addEventListener("click", function () {
+    if (!IS_ADMIN) { toast("관리자만 3D를 생성할 수 있습니다"); return; }
+    if (!state.pins.length || !state.pins.some(isDone)) { toast("실측값을 먼저 입력해주세요"); return; }
+    if (activeProject3D) activeProject3D.cancel();
+    if (!$("adminresult").open) $("adminresult").showModal();
+    activeProject3D = mountProject3D($("project3d"));
+    toast("3D를 생성했습니다");
+  });
+  $("close3d").addEventListener("click", function () {
+    if (activeProject3D) { activeProject3D.cancel(); activeProject3D = null; }
+    $("adminresult").close();
+  });
+
+  function openSurveyDB() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open("yk-window-surveys", 1);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains("surveys")) db.createObjectStore("surveys", { keyPath: "id" });
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function surveyId() { return (state.surveyDate || todayLocal()) + "|" + (state.site || "").trim(); }
+  $("save").addEventListener("click", async function () {
+    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal();
+    if (!state.site) { toast("현장명을 입력해주세요"); $("site").focus(); return; }
+    try {
+      var db = await openSurveyDB();
+      var tx = db.transaction("surveys", "readwrite");
+      tx.objectStore("surveys").put({ id: surveyId(), site: state.site, surveyDate: state.surveyDate,
+        updatedAt: new Date().toISOString(), payload: JSON.stringify(state) });
+      await new Promise(function (resolve, reject) { tx.oncomplete = resolve; tx.onerror = function () { reject(tx.error); }; });
+      db.close(); persist(); toast(state.surveyDate + " · " + state.site + " 실측파일을 저장했습니다");
+    } catch (e) { toast("저장하지 못했습니다: " + e.message); }
+  });
+
+  function applySavedState(saved) {
+    state = saved;
+    state.site = state.site || ""; state.surveyDate = state.surveyDate || todayLocal();
+    state.pins = Array.isArray(state.pins) ? state.pins : [];
+    state.pins.forEach(function (p) {
+      if (Array.isArray(p.parts)) p.parts.forEach(function (t) {
+        if (t.kind === "mullion" && t.spec === "100×45") t.spec = "40×105";
+        if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
+        if (t.kind === "entry") { t.w = "900"; t.h = "2100"; }
+      });
+      if (/현관/.test(p.name || "") && Array.isArray(p.parts)) p.parts = p.parts.map(function (t) {
+        return t.kind === "turn" ? newEntry() : t;
+      });
+    });
+    $("site").value = state.site; $("surveydate").value = state.surveyDate;
+    sel = null; updateScaleHint();
+    if (state.planData) showPlan(state.planData, state.planName); else render();
+    persist();
+  }
+  async function showSavedSurveys() {
+    var host = $("savedlist"); host.innerHTML = '<div class="empty">불러오는 중…</div>';
+    $("savedialog").showModal();
+    try {
+      var db = await openSurveyDB(), tx = db.transaction("surveys", "readonly");
+      var req = tx.objectStore("surveys").getAll();
+      var rows = await new Promise(function (resolve, reject) { req.onsuccess = function () { resolve(req.result); }; req.onerror = function () { reject(req.error); }; });
+      db.close(); rows.sort(function (a, b) { return b.id.localeCompare(a.id); }); host.innerHTML = "";
+      if (!rows.length) { host.innerHTML = '<div class="empty">이 브라우저에 저장된 실측파일이 없습니다.</div>'; return; }
+      rows.forEach(function (row) {
+        var div = document.createElement("div"); div.className = "saved-row";
+        var date = document.createElement("span"); date.className = "saved-date"; date.textContent = row.surveyDate;
+        var site = document.createElement("b"); site.textContent = row.site;
+        var open = document.createElement("button"); open.type = "button"; open.textContent = "열기";
+        open.addEventListener("click", function () {
+          try { applySavedState(JSON.parse(row.payload)); $("savedialog").close(); toast(row.site + " 실측파일을 열었습니다"); }
+          catch (e) { toast("저장된 내용을 읽지 못했습니다"); }
+        });
+        div.appendChild(date); div.appendChild(site); div.appendChild(open); host.appendChild(div);
+      });
+    } catch (e) { host.innerHTML = '<div class="empty">저장 목록을 불러오지 못했습니다.</div>'; }
+  }
+  $("load").addEventListener("click", showSavedSurveys);
+  $("closesaved").addEventListener("click", function () { $("savedialog").close(); });
+  $("openlegacy").addEventListener("click", function () { $("loadfile").click(); });
+  $("loadfile").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var j = JSON.parse(r.result);
+        var list = j && (j.openings || j.markers);
+        if (!Array.isArray(list)) throw new Error("형식이 다릅니다");
+        state.site = (j.project && j.project.name) || "";
+        state.surveyDate = (j.project && j.project.surveyDate) || todayLocal();
+        state.planName = (j.floorplan && j.floorplan.file) || "";
+        state.scale = (j.floorplan && j.floorplan.scale &&
+                      (j.floorplan.scale.mmPerPixel || j.floorplan.scale.mmPerFracX))
+          ? j.floorplan.scale : null;
+        state.pins = list.map(function (m) {
+          var parts;
+          if (Array.isArray(m.parts) && m.parts.length) {
+            parts = m.parts.map(function (t) {
+              if (t.kind === "mullion") return { kind: "mullion", spec: t.spec === "100×45" ? "40×105" : (t.spec || MULLION_SPECS[0]) };
+              if (t.kind === "entry") return newEntry();
+              if (t.kind === "turn") return { kind: "turn",
+                       w: t.width === null || t.width === undefined ? "" : String(t.width),
+                       h: t.height === null || t.height === undefined ? "" : String(t.height),
+                       swing: "push", handle: "right" };
+              return { kind: "sash",
+                       w: t.width === null || t.width === undefined ? "" : String(t.width),
+                       h: t.height === null || t.height === undefined ? "" : String(t.height),
+                       panels: t.panels === "fix" ? "고정" : (t.panels ? t.panels + "짝" : "2짝"),
+                       primary: t.primary || "right" };
+            });
+          } else if (m.width !== undefined || m.height !== undefined) {
+            parts = [{ kind: "sash",
+                       w: m.width === null || m.width === undefined ? "" : String(m.width),
+                       h: m.height === null || m.height === undefined ? "" : String(m.height),
+                       panels: "2짝", primary: "right" }];
+          } else {
+            parts = [];
+          }
+          if (/현관/.test(m.name || "")) parts = parts.map(function (t) {
+            return t.kind === "turn" ? newEntry() : t;
+          });
+          return { name: m.name || "", frame: m.frame || "", parts: parts,
+                   x: (m.plan && m.plan.x) || 0.5, y: (m.plan && m.plan.y) || 0.5,
+                   angle: (m.plan && m.plan.angle) || 0,
+                   placementMode: (m.plan && m.plan.placementMode) || "free", wallLock: null };
+        });
+        $("site").value = state.site;
+        $("surveydate").value = state.surveyDate;
+        sel = null;
+        updateScaleHint();
+        render();
+        toast(state.planName
+          ? "불러왔습니다 — 평면도(" + state.planName + ")는 다시 올려주세요"
+          : "불러왔습니다");
+      } catch (err) {
+        toast("읽을 수 없는 파일입니다: " + err.message);
+      }
+    };
+    r.readAsText(f);
+  });
+
+  /* ---------------- 시작 ---------------- */
+  restore();
+  $("site").value = state.site;
+  $("surveydate").value = state.surveyDate || todayLocal();
+  updateScaleHint();
+  if (state.planData) showPlan(state.planData, state.planName);
+  render();
+})();
+</script>
+</body>
+</html>
