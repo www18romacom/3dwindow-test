@@ -61,6 +61,18 @@
     align-items: start;
   }
   @media (max-width: 1000px) { .wrap { grid-template-columns: minmax(0,1fr); } }
+  @media (max-width: 600px) {
+    header { padding: 12px 8px 0; }
+    .wrap { gap: 10px; padding: 10px 6px 28px; }
+    .floorplan-card .body { padding: 4px; }
+    .floorplan-card > h2 { padding-inline: 10px; }
+    .floorplan-card .btnrow { padding-inline: 4px; }
+    #drop { min-height: 220px; }
+    .marker { width: 20px; height: 20px; margin: -10px 0 0 -10px;
+      border-width: 1.5px; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+    .marker.sel { transform: scale(1.15); box-shadow: 0 0 0 2px var(--accent); }
+    .marker.entry-marker { min-width: 38px; height: 20px; padding: 0 5px; border-radius: 10px; font-size: 9px; }
+  }
 
   .card {
     background: var(--panel); border: 1px solid var(--line);
@@ -122,6 +134,7 @@
   }
   .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
   .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
+  .marker.entry-marker { width: auto; min-width: 54px; padding: 0 10px; border-radius: 18px; }
 
   /* ---- 실제 비율 폭 표시 막대(축척 설정 후) — 각진 직사각형(둥근 모서리 아님) ---- */
   .span-bar {
@@ -167,6 +180,7 @@
     font: 700 12px/1 system-ui, sans-serif; background: var(--panel);
   }
   .no.done { background: var(--accent-solid); color: var(--accent-ink); }
+  .no.entry-no { width: auto; min-width: 42px; padding: 0 7px; border-radius: 12px; }
 
   .nm { flex: 1; min-width: 0; }
 
@@ -238,11 +252,13 @@
   .dialog-head { display: flex; align-items: center; justify-content: space-between;
     padding: 14px 16px; border-bottom: 1px solid var(--line); }
   .dialog-body { padding: 12px 16px 16px; overflow: auto; }
-  .saved-row { display: grid; grid-template-columns: 130px minmax(0,1fr) auto; gap: 8px;
+  .saved-row { display: grid; grid-template-columns: minmax(0,1fr) 110px auto; gap: 8px;
     align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
   .saved-row:last-child { border-bottom: 0; }
+  .saved-date { color: var(--ink-3); font-size: 12px; }
   @media (max-width: 600px) { .saved-row { grid-template-columns: 1fr auto; }
-    .saved-row .saved-date { grid-column: 1; } }
+    .saved-row .saved-date { grid-column: 1; grid-row: 2; color: var(--ink-3); font-size: 12px; }
+    .saved-row button { grid-column: 2; grid-row: 1 / span 2; } }
   .mini3d-empty { color: var(--ink-3); font-size: 12.5px; padding: 18px; text-align: center; }
 
   .empty { color: var(--ink-3); font-size: 13.5px; padding: 18px 4px; text-align: center; }
@@ -271,7 +287,7 @@
 
 <div class="wrap">
 
-  <section class="card">
+  <section class="card floorplan-card">
     <h2>평면도 <span class="hint" id="planhint">이미지를 올린 뒤 클릭하면 번호가 찍힙니다</span></h2>
     <div class="body">
       <div id="drop">
@@ -314,7 +330,7 @@
       <div class="btnrow" style="margin-top:14px">
         <button type="button" class="primary" id="generate3d">3D 생성</button>
         <button type="button" id="save">실측파일 저장</button>
-        <button type="button" id="load">실측파일 열기</button>
+        <button type="button" id="load">실측현장 열기</button>
       </div>
     </div>
     <div class="status">
@@ -331,10 +347,10 @@
 </dialog>
 
 <dialog id="savedialog">
-  <div class="dialog-head"><b>저장된 실측파일</b><button type="button" class="x" id="closesaved">×</button></div>
+  <div class="dialog-head"><b>저장된 실측현장</b><button type="button" class="x" id="closesaved">×</button></div>
   <div class="dialog-body">
     <div id="savedlist"></div>
-    <div class="btnrow" style="margin-top:14px"><button type="button" id="openlegacy">기존 JSON 파일 선택</button></div>
+    <div class="btnrow" style="margin-top:14px"><button type="button" id="openlegacy">실측현장 파일 선택</button></div>
     <input type="file" id="loadfile" accept="application/json,.json" class="sr">
   </div>
 </dialog>
@@ -397,6 +413,15 @@
   function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0] }; }
   function newTurn() { return { kind: "turn", w: "0", h: "0", swing: "push", handle: "right" }; }
   function newEntry() { return { kind: "entry", w: "900", h: "2100" }; }
+  function isEntryPin(p) {
+    return !!(p && p.parts && p.parts.some(function (t) { return t.kind === "entry"; }));
+  }
+  function visiblePinLabel(p, index) {
+    if (isEntryPin(p)) return "현관";
+    var number = 0;
+    for (var i = 0; i <= index; i++) if (!isEntryPin(state.pins[i])) number++;
+    return String(number);
+  }
   function edgeFallbackAngle(x, y) {
     var toLR = Math.min(x, 1 - x);   // 좌/우 가장자리까지 거리 — 가까우면 세로벽(세로 막대)
     var toTB = Math.min(y, 1 - y);   // 상/하 가장자리까지 거리 — 가까우면 가로벽(가로 막대)
@@ -926,10 +951,12 @@
       m.className = "marker" + (isDone(p) ? " done" : "") + (sel === i ? " sel" : "");
       m.style.left = (sx * 100) + "%";
       m.style.top = (sy * 100) + "%";
-      m.textContent = String(i + 1);
+      var pinLabel = visiblePinLabel(p, i);
+      m.textContent = pinLabel;
+      if (isEntryPin(p)) m.classList.add("entry-marker");
       m.dataset.i = i;
       m.title = (p.name || "이름 없음") + " — 드래그해서 위치 조정";
-      m.setAttribute("aria-label", (i + 1) + "번 " + (p.name || "이름 없음"));
+      m.setAttribute("aria-label", isEntryPin(p) ? "현관" : (pinLabel + "번 " + (p.name || "이름 없음")));
       m.addEventListener("pointerdown", onDown);
       m.addEventListener("pointermove", onMove);
       m.addEventListener("pointerup", onUp);
@@ -991,7 +1018,8 @@
 
     var badge = document.createElement("span");
     badge.className = "no" + (isDone(p) ? " done" : "");
-    badge.textContent = String(i + 1);
+    if (isEntryPin(p)) badge.classList.add("entry-no");
+    badge.textContent = visiblePinLabel(p, i);
     row.appendChild(badge);
 
     var nm = document.createElement("input");
@@ -1198,13 +1226,14 @@
   }
 
   function refreshDone() {
-    var done = state.pins.filter(isDone).length;
+    var surveyPins = state.pins.filter(function (p) { return !isEntryPin(p); });
+    var done = surveyPins.filter(isDone).length;
     $("cdone").textContent = done;
-    $("ctotal").textContent = state.pins.length;
+    $("ctotal").textContent = surveyPins.length;
     var msg = $("cmsg");
-    if (!state.pins.length) { msg.textContent = ""; msg.className = ""; }
-    else if (done === state.pins.length) { msg.textContent = "✓ 전부 입력 완료"; msg.className = "done"; }
-    else { msg.textContent = "미입력 " + (state.pins.length - done) + "곳"; msg.className = ""; }
+    if (!surveyPins.length) { msg.textContent = ""; msg.className = ""; }
+    else if (done === surveyPins.length) { msg.textContent = "✓ 전부 입력 완료"; msg.className = "done"; }
+    else { msg.textContent = "미입력 " + (surveyPins.length - done) + "곳"; msg.className = ""; }
 
     var cards = document.querySelectorAll(".op");
     state.pins.forEach(function (p, i) {
@@ -1411,7 +1440,8 @@
 
   function parseFloorplanStructure() {
     if (!planPixels) return null;
-    var gw = 96, gh = Math.max(48, Math.round(gw * planPixels.h / planPixels.w));
+    // 벽선이 가는 도면도 놓치지 않도록 모바일에서도 충분한 분석 격자를 사용한다.
+    var gw = 128, gh = Math.max(64, Math.round(gw * planPixels.h / planPixels.w));
     var occupied = new Array(gw * gh).fill(false), line = new Array(gw * gh).fill(false);
     function at(a, x, y) { return x >= 0 && y >= 0 && x < gw && y < gh && a[y * gw + x]; }
     function detailAt(x, y) {
@@ -1771,13 +1801,43 @@
   var IS_ADMIN = location.protocol === "file:" || window.YK_CURRENT_USER_ROLE === "admin" ||
     new URLSearchParams(location.search).get("testAdmin") === "1";
   $("generate3d").hidden = !IS_ADMIN;
-  $("generate3d").addEventListener("click", function () {
+  function showDialogSafe(dialog) {
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+  function waitFor3DEngine(timeoutMs) {
+    if (window.__THREE && window.__OrbitControls) return Promise.resolve(true);
+    return new Promise(function (resolve) {
+      var finished = false;
+      function done(ok) {
+        if (finished) return; finished = true;
+        window.removeEventListener("mini3d-ready", ready);
+        clearTimeout(timer); resolve(ok);
+      }
+      function ready() { done(!!(window.__THREE && window.__OrbitControls)); }
+      var timer = setTimeout(function () { done(false); }, timeoutMs);
+      window.addEventListener("mini3d-ready", ready);
+    });
+  }
+  $("generate3d").addEventListener("click", async function () {
     if (!IS_ADMIN) { toast("관리자만 3D를 생성할 수 있습니다"); return; }
     if (!state.pins.length || !state.pins.some(isDone)) { toast("실측값을 먼저 입력해주세요"); return; }
     if (activeProject3D) activeProject3D.cancel();
-    if (!$("adminresult").open) $("adminresult").showModal();
-    activeProject3D = mountProject3D($("project3d"));
-    toast("3D를 생성했습니다");
+    if (!$("adminresult").open) showDialogSafe($("adminresult"));
+    $("project3d").innerHTML = '<div class="mini3d-empty">3D 엔진을 불러오는 중입니다…</div>';
+    var button = this, oldText = button.textContent;
+    button.disabled = true; button.textContent = "3D 준비 중…";
+    try {
+      var ready = await waitFor3DEngine(15000);
+      if (!ready) throw new Error("3D 엔진을 불러오지 못했습니다. 인터넷 연결을 확인해주세요.");
+      activeProject3D = mountProject3D($("project3d"));
+      toast("3D를 생성했습니다");
+    } catch (err) {
+      $("project3d").innerHTML = '<div class="mini3d-empty">' + String(err.message || err) + '</div>';
+      toast("3D 생성에 실패했습니다");
+    } finally {
+      button.disabled = false; button.textContent = oldText;
+    }
   });
   $("close3d").addEventListener("click", function () {
     if (activeProject3D) { activeProject3D.cancel(); activeProject3D = null; }
@@ -1836,7 +1896,7 @@
       var req = tx.objectStore("surveys").getAll();
       var rows = await new Promise(function (resolve, reject) { req.onsuccess = function () { resolve(req.result); }; req.onerror = function () { reject(req.error); }; });
       db.close(); rows.sort(function (a, b) { return b.id.localeCompare(a.id); }); host.innerHTML = "";
-      if (!rows.length) { host.innerHTML = '<div class="empty">이 브라우저에 저장된 실측파일이 없습니다.</div>'; return; }
+      if (!rows.length) { host.innerHTML = '<div class="empty">이 브라우저에 저장된 실측현장이 없습니다.</div>'; return; }
       rows.forEach(function (row) {
         var div = document.createElement("div"); div.className = "saved-row";
         var date = document.createElement("span"); date.className = "saved-date"; date.textContent = row.surveyDate;
@@ -1846,7 +1906,7 @@
           try { applySavedState(JSON.parse(row.payload)); $("savedialog").close(); toast(row.site + " 실측파일을 열었습니다"); }
           catch (e) { toast("저장된 내용을 읽지 못했습니다"); }
         });
-        div.appendChild(date); div.appendChild(site); div.appendChild(open); host.appendChild(div);
+        div.appendChild(site); div.appendChild(date); div.appendChild(open); host.appendChild(div);
       });
     } catch (e) { host.innerHTML = '<div class="empty">저장 목록을 불러오지 못했습니다.</div>'; }
   }
