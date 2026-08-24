@@ -135,6 +135,10 @@
   .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
   .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
   .marker.entry-marker { width: auto; min-width: 54px; padding: 0 10px; border-radius: 18px; }
+  .wall-edit { position: absolute; height: 4px; transform-origin: 0 50%; pointer-events: none;
+    z-index: 3; border-radius: 2px; opacity: .9; }
+  .wall-edit.add { background: #2185d0; }
+  .wall-edit.remove { height: 0; border-top: 3px dashed #e03d32; border-radius: 0; }
 
   /* ---- 실제 비율 폭 표시 막대(축척 설정 후) — 각진 직사각형(둥근 모서리 아님) ---- */
   .span-bar {
@@ -313,6 +317,11 @@
         <button type="button" id="calibrate">축척 설정 (도면의 두 점 지정)</button>
         <span id="scalehint" style="margin-left:2px">미설정 — 번호가 점으로만 표시됩니다</span>
       </div>
+      <div class="btnrow" style="margin-top:8px">
+        <button type="button" id="walladd">+ 누락 벽 추가</button>
+        <button type="button" id="wallremove">잘못된 벽 제외</button>
+        <button type="button" id="wallreset">벽 보정 초기화</button>
+      </div>
     </div>
   </section>
 
@@ -396,7 +405,7 @@
     return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
   }
   var state = { site: "", surveyDate: todayLocal(), planName: "", planData: "", pins: [], scale: null,
-                flipV: false, flipH: false };
+                flipV: false, flipH: false, wallEdits: { add: [], remove: [] } };
   var sel = null;
   var pickMode = null;
   var activeMini3D = null;   // 현재 열린 카드의 3D 프리뷰 정리 함수 보관(WebGL 컨텍스트 누수 방지)
@@ -421,6 +430,19 @@
     var number = 0;
     for (var i = 0; i <= index; i++) if (!isEntryPin(state.pins[i])) number++;
     return String(number);
+  }
+  function markerSizeForPin(p) {
+    if (!planPixels || isEntryPin(p)) return null;
+    var cx = Math.round(p.x * planPixels.w), cy = Math.round(p.y * planPixels.h);
+    var vertical = (p.angle || 0) === 90, first = null, last = null;
+    for (var off = -30; off <= 30; off++) {
+      var x = vertical ? cx + off : cx, y = vertical ? cy : cy + off;
+      if (isWallPixel(x, y)) { if (first === null) first = off; last = off; }
+    }
+    var sourceThickness = first === null ? 4 : Math.max(2, last - first + 1);
+    var stage = $("stage"), shown = vertical ? stage.clientWidth : stage.clientHeight;
+    var source = vertical ? planPixels.w : planPixels.h;
+    return Math.max(8, Math.min(24, sourceThickness * 2 * shown / Math.max(1, source)));
   }
   function edgeFallbackAngle(x, y) {
     var toLR = Math.min(x, 1 - x);   // 좌/우 가장자리까지 거리 — 가까우면 세로벽(세로 막대)
@@ -557,7 +579,10 @@
                   surveyDate: s.surveyDate || todayLocal(),
                   planData: s.planData || "", pins: s.pins,
                   scale: s.scale && (s.scale.mmPerPixel || s.scale.mmPerFracX) ? s.scale : null,
-                  flipV: !!s.flipV, flipH: !!s.flipH };
+                  flipV: !!s.flipV, flipH: !!s.flipH,
+                  wallEdits: s.wallEdits || { add: [], remove: [] } };
+        if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
+        if (!Array.isArray(state.wallEdits.remove)) state.wallEdits.remove = [];
         state.pins.forEach(function (p) {
           if (!Array.isArray(p.parts)) p.parts = [];
           p.parts.forEach(function (t) {
@@ -620,6 +645,7 @@
     r.onload = function () {
       state.flipV = false; state.flipH = false;
       state.scale = null;
+      state.wallEdits = { add: [], remove: [] };
       state.pins.forEach(function (p) { p.span = null; });
       showPlan(r.result, f.name); toast("평면도를 불러왔습니다");
     };
@@ -691,6 +717,12 @@
           a: a, b: b, imageWidth: $("plan").naturalWidth, imageHeight: $("plan").naturalHeight };
         pickMode = null; updateScaleHint(); persist(); render(); toast("축척을 설정했습니다"); return;
       }
+      if (pickMode.type === "wall-add" || pickMode.type === "wall-remove") {
+        var editKey = pickMode.type === "wall-add" ? "add" : "remove";
+        state.wallEdits[editKey].push({ a: a, b: b });
+        pickMode = null; persist(); render();
+        toast(editKey === "add" ? "누락 벽을 추가했습니다" : "잘못된 벽을 제외했습니다"); return;
+      }
       pickMode = null; render(); return;
     }
     state.pins.push(newPin(fx, fy));
@@ -719,6 +751,22 @@
     $("planhint").textContent = "기준 치수선의 첫 번째 점을 눌러주세요";
     toast("기준 치수선의 첫 번째 점을 눌러주세요");
     render();
+  });
+  function beginWallEdit(type, message) {
+    if (!state.planData) { toast("평면도를 먼저 올려주세요"); return; }
+    pickMode = { type: type, points: [] }; render(); toast(message);
+  }
+  $("walladd").addEventListener("click", function () {
+    beginWallEdit("wall-add", "추가할 벽의 시작점을 눌러주세요");
+  });
+  $("wallremove").addEventListener("click", function () {
+    beginWallEdit("wall-remove", "제외할 벽의 시작점을 눌러주세요");
+  });
+  $("wallreset").addEventListener("click", function () {
+    var edits = state.wallEdits.add.length + state.wallEdits.remove.length;
+    if (!edits) { toast("저장된 벽 보정이 없습니다"); return; }
+    if (!confirm("추가·제외한 벽 보정을 모두 초기화할까요?")) return;
+    state.wallEdits = { add: [], remove: [] }; persist(); render(); toast("벽 보정을 초기화했습니다");
   });
 
   $("addnum").addEventListener("click", function () {
@@ -928,7 +976,9 @@
     if (activeMini3D) { activeMini3D.cancel(); activeMini3D = null; }
 
     var stage = $("stage");
-    Array.prototype.slice.call(stage.querySelectorAll(".marker, .span-bar, .pick-dot")).forEach(function (n) { n.remove(); });
+    Array.prototype.slice.call(stage.querySelectorAll(".marker, .span-bar, .pick-dot, .wall-edit")).forEach(function (n) { n.remove(); });
+    state.wallEdits.add.forEach(function (line) { appendWallEdit(stage, line, "add"); });
+    state.wallEdits.remove.forEach(function (line) { appendWallEdit(stage, line, "remove"); });
     state.pins.forEach(function (p, i) {
       var sx = dispX(p.x), sy = dispY(p.y);
       if (state.scale) {
@@ -954,6 +1004,12 @@
       var pinLabel = visiblePinLabel(p, i);
       m.textContent = pinLabel;
       if (isEntryPin(p)) m.classList.add("entry-marker");
+      var markerSize = markerSizeForPin(p);
+      if (markerSize) {
+        m.style.width = markerSize + "px"; m.style.height = markerSize + "px";
+        m.style.marginLeft = (-markerSize / 2) + "px"; m.style.marginTop = (-markerSize / 2) + "px";
+        m.style.fontSize = Math.max(8, markerSize * .46) + "px";
+      }
       m.dataset.i = i;
       m.title = (p.name || "이름 없음") + " — 드래그해서 위치 조정";
       m.setAttribute("aria-label", isEntryPin(p) ? "현관" : (pinLabel + "번 " + (p.name || "이름 없음")));
@@ -967,7 +1023,9 @@
     if (pickMode && pickMode.points.length === 1) appendPickDot(stage, pickMode.points[0]);
     $("planhint").textContent = pickMode
       ? (pickMode.type === "entry" ? "현관 위치를 한 번 눌러주세요" :
-        (pickMode.points.length ? "두 번째 점을 눌러주세요" : "첫 번째 점을 눌러주세요"))
+        (pickMode.points.length ? "두 번째 점을 눌러주세요" :
+          (pickMode.type === "wall-add" ? "추가할 벽의 시작점을 눌러주세요" :
+            (pickMode.type === "wall-remove" ? "제외할 벽의 시작점을 눌러주세요" : "첫 번째 점을 눌러주세요"))))
       : "번호 위치의 벽선을 읽어 가로·세로를 자동 판별합니다";
 
     var host = $("ops");
@@ -989,6 +1047,16 @@
     var d = document.createElement("div"); d.className = "pick-dot";
     d.style.left = (dispX(pt.x) * 100) + "%"; d.style.top = (dispY(pt.y) * 100) + "%";
     stage.appendChild(d);
+  }
+  function appendWallEdit(stage, line, type) {
+    if (!line || !line.a || !line.b) return;
+    var ax = dispX(line.a.x) * stage.clientWidth, ay = dispY(line.a.y) * stage.clientHeight;
+    var bx = dispX(line.b.x) * stage.clientWidth, by = dispY(line.b.y) * stage.clientHeight;
+    var el = document.createElement("div"); el.className = "wall-edit " + type;
+    el.style.left = ax + "px"; el.style.top = ay + "px";
+    el.style.width = Math.hypot(bx - ax, by - ay) + "px";
+    el.style.transform = "rotate(" + Math.atan2(by - ay, bx - ax) + "rad)";
+    stage.appendChild(el);
   }
   function buildCard(p, i) {
     var card = document.createElement("div");
@@ -1487,10 +1555,29 @@
       }
       if (comp.length > best.length) best = comp;
     }
-    if (best.length < 20) return null;
+    if (best.length < 20 && !state.wallEdits.add.length) return null;
     var mask = new Uint8Array(gw * gh), minX = gw, maxX = 0, minY = gh, maxY = 0;
     best.forEach(function (n) { mask[n] = 1; var x = n % gw, y = Math.floor(n / gw);
       minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
+
+    // 사용자가 확정한 벽 보정은 이미지 자동 분석보다 우선한다.
+    function rasterWallEdit(seg, value, radius) {
+      if (!seg || !seg.a || !seg.b) return;
+      var ax = seg.a.x * (gw - 1), ay = seg.a.y * (gh - 1);
+      var bx = seg.b.x * (gw - 1), by = seg.b.y * (gh - 1);
+      var steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * 2));
+      for (var step = 0; step <= steps; step++) {
+        var t = step / steps, px = Math.round(ax + (bx - ax) * t), py = Math.round(ay + (by - ay) * t);
+        for (var ey = -radius; ey <= radius; ey++) for (var ex = -radius; ex <= radius; ex++) {
+          var xx = px + ex, yy = py + ey;
+          if (xx < 0 || yy < 0 || xx >= gw || yy >= gh) continue;
+          mask[yy * gw + xx] = value;
+          if (value) { minX = Math.min(minX, xx); maxX = Math.max(maxX, xx); minY = Math.min(minY, yy); maxY = Math.max(maxY, yy); }
+        }
+      }
+    }
+    state.wallEdits.add.forEach(function (seg) { rasterWallEdit(seg, 1, 1); });
+    state.wallEdits.remove.forEach(function (seg) { rasterWallEdit(seg, 0, 2); });
 
     // 외벽의 빈 구간 중 바깥쪽에 문짝/호가 있는 곳을 현관 후보로 선택한다.
     var candidates = [];
@@ -1775,7 +1862,7 @@
     return {
       schemaVersion: "0.2-draft",
       project: { name: state.site || "(현장명 없음)", surveyDate: state.surveyDate || todayLocal(), unit: "mm" },
-      floorplan: { file: state.planName || "", scale: state.scale || null },
+      floorplan: { file: state.planName || "", scale: state.scale || null, wallEdits: state.wallEdits },
       openings: state.pins.map(function (p, i) {
         return {
           no: i + 1,
@@ -1873,6 +1960,9 @@
     state = saved;
     state.site = state.site || ""; state.surveyDate = state.surveyDate || todayLocal();
     state.pins = Array.isArray(state.pins) ? state.pins : [];
+    state.wallEdits = state.wallEdits || { add: [], remove: [] };
+    if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
+    if (!Array.isArray(state.wallEdits.remove)) state.wallEdits.remove = [];
     state.pins.forEach(function (p) {
       if (Array.isArray(p.parts)) p.parts.forEach(function (t) {
         if (t.kind === "mullion" && t.spec === "100×45") t.spec = "40×105";
@@ -1929,6 +2019,9 @@
         state.scale = (j.floorplan && j.floorplan.scale &&
                       (j.floorplan.scale.mmPerPixel || j.floorplan.scale.mmPerFracX))
           ? j.floorplan.scale : null;
+        state.wallEdits = (j.floorplan && j.floorplan.wallEdits) || { add: [], remove: [] };
+        if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
+        if (!Array.isArray(state.wallEdits.remove)) state.wallEdits.remove = [];
         state.pins = list.map(function (m) {
           var parts;
           if (Array.isArray(m.parts) && m.parts.length) {
