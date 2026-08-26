@@ -249,6 +249,10 @@
 
   .frame-row { margin-top: 10px; display: grid; gap: 10px; }
   .frame-row .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
+  .survey-detail-grid { margin-top: 10px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+  .survey-detail-grid .field { margin:0; font-size:11.5px; }
+  .survey-detail-grid input { min-width:0; padding:8px 9px; }
+  @media(max-width:600px){.survey-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
   .grid2 .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
@@ -342,10 +346,12 @@
         <button type="button" class="tiny" id="parsebase" style="margin-top:7px">붙여넣은 내용 분석</button>
         <div class="site-fields">
           <label class="field">실측 날짜<input type="date" id="setupdate"></label>
+          <label class="field">구분<select id="setupcategory"><option>실측</option><option>시공</option><option>AS</option></select></label>
           <label class="field">담당자<input type="text" id="setupmanager" placeholder="예: 박"></label>
           <label class="field">거래처<input type="text" id="setupvendor" placeholder="예: LX"></label>
           <label class="field">거래처명<input type="text" id="setupvendorname" placeholder="예: 와이케이"></label>
           <label class="field wide">현장주소<input type="text" id="setupaddress" placeholder="예: 구리시 교문동 덕현아파트 107동 1903호"></label>
+          <label class="field wide">현장명<input type="text" id="setupname" placeholder="복붙 내용으로 확실하지 않으면 직접 입력하세요"></label>
           <label class="field wide">비고<input type="text" id="setupnote" placeholder="예: 10년 보증 체크, 49평형"></label>
         </div>
         <div class="site-preview" id="sitepreview" aria-live="polite"></div>
@@ -433,6 +439,8 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 <datalist id="frame-options">
+  <option value="BF/115"><option value="BF/140"><option value="BF/235"><option value="BF/250">
+  <option value="BF/WA"><option value="공틀100"><option value="공틀40">
   <option value="B/F115"><option value="B/F140"><option value="B/F235"><option value="B/F250">
   <option value="B/FWA"><option value="궁굴100"><option value="궁굴40"><option value="W/B">
 </datalist>
@@ -458,7 +466,7 @@
   /* =========================================================
      선택 목록 — 항목을 추가/수정하려면 아래 배열만 고치면 된다.
      ========================================================= */
-  var FRAME_TYPES   = ["B/F115", "B/F140", "B/F235", "B/F250", "B/FWA", "궁굴100", "궁굴40", "W/B"]; // 직접 입력도 가능
+  var FRAME_TYPES   = ["BF/115", "BF/140", "BF/235", "BF/250", "BF/WA", "공틀100", "공틀40", "B/F115", "B/F140", "B/F235", "B/F250", "B/FWA", "궁굴100", "궁굴40", "W/B"]; // 직접 입력 및 구자료 호환
   var MULLION_SPECS = ["100×100", "40×105"];                        // 통바 규격
   var PANEL_TYPES   = ["2짝", "3짝", "4짝", "고정"];                 // 창 짝수
   var PRIMARY_TYPES = [["left", "왼쪽"], ["right", "오른쪽"],
@@ -483,28 +491,32 @@
   var activeProject3D = null;
   var planPixels = null;     // 업로드한 원본 평면도의 굵은 벽선 방향 판별용
 
-  var SETUP_FIELDS = ["manager", "vendor", "vendorName", "address", "note", "baseText"];
+  var SETUP_FIELDS = ["category", "manager", "vendor", "vendorName", "address", "siteName", "note", "baseText"];
   function normalizedSetup(v) {
     var out = {}, src = v || {};
     SETUP_FIELDS.forEach(function (k) { out[k] = typeof src[k] === "string" ? src[k] : ""; });
+    if (!out.category) out.category = "실측";
     return out;
   }
   function compactDate(v) { return String(v || todayLocal()).replace(/-/g, "").slice(2); }
   function generatedSiteName() {
     var s = normalizedSetup(state.siteSetup), people = [s.manager, s.vendor, s.vendorName].map(function(v){return v.trim();}).filter(Boolean);
-    return [compactDate(state.surveyDate), "[실측]", people.length ? "(" + people.join("-") + ")" : "", s.address.trim(), s.note.trim() ? "(" + s.note.trim() + ")" : ""].filter(Boolean).join(" ");
+    var address = s.address.trim(), siteName = s.siteName.trim(), place = address;
+    if (siteName && !address.includes(siteName)) place = address ? address + " " + siteName : siteName;
+    if (address && siteName.includes(address)) place = siteName;
+    return [compactDate(state.surveyDate), "[" + (s.category || "실측") + "]", people.length ? "(" + people.join("-") + ")" : "", place, s.note.trim() ? "(" + s.note.trim() + ")" : ""].filter(Boolean).join(" ");
   }
   function setupFromInputs() {
     state.surveyDate = $("setupdate").value || todayLocal();
-    state.siteSetup = { baseText: $("basetext").value, manager: $("setupmanager").value, vendor: $("setupvendor").value,
-      vendorName: $("setupvendorname").value, address: $("setupaddress").value, note: $("setupnote").value };
+    state.siteSetup = { baseText: $("basetext").value, category: $("setupcategory").value || "실측", manager: $("setupmanager").value, vendor: $("setupvendor").value,
+      vendorName: $("setupvendorname").value, address: $("setupaddress").value, siteName: $("setupname").value, note: $("setupnote").value };
     $("sitepreview").textContent = generatedSiteName() || "현장명 미리보기";
   }
   function fillSetup(collapse) {
     state.siteSetup = normalizedSetup(state.siteSetup);
     $("basetext").value = state.siteSetup.baseText; $("setupmanager").value = state.siteSetup.manager;
-    $("setupvendor").value = state.siteSetup.vendor; $("setupvendorname").value = state.siteSetup.vendorName;
-    $("setupaddress").value = state.siteSetup.address; $("setupnote").value = state.siteSetup.note;
+    $("setupcategory").value = state.siteSetup.category; $("setupvendor").value = state.siteSetup.vendor; $("setupvendorname").value = state.siteSetup.vendorName;
+    $("setupaddress").value = state.siteSetup.address; $("setupname").value = state.siteSetup.siteName; $("setupnote").value = state.siteSetup.note;
     $("setupdate").value = state.surveyDate || todayLocal(); setupFromInputs();
     $("sitesetup").classList.toggle("collapsed", !!collapse); $("editsitesetup").hidden = !collapse;
   }
@@ -518,16 +530,17 @@
     var candidates = first.map(function(v){return v.replace(phone, "").replace(/^(?:실측|시공|AS)\s*\([^)]*\)\s*(?:\|.*)?$/i, "").trim();}).filter(Boolean);
     var address = candidates.filter(function(v){ return /(?:시|군|구|동|읍|면|리|아파트|빌라|로|길|번지|호)/.test(v) && v !== afterPipe; })[0] || "";
     if (manager) $("setupmanager").value = manager;
+    var category = (head.match(/(?:실측|시공|AS)/i) || [])[0]; if (category) $("setupcategory").value = category.toUpperCase() === "AS" ? "AS" : category;
     if (address) $("setupaddress").value = address;
     if (afterPipe && afterPipe !== address) $("setupnote").value = afterPipe;
     setupFromInputs(); persist();
   }
-  ["basetext","setupdate","setupmanager","setupvendor","setupvendorname","setupaddress","setupnote"].forEach(function(id){
+  ["basetext","setupdate","setupcategory","setupmanager","setupvendor","setupvendorname","setupaddress","setupname","setupnote"].forEach(function(id){
     $(id).addEventListener("input", function(){ setupFromInputs(); persist(); });
   });
   $("parsebase").addEventListener("click", parseBaseText);
   $("basetext").addEventListener("paste", function(){ setTimeout(parseBaseText, 0); });
-  $("applysite").addEventListener("click", function(){ setupFromInputs(); var name = generatedSiteName(); if (!state.siteSetup.address.trim()) { toast("현장주소를 입력해주세요"); $("setupaddress").focus(); return; } $("site").value = state.site = name; $("surveydate").value = state.surveyDate; persist(); fillSetup(true); toast("현장명을 적용했습니다"); });
+  $("applysite").addEventListener("click", function(){ setupFromInputs(); var name = generatedSiteName(); if (!state.siteSetup.siteName.trim()) { toast("현장명을 입력해주세요"); $("setupname").focus(); return; } $("site").value = state.site = name; $("surveydate").value = state.surveyDate; persist(); fillSetup(true); toast("현장명을 적용했습니다"); });
   $("editsitesetup").addEventListener("click", function(){ fillSetup(false); $("basetext").focus(); });
 
   // 평면도를 화면에 뒤집어 보여줄 때(상하/좌우), 저장되는 좌표는 항상 "원본 이미지
@@ -540,6 +553,12 @@
   function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0] }; }
   function newTurn() { return { kind: "turn", w: "0", h: "0", swing: "push", handle: "right" }; }
   function newEntry() { return { kind: "entry", w: "900", h: "2100" }; }
+  var DETAIL_FIELDS = [["molding","몰딩"],["filling","사춤"],["tile","타일"],["drainHole","물구멍"],["screen","방충망"],["brick","벽돌"]];
+  function normalizedDetails(v) {
+    var out = {}, src = v || {};
+    DETAIL_FIELDS.forEach(function(item){ out[item[0]] = typeof src[item[0]] === "string" ? src[item[0]] : ""; });
+    return out;
+  }
   function isEntryPin(p) {
     return !!(p && p.parts && p.parts.some(function (t) { return t.kind === "entry"; }));
   }
@@ -676,7 +695,7 @@
     return edgeFallbackAngle(x, y);
   }
   function newPin(x, y) {
-    var p = { name: "", frame: "", notes: "", parts: [], x: x, y: y, angle: 0,
+    var p = { name: "", frame: "", notes: "", details: normalizedDetails(), parts: [], x: x, y: y, angle: 0,
               placementMode: "free", wallLock: null };
     applyPlacement(p);
     return p;
@@ -713,6 +732,7 @@
           });
           if (typeof p.frame !== "string") p.frame = "";
           if (typeof p.notes !== "string") p.notes = "";
+          p.details = normalizedDetails(p.details);
           if (typeof p.angle !== "number") p.angle = 0;
           if (p.placementMode !== "wall") p.placementMode = "free";
           if (!p.wallLock || typeof p.wallLock.coordinate !== "number") p.wallLock = null;
@@ -1295,6 +1315,14 @@
     notes.addEventListener("input", function () { p.notes = this.value; persist(); });
     fr.appendChild(labeled("참고사항", notes));
     body.appendChild(fr);
+    p.details = normalizedDetails(p.details);
+    var detailGrid = document.createElement("div"); detailGrid.className = "survey-detail-grid";
+    DETAIL_FIELDS.forEach(function(item){
+      var input = document.createElement("input"); input.type="text"; input.value=p.details[item[0]]; input.placeholder="없음/규격/수량";
+      input.addEventListener("input",function(){p.details[item[0]]=this.value;persist();});
+      detailGrid.appendChild(labeled(item[1],input));
+    });
+    body.appendChild(detailGrid);
     }
 
     var wrap = document.createElement("div");
@@ -1999,13 +2027,19 @@
       return kind + " " + escapeHTML(t.w || "-") + "×" + escapeHTML(t.h || "-") + extra;
     }).join("<br>");
   }
+  function detailText(p) {
+    var d=normalizedDetails(p.details), values=DETAIL_FIELDS.map(function(item){return d[item[0]] ? item[1]+" "+d[item[0]] : "";}).filter(Boolean);
+    if (p.frame) values.push("프레임두께 "+p.frame);
+    if (p.notes) values.push("참고사항 "+p.notes);
+    return values.join(" · ");
+  }
   function buildDrawingHTML(autoPrint) {
     state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); persist();
     var rows = state.pins.map(function (p, i) {
       return '<tr><td class="no-cell">' + escapeHTML(visiblePinLabel(p, i)) + '</td>' +
         '<td>' + escapeHTML(p.name || (isEntryPin(p) ? "현관" : "")) + '</td>' +
         '<td>' + drawingParts(p) + '</td><td>' + escapeHTML(isEntryPin(p) ? "-" : (p.frame || "")) + '</td>' +
-        '<td class="notes">' + escapeHTML(isEntryPin(p) ? "" : (p.notes || "")).replace(/\n/g, "<br>") + '</td></tr>';
+        '<td class="notes">' + escapeHTML(isEntryPin(p) ? "" : detailText(p)).replace(/\n/g, "<br>") + '</td></tr>';
     }).join("");
     var planMarkers = state.pins.map(function (p, i) {
       var entry = isEntryPin(p), label = visiblePinLabel(p, i);
@@ -2055,12 +2089,8 @@
     var measure = document.createElement("canvas").getContext("2d");
     measure.font = '25px "Malgun Gothic", sans-serif';
     var siteLines = wrapCanvasText(measure, "현장명  " + (state.site || "-"), W - pad * 2);
-    measure.font = '27px "Malgun Gothic", sans-serif';
-    var widths = [90, 220, 400, 240, 530], rowData = state.pins.map(function(p,i){
-      var vals=[visiblePinLabel(p,i), p.name || (isEntryPin(p)?"현관":""), plainParts(p), isEntryPin(p)?"-":(p.frame||""), isEntryPin(p)?"":(p.notes||"")];
-      var lines=vals.map(function(v,k){return wrapCanvasText(measure,v,widths[k]-24);}); return {lines:lines,h:Math.max(62, Math.max.apply(null,lines.map(function(x){return x.length;}))*36+20)};
-    });
-    var py = 128 + siteLines.length * 34, tableH = 58 + rowData.reduce(function(n,r){return n+r.h;}, state.pins.length ? 0 : 72), H = py + planH + 35 + tableH + 60;
+    var py = 128 + siteLines.length * 34, panelGap=24, panelW=(W-pad*2-panelGap)/2, panelH=520;
+    var panelRows=Math.max(1,Math.ceil(state.pins.length/2)), H=py+planH+35+panelRows*(panelH+panelGap)+60;
     var canvas=document.createElement("canvas"); canvas.width=W; canvas.height=H; var c=canvas.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.fillStyle="#111";
     c.font='bold 40px "Malgun Gothic", sans-serif'; c.fillText("창호 실측도면",pad,58); c.font='25px "Malgun Gothic", sans-serif';
     siteLines.forEach(function(line, i){ c.fillText(line, pad, 100 + i * 34); });
@@ -2069,11 +2099,30 @@
     if(img){ c.save(); c.translate(state.flipH?planX+planW:planX,state.flipV?py+planH:py); c.scale(state.flipH?-1:1,state.flipV?-1:1); c.drawImage(img,0,0,planW,planH); c.restore();
       state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW, y=py+dispY(p.y)*planH, entry=isEntryPin(p); c.beginPath(); c.arc(x,y,18,0,Math.PI*2); c.fillStyle=entry?"#287a68":"#ffd66b"; c.fill(); c.strokeStyle=entry?"#287a68":"#6d571d"; c.lineWidth=2; c.stroke(); c.fillStyle=entry?"#fff":"#111"; c.textAlign="center"; c.textBaseline="middle"; c.font=entry?'bold 11px "Malgun Gothic"':'bold 20px "Malgun Gothic"'; c.fillText(visiblePinLabel(p,i),x,y);}); }
     else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Malgun Gothic"'; c.fillText("평면도 없음",W/2,py+planH/2); }
-    var ty=py+planH+35, x=pad; c.textAlign="left"; c.textBaseline="top"; c.font='bold 24px "Malgun Gothic"'; c.fillStyle="#eee"; c.fillRect(pad,ty,W-pad*2,58); c.fillStyle="#111";
-    ["번호","위치","치수·구성","프레임 두께","참고사항"].forEach(function(v,k){c.fillText(v,x+12,ty+14); x+=widths[k];});
-    function gridRow(y,h){var xx=pad;c.strokeStyle="#333";c.lineWidth=1;c.strokeRect(pad,y,W-pad*2,h);widths.slice(0,-1).forEach(function(w){xx+=w;c.beginPath();c.moveTo(xx,y);c.lineTo(xx,y+h);c.stroke();});}
-    gridRow(ty,58); ty+=58; c.font='27px "Malgun Gothic"';
-    if(!rowData.length){gridRow(ty,72);c.fillText("입력된 창호가 없습니다.",pad+12,ty+18);} else rowData.forEach(function(r){gridRow(ty,r.h);var xx=pad;r.lines.forEach(function(lines,k){lines.forEach(function(line,n){c.fillText(line,xx+12,ty+12+n*36);});xx+=widths[k];});ty+=r.h;});
+    function partSize(t){
+      if(t.kind==="mullion"){var mw=parseFloat(String(t.spec||"").replace(/,/g,""))||100;return {w:mw,h:100,kind:t.kind,label:"통바 "+(t.spec||"")};}
+      var pw=parseFloat(t.w)|| (t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
+      return {w:pw,h:ph,kind:t.kind,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":"창")+" "+Math.round(pw)+"×"+Math.round(ph),panels:parseInt(t.panels,10)||1};
+    }
+    function drawPanel(p,i,x,y){
+      var headH=48, footH=128, drawTop=y+headH, drawH=panelH-headH-footH, sizes=p.parts.map(partSize);
+      c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.moveTo(x,y+panelH-footH);c.lineTo(x+panelW,y+panelH-footH);c.stroke();
+      c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Malgun Gothic"';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
+      var totalW=sizes.reduce(function(n,s){return n+s.w;},0)||1,maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}));if(!isFinite(maxH))maxH=1;
+      sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
+      var scale=Math.min((panelW-70)/totalW,(drawH-80)/maxH), dx=x+(panelW-totalW*scale)/2, base=drawTop+drawH-38;
+      sizes.forEach(function(s,partIndex){
+        var sw=Math.max(10,s.w*scale),sh=Math.max(10,s.h*scale),sy=base-sh;c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(dx,sy,sw,sh);
+        if(s.kind==="sash"&&s.panels>1){var ratios=s.panels===3?[1,2,1]:null,totalRatio=ratios?4:s.panels,run=dx;for(var z=1;z<s.panels;z++){run+=sw*(ratios?ratios[z-1]:1)/totalRatio;c.beginPath();c.moveTo(run,sy);c.lineTo(run,base);c.stroke();}}
+        if(s.kind==="turn"||s.kind==="entry"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.stroke();}
+        c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font='16px "Malgun Gothic"';c.fillText(s.label,dx+sw/2,sy-6);dx+=sw;
+      });
+      var footer=detailText(p)||"부가항목 미입력";c.textAlign="left";c.textBaseline="top";c.font='17px "Malgun Gothic"';
+      wrapCanvasText(c,footer,panelW-28).slice(0,5).forEach(function(line,n){c.fillText(line,x+14,y+panelH-footH+13+n*22);});
+      c.font='15px "Malgun Gothic"';c.fillStyle="#555";c.fillText(plainParts(p)||"구성 미입력",x+14,y+panelH-25);
+    }
+    var ty=py+planH+35;c.textBaseline="top";
+    if(!state.pins.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Malgun Gothic"';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else state.pins.forEach(function(p,i){drawPanel(p,i,pad+(i%2)*(panelW+panelGap),ty+Math.floor(i/2)*(panelH+panelGap));});
     var blob=await new Promise(function(resolve){canvas.toBlob(resolve,"image/png");}); if(!blob) throw new Error("PNG 변환에 실패했습니다"); var a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=drawingFileName();document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
   }
 
@@ -2088,6 +2137,7 @@
           name: p.name || "",
           frame: p.frame || null,
           notes: p.notes || "",
+          details: normalizedDetails(p.details),
           parts: p.parts.map(function (t) {
             if (t.kind === "mullion") return { kind: "mullion", spec: t.spec };
             if (t.kind === "entry") return { kind: "entry", width: 900, height: 2100 };
@@ -2199,6 +2249,7 @@
     state.pins.forEach(function (p) {
       if (typeof p.frame !== "string") p.frame = "";
       if (typeof p.notes !== "string") p.notes = "";
+      p.details = normalizedDetails(p.details);
       if (!Array.isArray(p.parts)) p.parts = [];
       if (Array.isArray(p.parts)) p.parts.forEach(function (t) {
         if (t.kind === "mullion" && t.spec === "100×45") t.spec = "40×105";
@@ -2287,7 +2338,7 @@
           if (/현관/.test(m.name || "")) parts = parts.map(function (t) {
             return t.kind === "turn" ? newEntry() : t;
           });
-          return { name: m.name || "", frame: m.frame || "", notes: m.notes || "", parts: parts,
+          return { name: m.name || "", frame: m.frame || "", notes: m.notes || "", details: normalizedDetails(m.details), parts: parts,
                    x: (m.plan && m.plan.x) || 0.5, y: (m.plan && m.plan.y) || 0.5,
                    angle: (m.plan && m.plan.angle) || 0,
                    placementMode: (m.plan && m.plan.placementMode) || "free", wallLock: null };
