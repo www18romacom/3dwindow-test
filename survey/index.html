@@ -484,6 +484,8 @@
   </div>
 </dialog>
 
+<iframe id="drivebridge" title="Google Drive 저장 연결" hidden aria-hidden="true"
+  src="https://script.google.com/macros/s/AKfycbwLEOWtoGxBnvZOapQVZlvybUMqBkEeGYAnlmVm-NNIH9fH2SYKEnXtctKC2pJXCjWgcA/exec"></iframe>
 <div id="toast" role="status" aria-live="polite"></div>
 <datalist id="frame-options">
   <option value="B/F115"><option value="B/F140"><option value="B/F235"><option value="B/F250"><option value="B/FWA">
@@ -535,6 +537,9 @@
   var activeProject3D = null;
   var planPixels = null;     // 업로드한 원본 평면도의 굵은 벽선 방향 판별용
   var planZoom = 1, previewZoom = 1, panMoved = false, pinching = false, previewPages=[], previewPageIndex=0, previewPageStates=[];
+  var driveBridgeReady=false,driveRequests={};
+  window.addEventListener("message",function(event){var msg=event.data||{};if(!msg.ykSurveyBridge||event.source!==$("drivebridge").contentWindow)return;if(msg.ready){driveBridgeReady=true;return;}if(!msg.requestId)return;var req=driveRequests[msg.requestId];if(!req)return;delete driveRequests[msg.requestId];clearTimeout(req.timer);msg.ok?req.resolve(msg.result):req.reject(new Error(msg.error||"Google Drive 요청 실패"));});
+  function driveCall(action,payload){return new Promise(function(resolve,reject){if(!driveBridgeReady){reject(new Error("Google Drive 연결 페이지가 아직 준비되지 않았습니다"));return;}var id="survey-"+Date.now()+"-"+Math.random().toString(36).slice(2),timer=setTimeout(function(){delete driveRequests[id];reject(new Error("Google Drive 응답 시간이 초과됐습니다. Apps Script 새 버전 배포 여부를 확인하세요"));},45000);driveRequests[id]={resolve:resolve,reject:reject,timer:timer};$("drivebridge").contentWindow.postMessage({ykSurveyBridge:true,requestId:id,action:action,payload:payload||{}},"*");});}
 
   function applyPlanZoom() {
     $("stage").style.width = Math.round(planZoom * 100) + "%";
@@ -809,7 +814,12 @@
       var localScore = localTotal ? localHit / localTotal : 0;
       if (localScore >= best.score * .55) { weighted += pos * localScore; weight += localScore; }
     }
-    return { coordinate: (vertical ? cx : cy) + (weight ? weighted / weight : best.off),
+    var center=(vertical ? cx : cy)+(weight?weighted/weight:best.off),minCoordinate=center,maxCoordinate=center;
+    for(var edgeOff=-searchR;edgeOff<=searchR;edgeOff++){
+      var edgeHit=0,edgeTotal=0;for(var edgeAlong=-longR;edgeAlong<=longR;edgeAlong+=3){var edgeFound=false;for(var edgeBand=-1;edgeBand<=1;edgeBand++){var ex=vertical?cx+edgeOff+edgeBand:cx+edgeAlong,ey=vertical?cy+edgeAlong:cy+edgeOff+edgeBand;if(isWallPixel(ex,ey)){edgeFound=true;break;}}if(edgeFound)edgeHit++;edgeTotal++;}
+      if(edgeTotal&&edgeHit/edgeTotal>=best.score*.55){var coordinate=(vertical?cx:cy)+edgeOff;minCoordinate=Math.min(minCoordinate,coordinate);maxCoordinate=Math.max(maxCoordinate,coordinate);}
+    }
+    return { coordinate:center,minCoordinate:minCoordinate,maxCoordinate:maxCoordinate,
              score: best.score, distance: Math.abs(best.off) };
   }
   function analyzePlacement(x, y) {
@@ -819,10 +829,10 @@
     if (vertical || horizontal) {
       var useVertical = vertical && (!horizontal || vertical.score >= horizontal.score);
       if (useVertical) {
-        var sx = Math.min(1, Math.max(0, vertical.coordinate / planPixels.w));
+        var wallX=x<.5?vertical.minCoordinate:vertical.maxCoordinate,sx = Math.min(1, Math.max(0, wallX / planPixels.w));
         return { x: sx, y: y, angle: 90, mode: "wall", wallLock: { angle: 90, coordinate: sx } };
       }
-      var sy = Math.min(1, Math.max(0, horizontal.coordinate / planPixels.h));
+      var wallY=y<.5?horizontal.minCoordinate:horizontal.maxCoordinate,sy = Math.min(1, Math.max(0, wallY / planPixels.h));
       return { x: x, y: sy, angle: 0, mode: "wall", wallLock: { angle: 0, coordinate: sy } };
     }
     return { x: x, y: y, angle: guessAngle(x, y), mode: "free", wallLock: null };
@@ -1633,6 +1643,10 @@
     });
     return {width:Math.max(1,x),depth:Math.max(1,maxY-minY),frameDepth:frameDepth,minY:minY,maxY:maxY,items:items};
   }
+  function outsideSignForPin(p){
+    if(typeof p.outsideSign==="number")return p.outsideSign;
+    return (p.angle||0)===90?(p.x<.5?1:-1):(p.y<.5?-1:1);
+  }
   function drawPlanStructureSvg(host,layout){
     host.textContent="";var ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 "+layout.minY+" "+layout.width+" "+layout.depth);svg.setAttribute("preserveAspectRatio","none");
     layout.items.forEach(function(item){
@@ -1648,15 +1662,15 @@
     if(!px)px=Math.max(54,Math.min(150,layout.width/24));if(!depthPx)depthPx=Math.max(8,Math.min(34,layout.depth/10));return {layout:layout,width:px,depth:depthPx};
   }
   function drawPlanStructureCanvas(ctx,p,cx,cy,planW,planH,img){
-    var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth;ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.translate(-view.width/2,-view.layout.frameDepth*sy/2);
+    var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth,interiorAxis=-outsideSignForPin(p);ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.scale(1,interiorAxis);ctx.translate(-view.width/2,0);
     view.layout.items.forEach(function(item){if(item.kind!=="mullion"){ctx.fillStyle="#fffdf2";ctx.fillRect(item.x*sx,item.y*sy,item.w*sx,item.depth*sy);ctx.strokeStyle="#555";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,item.y*sy,item.w*sx,item.depth*sy);return;}item.layers.forEach(function(layer){ctx.fillStyle=layer.label==="100×100"?"#75c9ec":"#c8ebfa";ctx.fillRect(item.x*sx,layer.y*sy,layer.face*sx,layer.depth*sy);ctx.strokeStyle="#14748a";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,layer.y*sy,layer.face*sx,layer.depth*sy);});});ctx.restore();
   }
   function refreshSpanBar(i) {
     var p = state.pins[i], bar = document.querySelector('.span-bar[data-i="' + i + '"]');
     if (!p || !bar) return;
     var view=planOverlayPixels(p,$("stage").clientWidth,$("stage").clientHeight,$("plan"));
-    var sy=view.depth/view.layout.depth,offset=(view.layout.minY-view.layout.frameDepth/2)*sy;
-    bar.style.width=view.width+"px";bar.style.height=view.depth+"px";bar.style.transform="rotate("+(p.angle||0)+"deg) translate(-50%, "+offset+"px)";bar.style.transformOrigin="0 0";drawPlanStructureSvg(bar,view.layout);
+    var sy=view.depth/view.layout.depth,offset=view.layout.minY*sy,interiorAxis=-outsideSignForPin(p);
+    bar.style.width=view.width+"px";bar.style.height=view.depth+"px";bar.style.transform="rotate("+(p.angle||0)+"deg) scale(1,"+interiorAxis+") translate(-50%, "+offset+"px)";bar.style.transformOrigin="0 0";drawPlanStructureSvg(bar,view.layout);
   }
 
   function refreshDone() {
@@ -2189,8 +2203,10 @@
       group.position.set(p.x * planWmm * mm, baseY, p.y * planHmm * mm);
       if ((p.angle || 0) === 90) group.rotation.y = -Math.PI / 2;
       // 통바/창 구성 순서는 언제나 실내에서 바라본 왼쪽부터 유지한다.
-      var pOutside = typeof p.outsideSign === "number" ? p.outsideSign :
-        (((p.angle || 0) === 90) ? (p.x < .5 ? 1 : -1) : (p.y < .5 ? -1 : 1));
+      var pOutside = outsideSignForPin(p), wallFrameDepth=(frameDepthMm(p.frame)||(hasDoor?140:140))*mm;
+      // 번호 위치의 벽선은 창틀 실외면이다. 프레임 중심은 여기서 실내 방향으로 반 깊이 이동한다.
+      if((p.angle||0)===90)group.position.x+=pOutside*wallFrameDepth/2;
+      else group.position.z+=-pOutside*wallFrameDepth/2;
       if (!hasDoor && pOutside > 0) group.scale.x = -1;
       scene.add(group);
       var labelName = p.name || ((pinIndex + 1) + "번");
@@ -2292,6 +2308,13 @@
     }); return lines;
   }
   function loadPlanImage() { return new Promise(function(resolve, reject){ if (!state.planData) { resolve(null); return; } var img = new Image(); img.onload=function(){resolve(img);}; img.onerror=function(){reject(new Error("평면도 이미지를 읽지 못했습니다"));}; img.src=state.planData; }); }
+  function safeSiteFileBase(){return (state.site||generatedSiteName()||"현장").replace(/[\\/:*?"<>|\x00-\x1f]/g,"_").replace(/[. ]+$/g,"").slice(0,140);}
+  function canvasFileData(canvas,name){return new Promise(function(resolve,reject){canvas.toBlob(function(blob){if(!blob){reject(new Error(name+" 변환 실패"));return;}var reader=new FileReader();reader.onload=function(){resolve({name:name,mimeType:"image/png",data:String(reader.result).split(",")[1]});};reader.onerror=function(){reject(reader.error||new Error(name+" 읽기 실패"));};reader.readAsDataURL(blob);},"image/png");});}
+  function textFileData(text,name){var bytes=new TextEncoder().encode(text),binary="";for(var i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);return {name:name,mimeType:"application/json",data:btoa(binary)};}
+  async function buildSitePlanCanvas(){
+    var img=await loadPlanImage();if(!img)throw new Error("현장 평면도를 먼저 올려주세요");var maxW=1600,scale=Math.min(1,maxW/img.naturalWidth),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale)),canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;var c=canvas.getContext("2d");c.fillStyle="#fff";c.fillRect(0,0,w,h);c.save();c.translate(state.flipH?w:0,state.flipV?h:0);c.scale(state.flipH?-1:1,state.flipV?-1:1);c.drawImage(img,0,0,w,h);c.restore();
+    state.pins.forEach(function(p,i){var x=dispX(p.x)*w,y=dispY(p.y)*h,entry=isEntryPin(p);drawPlanStructureCanvas(c,p,x,y,w,h,img);var radius=Math.max(8,Math.min(16,w/90));c.beginPath();c.arc(x,y,radius,0,Math.PI*2);c.fillStyle=entry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=entry?"#287a68":"#6d571d";c.lineWidth=Math.max(1,radius/8);c.stroke();c.fillStyle=entry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font='bold '+Math.max(8,radius)+ 'px "Gulim"';c.fillText(visiblePinLabel(p,i),x,y);});return canvas;
+  }
   async function buildDrawingCanvas() {
     state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); syncGlobalInputs(); persist();
     var img = await loadPlanImage(), W = 1600, pad = 60, planW = W - pad * 2, planH = 180;
@@ -2369,7 +2392,8 @@
     var pages=await buildDrawingPages(),base=drawingFileName().replace(/\.png$/i,"");
     var blobs=await Promise.all(pages.map(function(canvas){return new Promise(function(resolve){canvas.toBlob(resolve,"image/png");});}));
     if(blobs.some(function(blob){return !blob;}))throw new Error("PNG 변환에 실패했습니다");
-    blobs.forEach(function(blob,index){var a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=base+"_"+(index+1)+".png";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1500);});return pages.length;
+    blobs.forEach(function(blob,index){var a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=base+"_"+(index+1)+".png";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1500);});
+    var driveSaved=false,driveError="";if(driveBridgeReady){try{var files=await Promise.all(pages.map(function(canvas,index){return canvasFileData(canvas,base+"_"+(index+1)+".png");}));await driveCall("saveSurveySite",{siteName:state.site||generatedSiteName(),drawingFiles:files});driveSaved=true;}catch(e){driveError=e.message||String(e);}}return {count:pages.length,driveSaved:driveSaved,driveError:driveError};
   }
 
   function buildJSON() {
@@ -2397,7 +2421,7 @@
                      panels: panelsOut(t.panels), primary: t.primary };
           }),
           plan: { x: Math.round(p.x * 10000) / 10000, y: Math.round(p.y * 10000) / 10000,
-                  angle: p.angle || 0, placementMode: p.placementMode || "free" }
+                  angle: p.angle || 0, placementMode: p.placementMode || "free", outsideSign:outsideSignForPin(p) }
         };
       })
     };
@@ -2405,7 +2429,7 @@
 
   $("savedrawing").addEventListener("click", async function () {
     var button=this; button.disabled=true;
-    try { var count=await saveDrawingPNG(); toast("실측도면 출력본 "+count+"페이지 저장 완료 — 기기 다운로드 폴더를 확인하세요"); }
+    try { var result=await saveDrawingPNG(); toast("실측도면 출력본 "+result.count+"페이지 저장 완료 — "+(result.driveSaved?"Google Drive 실측도면 폴더와 기기 다운로드 폴더를 확인하세요":(result.driveError?"기기 다운로드 완료 · Drive 실패: "+result.driveError:"기기 다운로드 폴더를 확인하세요"))); }
     catch(e) { toast(e.message || "실측도면 출력본을 저장하지 못했습니다"); }
     finally { button.disabled=false; }
   });
@@ -2488,6 +2512,7 @@
   }
   function surveyId() { return (state.surveyDate || todayLocal()) + "|" + (state.site || "").trim(); }
   $("save").addEventListener("click", async function () {
+    var localSaved=false;
     state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal();
     if (!state.site) { toast("기초입력에서 현장주소를 적용해주세요"); $("setupaddress").focus(); return; }
     try {
@@ -2496,8 +2521,12 @@
       tx.objectStore("surveys").put({ id: surveyId(), siteKey: state.site, site: state.site, surveyDate: state.surveyDate,
         updatedAt: new Date().toISOString(), payload: JSON.stringify(state) });
       await new Promise(function (resolve, reject) { tx.oncomplete = resolve; tx.onerror = function () { reject(tx.error); }; });
-      db.close(); persist(); toast("현장 저장 완료 — 기초입력·실측입력·현장 평면도·위치·축척·작업상태를 이 브라우저에 보관했습니다");
-    } catch (e) { toast("저장하지 못했습니다: " + e.message); }
+      db.close(); persist();localSaved=true;
+      if(!driveBridgeReady){toast("현장 로컬 저장 완료 — Google Drive 연결은 Apps Script 새 버전 배포 후 활성화됩니다");return;}
+      var base=safeSiteFileBase(),planCanvas=await buildSitePlanCanvas(),planFile=await canvasFileData(planCanvas,base+"_현장평면도.png"),jsonFile=textFileData(JSON.stringify(state),base+"_현장데이터.json");
+      await driveCall("saveSurveySite",{siteName:state.site,planFiles:[planFile,jsonFile]});
+      toast("현장 저장 완료 — Google Drive의 "+state.site+"/현장평면도 폴더에 저장했습니다");
+    } catch (e) { toast((localSaved?"현장 로컬 저장 완료 · Google Drive 저장 실패: ":"저장하지 못했습니다: ") + e.message); }
   });
 
   function applySavedState(saved) {
@@ -2540,8 +2569,8 @@
       var db = await openSurveyDB(), tx = db.transaction("surveys", "readonly");
       var req = tx.objectStore("surveys").getAll();
       var rows = await new Promise(function (resolve, reject) { req.onsuccess = function () { resolve(req.result); }; req.onerror = function () { reject(req.error); }; });
-      db.close(); rows.sort(function (a, b) { return b.id.localeCompare(a.id); }); host.innerHTML = "";
-      if (!rows.length) { host.innerHTML = '<div class="empty">이 브라우저에 저장된 현장이 없습니다.</div>'; return; }
+      db.close(); rows.sort(function (a, b) { return b.id.localeCompare(a.id); }); host.innerHTML = '<div class="cap2">이 브라우저</div>';
+      if (!rows.length) host.innerHTML += '<div class="empty">이 브라우저에 저장된 현장이 없습니다.</div>';
       rows.forEach(function (row) {
         var div = document.createElement("div"); div.className = "saved-row";
         var date = document.createElement("span"); date.className = "saved-date"; date.textContent = row.surveyDate;
@@ -2553,6 +2582,8 @@
         });
         div.appendChild(site); div.appendChild(date); div.appendChild(open); host.appendChild(div);
       });
+      if(driveBridgeReady){var driveTitle=document.createElement("div");driveTitle.className="cap2";driveTitle.style.marginTop="14px";driveTitle.textContent="Google Drive";host.appendChild(driveTitle);try{var driveRows=await driveCall("listSurveySites",{});if(!driveRows.length){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive에 저장된 현장이 없습니다.</div>');}driveRows.forEach(function(row){var div=document.createElement("div");div.className="saved-row";var site=document.createElement("b");site.textContent=row.name;var date=document.createElement("span");date.className="saved-date";date.textContent=row.modifiedTime?String(row.modifiedTime).slice(0,10):"Drive";var open=document.createElement("button");open.type="button";open.textContent="열기";open.addEventListener("click",async function(){open.disabled=true;try{var loaded=await driveCall("loadSurveySite",{siteId:row.id});applySavedState(JSON.parse(loaded.json));$("savedialog").close();toast(row.name+" 현장을 Google Drive에서 불러왔습니다");}catch(e){toast("Drive 현장을 읽지 못했습니다: "+e.message);}finally{open.disabled=false;}});div.appendChild(site);div.appendChild(date);div.appendChild(open);host.appendChild(div);});}catch(e){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive 목록을 불러오지 못했습니다.</div>');}}
+      else host.insertAdjacentHTML("beforeend",'<div class="cap2" style="margin-top:14px">Google Drive 연결은 Apps Script 새 버전 배포 후 표시됩니다.</div>');
     } catch (e) { host.innerHTML = '<div class="empty">저장 목록을 불러오지 못했습니다.</div>'; }
   }
   $("load").addEventListener("click", showSavedSurveys);
@@ -2613,7 +2644,7 @@
           var importedEntry=parts.filter(function(t){return t.kind==="entry";})[0];
           return { name: m.name || "", frame: m.frame || "", notes: m.notes || "", composition: m.composition || "", drawInDrawing: typeof m.drawInDrawing==="boolean"?m.drawInDrawing:!!(importedEntry&&importedEntry.drawInDrawing), details: normalizedDetails(m.details), parts: parts,
                    x: (m.plan && m.plan.x) || 0.5, y: (m.plan && m.plan.y) || 0.5,
-                   angle: (m.plan && m.plan.angle) || 0,
+                   angle: (m.plan && m.plan.angle) || 0, outsideSign:m.plan&&typeof m.plan.outsideSign==="number"?m.plan.outsideSign:undefined,
                    placementMode: (m.plan && m.plan.placementMode) || "free", wallLock: null };
         });
         $("site").value = state.site;
