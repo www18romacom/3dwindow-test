@@ -44,6 +44,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; }
   body {
     background: var(--bg); color: var(--ink);
@@ -63,6 +64,7 @@
   @media (max-width: 1000px) { .wrap { grid-template-columns: minmax(0,1fr); } }
   @media (max-width: 600px) {
     header { padding: 12px 8px 0; }
+    header p { display:none; }
     .wrap { gap: 10px; padding: 10px 6px 28px; }
     .floorplan-card .body { padding: 4px; }
     .floorplan-card > h2 { padding-inline: 10px; }
@@ -73,6 +75,15 @@
     .marker.sel { transform: scale(1.15); box-shadow: 0 0 0 2px var(--accent); }
     .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff;
       font-size: 7px; letter-spacing: -.08em; }
+    .card { border-radius: 9px; }
+    .body { padding: 10px; }
+    input[type="text"], input[type="number"], select, textarea, button { min-height: 44px; }
+    .part-top { min-height: 48px; }
+    .part-top .x { min-width: 40px; }
+  }
+  @media (min-width: 1001px) {
+    .floorplan-card { position: sticky; top: 12px; }
+    .wrap > .card:last-child { max-height: calc(100vh - 28px); overflow: auto; }
   }
 
   .card {
@@ -170,6 +181,10 @@
   .site-setup-actions { display:flex; gap:8px; margin-top:10px; }
   .site-setup-actions button { flex:1; }
   .site-setup.collapsed > :not(.site-setup-head) { display:none; }
+  .mullion-layer-list { display:grid; gap:7px; margin-top:9px; }
+  .mullion-layer-row { display:grid; grid-template-columns:minmax(120px,1fr) 86px 38px; gap:7px; align-items:end; }
+  .mullion-layer-row label { margin:0; }
+  .mullion-layer-row .x { min-width:38px; padding:7px; }
   @media (max-width: 600px) {
     .site-fields { grid-template-columns:1fr; }
     .site-fields .wide { grid-column:auto; }
@@ -545,7 +560,7 @@
     $("basetext").value = state.siteSetup.baseText; $("setupmanager").value = state.siteSetup.manager;
     $("setupvendor").value = ["LX","KCC","홈CC","custom"].includes(state.siteSetup.vendor) ? state.siteSetup.vendor : "custom";
     if ($("setupvendor").value === "custom" && !state.siteSetup.vendorCustom) state.siteSetup.vendorCustom = state.siteSetup.vendor;
-    $("setupvendorcustom").value = state.siteSetup.vendorCustom; $("setupvendorcustomwrap").hidden = $("setupvendor").value !== "custom"; $("setupvendorname").value = state.siteSetup.vendorName;
+    $("setupvendorcustom").value = state.siteSetup.vendorCustom; $("setupvendorcustomwrap").hidden = $("setupvendor").value !== "custom"; $("setupvendorcustom").disabled = $("setupvendor").value !== "custom"; $("setupvendorname").value = state.siteSetup.vendorName;
     $("setupaddress").value = state.siteSetup.address; $("setupnote").value = state.siteSetup.note;
     $("setupdate").value = state.surveyDate || todayLocal(); setupFromInputs();
     $("sitesetup").classList.toggle("collapsed", !!collapse); $("editsitesetup").hidden = !collapse;
@@ -585,7 +600,7 @@
   ["setupdate","setupmanager","setupvendor","setupvendorcustom","setupvendorname","setupaddress","setupnote"].forEach(function(id){
     $(id).addEventListener("input", function(){ setupFromInputs(); persist(); });
   });
-  $("setupvendor").addEventListener("change", function(){ $("setupvendorcustomwrap").hidden = this.value !== "custom"; setupFromInputs(); persist(); });
+  $("setupvendor").addEventListener("change", function(){ var custom=this.value === "custom"; $("setupvendorcustomwrap").hidden = !custom; $("setupvendorcustom").disabled = !custom; setupFromInputs(); persist(); });
   $("basetext").addEventListener("input", parseBaseText);
   $("applysite").addEventListener("click", function(){ setupFromInputs(); var name = generatedSiteName(); if (!state.siteSetup.address.trim()) { toast("현장주소를 확인해주세요"); $("setupaddress").focus(); return; } $("site").value = state.site = name; $("surveydate").value = state.surveyDate; persist(); fillSetup(true); toast("기초정보를 적용했습니다"); });
   $("editsitesetup").addEventListener("click", function(){ fillSetup(false); $("basetext").focus(); });
@@ -600,7 +615,7 @@
   var realX = dispX, realY = dispY;   // 뒤집기는 대칭이라 정방향/역방향 공식이 같다
 
   function newSash(type) { return { kind: "sash", sashType: type || "normal", w: "0", h: "0", panels: "2짝", primary: "right" }; }
-  function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0], count: 1, stack: "", groupId: "" }; }
+  function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0], count: 1, layers: [{ spec: MULLION_SPECS[0], count: 1 }] }; }
   function newTurn() { return { kind: "turn", w: "0", h: "0", swing: "push", handle: "right" }; }
   function newEntry() { return { kind: "entry", w: "900", h: "2100", drawInDrawing: false }; }
   function normalizeMullionSpec(v) {
@@ -610,20 +625,19 @@
     if (/105x40/.test(s)) return "105×40";
     return v || MULLION_SPECS[0];
   }
+  function normalizeMullionPart(t) {
+    var rows=[];
+    if(Array.isArray(t.layers)) t.layers.forEach(function(v){rows.push({spec:normalizeMullionSpec(v.spec),count:Math.max(1,parseInt(v.count,10)||1)});});
+    if(!rows.length&&typeof t.stack==="string"&&t.stack.trim()) t.stack.trim().split(/\s*\+\s*/).forEach(function(token){var m=token.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);if(m)rows.push({spec:normalizeMullionSpec(m[1]+"×"+m[2]),count:1});});
+    if(!rows.length) rows=[{spec:normalizeMullionSpec(t.spec==="100×45"?"40×105":t.spec),count:Math.max(1,parseInt(t.count,10)||1)}];
+    t.layers=rows; t.spec=rows[0].spec; t.count=rows[0].count; delete t.stack; delete t.groupId; return t;
+  }
+  function mullionLayerRows(t){return normalizeMullionPart(t).layers;}
   function mullionLayers(t) {
-    var raw=typeof t.stack==="string"?t.stack.trim():"", layers=[];
-    if(raw) raw.split(/\s*\+\s*/).forEach(function(token){var m=token.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);if(m)layers.push({face:Number(m[1]),depth:Number(m[2]),label:Math.round(Number(m[1]))+"×"+Math.round(Number(m[2]))});});
-    if(layers.length)return layers;
-    var spec=String(normalizeMullionSpec(t.spec)).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),count=Math.max(1,parseInt(t.count,10)||1),face=spec?Number(spec[1]):100,depth=spec?Number(spec[2]):100;
-    for(var i=0;i<count;i++)layers.push({face:face,depth:depth,label:Math.round(face)+"×"+Math.round(depth)});
-    return layers;
+    var layers=[];mullionLayerRows(t).forEach(function(row){var spec=String(row.spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=spec?Number(spec[1]):100,depth=spec?Number(spec[2]):100;for(var i=0;i<row.count;i++)layers.push({face:face,depth:depth,label:Math.round(face)+"×"+Math.round(depth)});});return layers;
   }
   function mullionDepth(t){return mullionLayers(t).reduce(function(n,v){return n+v.depth;},0);}
-  function drawingPartsGrouped(p) {
-    var out=[],groups={};
-    (p.parts||[]).forEach(function(t){var gid=t.kind==="mullion"?String(t.groupId||"").trim():"";if(!gid){out.push(t);return;}if(groups[gid]){groups[gid]._groupParts.push(t);groups[gid]._layers=groups[gid]._layers.concat(mullionLayers(t));return;}var grouped=Object.assign({},t,{_groupId:gid,_groupParts:[t],_layers:mullionLayers(t)});groups[gid]=grouped;out.push(grouped);});
-    return out;
-  }
+  function drawingPartsGrouped(p) { return (p.parts||[]).slice(); }
   function parseComposition(text) {
     var out=[];
     String(text||"").split(/\s*\+\s*/).forEach(function(token){
@@ -636,7 +650,7 @@
   }
   function compositionSummary(p) {
     return (p.parts || []).map(function(t){
-      if(t.kind==="mullion") return (t.groupId?"[그룹 "+t.groupId+"] ":"")+(t.stack ? "통바 적층 "+mullionLayers(t).map(function(v){return v.label;}).join(" + ") : (/^40/.test(normalizeMullionSpec(t.spec))?"통바40":/^105/.test(normalizeMullionSpec(t.spec))?"통바105":"통바100")+((parseInt(t.count,10)||1)>1?" × "+(parseInt(t.count,10)||1):""));
+      if(t.kind==="mullion") return "통바 "+mullionLayerRows(t).map(function(v){return v.spec+" "+v.count+"개";}).join(" / ");
       if(t.kind==="entry") return "현관문 900x2100";
       var st=t.kind==="turn"?"turn":(t.sashType||"normal"), names={normal:"창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
       return (names[st]||"창")+" "+(t.w||0)+"x"+(t.h||0)+(st==="normal"?" - "+(t.panels||"2짝"):"");
@@ -819,7 +833,7 @@
         state.pins.forEach(function (p) {
           if (!Array.isArray(p.parts)) p.parts = [];
           p.parts.forEach(function (t) {
-            if (t.kind === "mullion") { t.spec = t.spec === "100×45" ? "40×105" : normalizeMullionSpec(t.spec); t.count=Math.max(1,parseInt(t.count,10)||1); t.stack=typeof t.stack==="string"?t.stack:""; t.groupId=typeof t.groupId==="string"?t.groupId:""; }
+            if (t.kind === "mullion") normalizeMullionPart(t);
             if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
             if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if (typeof t.drawInDrawing !== "boolean") t.drawInDrawing = false; }
             if (t.kind === "sash" && !t.sashType) t.sashType = t.panels === "고정" ? "fix" : "normal";
@@ -1502,12 +1516,6 @@
     tag.className = "tag"; tag.textContent = PART_TAGS[t.kind] || t.kind;
     top.appendChild(tag);
 
-    if (t.kind === "mullion") {
-      var specSel = sel1(MULLION_SPECS, t.spec, function (v) { t.spec = v; syncComposition(p); persist(); refreshDone(); }, "spec");
-      top.appendChild(specSel);
-      var count=numInput(t.count||1,"1",function(v){t.count=Math.max(1,parseInt(v,10)||1);syncComposition(p);persist();});count.min="1";count.style.maxWidth="70px";count.title="통바 수량";top.appendChild(count);
-    }
-
     var sp = document.createElement("span"); sp.className = "sp"; top.appendChild(sp);
     var x = document.createElement("button");
     x.type = "button"; x.className = "x"; x.textContent = "×";
@@ -1518,13 +1526,17 @@
     d.appendChild(top);
 
     if (t.kind === "mullion") {
-      var stackInput=document.createElement("input");stackInput.type="text";stackInput.value=t.stack||"";stackInput.placeholder="예: 100×100 + 100×100 + 105×40";
-      stackInput.addEventListener("input",function(){t.stack=this.value;syncComposition(p);persist();});
-      d.appendChild(labeled("적층 통바 묶음 · 입력 순서가 실외→실내 깊이 순서",stackInput));
-      var stackHint=document.createElement("div");stackHint.className="cap2";stackHint.textContent=(t.stack?"총 깊이 "+Math.round(mullionDepth(t))+"mm":"비워두면 위 규격과 수량을 사용합니다");
-      stackInput.addEventListener("input",function(){stackHint.textContent=this.value.trim()?"총 깊이 "+Math.round(mullionDepth(t))+"mm":"비워두면 위 규격과 수량을 사용합니다";});d.appendChild(stackHint);
-      var groupInput=document.createElement("input");groupInput.type="text";groupInput.value=t.groupId||"";groupInput.placeholder="예: A (같은 그룹끼리 깊이 적층)";
-      groupInput.addEventListener("input",function(){t.groupId=this.value;syncComposition(p);persist();});d.appendChild(labeled("통바 그룹 · 비우면 좌우 별도 배치",groupInput));
+      normalizeMullionPart(t);
+      var layerList=document.createElement("div");layerList.className="mullion-layer-list";
+      function rebuildLayers(){layerList.innerHTML="";t.layers.forEach(function(layer,layerIndex){
+        var row=document.createElement("div");row.className="mullion-layer-row";
+        row.appendChild(labeled(layerIndex===0?"통바 규격":"같은 위치 적층 규격",sel1(MULLION_SPECS,layer.spec,function(v){layer.spec=v;t.spec=t.layers[0].spec;syncComposition(p);persist();},"spec")));
+        var count=numInput(layer.count||1,"1",function(v){layer.count=Math.max(1,parseInt(v,10)||1);t.count=t.layers[0].count;syncComposition(p);persist();});count.min="1";row.appendChild(labeled("수량",count));
+        var remove=document.createElement("button");remove.type="button";remove.className="x";remove.textContent="×";remove.disabled=t.layers.length===1;remove.title="이 적층 규격 삭제";remove.addEventListener("click",function(){t.layers.splice(layerIndex,1);t.spec=t.layers[0].spec;t.count=t.layers[0].count;syncComposition(p);persist();rebuildLayers();});row.appendChild(remove);layerList.appendChild(row);
+      });}
+      rebuildLayers();d.appendChild(layerList);
+      var addLayer=document.createElement("button");addLayer.type="button";addLayer.className="tiny";addLayer.textContent="+ 통바 추가 (같은 위치 적층)";addLayer.addEventListener("click",function(){t.layers.push({spec:MULLION_SPECS[0],count:1});syncComposition(p);persist();rebuildLayers();});d.appendChild(addLayer);
+      var stackHint=document.createElement("div");stackHint.className="cap2";stackHint.textContent="이 항목 안에서 추가하면 같은 위치에 깊이 방향으로 쌓입니다. 아래의 +통바는 좌우의 새 위치입니다.";d.appendChild(stackHint);
     }
 
     if (t.kind === "sash") {
@@ -2152,7 +2164,7 @@
   }
   function drawingParts(p) {
     return p.parts.map(function (t) {
-      if (t.kind === "mullion") return t.stack ? "통바 적층 " + escapeHTML(mullionLayers(t).map(function(v){return v.label;}).join(" + ")) + " · 총 " + Math.round(mullionDepth(t)) + "mm" : "통바 " + escapeHTML(t.spec || "") + ((parseInt(t.count,10)||1)>1?" × "+(parseInt(t.count,10)||1):"");
+      if (t.kind === "mullion") return "통바 " + mullionLayerRows(t).map(function(v){return escapeHTML(v.spec)+" "+v.count+"개";}).join(" / ");
       if (t.kind === "entry") return "현관문 900×2100";
       var typeNames={normal:"일반 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
       var kind = t.kind === "turn" ? "터닝도어" : (typeNames[t.sashType||"normal"] || "일반 창");
@@ -2182,7 +2194,7 @@
     var plan = state.planData ? '<div class="plan-wrap" style="aspect-ratio:' + planRatio + '"><img class="plan" src="' +
       state.planData + '" alt="평면도">' + planMarkers + '</div>' : '<div class="no-plan">평면도 없음</div>';
     return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>' + escapeHTML(state.site || "실측도면") +
-      '</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:"Malgun Gothic",sans-serif;color:#111;margin:0;font-size:11px}' +
+      '</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:"Gulim",sans-serif;color:#111;margin:0;font-size:11px}' +
       'h1{font-size:20px;margin:0 0 6px}.meta{display:flex;gap:28px;border:1px solid #111;padding:7px 10px;margin-bottom:8px}.plan-wrap{position:relative;width:100%;margin:0 auto 9px;overflow:hidden;page-break-inside:avoid}.plan{display:block;width:100%;height:100%;object-fit:contain}.plan-marker{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#ffd66b;border:1.5px solid #6d571d;color:#17130a;font-weight:700;font-size:10px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.28)}.plan-marker.entry{background:#287a68;border-color:#287a68;color:#fff;font-size:6px;letter-spacing:-.08em}.no-plan{text-align:center;padding:30px;border:1px solid #aaa}' +
       'table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:5px;vertical-align:top;word-break:break-word}th{background:#eee}.no-cell{width:8%;text-align:center;font-weight:bold}th:nth-child(2){width:17%}th:nth-child(3){width:28%}th:nth-child(4){width:16%}.notes{white-space:normal}@media print{.no-print{display:none}}</style></head><body>' +
       '<h1>' + escapeHTML(normalizedSetup(state.siteSetup).address || "현장주소 미입력") + '</h1>' +
@@ -2196,7 +2208,7 @@
 
   function plainParts(p) {
     return p.parts.map(function(t){
-      if (t.kind === "mullion") return t.stack ? "통바 적층 " + mullionLayers(t).map(function(v){return v.label;}).join(" + ") + " · 총 " + Math.round(mullionDepth(t)) + "mm" : "통바 " + (t.spec || "") + ((parseInt(t.count,10)||1)>1?" × "+(parseInt(t.count,10)||1):"");
+      if (t.kind === "mullion") return "통바 " + mullionLayerRows(t).map(function(v){return v.spec+" "+v.count+"개";}).join(" / ");
       if (t.kind === "entry") return "현관문 900×2100";
       var names={normal:"일반 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
       return (t.kind === "turn" ? "터닝도어 " : (names[t.sashType||"normal"]||"일반 창")+" ") + (t.w || "-") + "×" + (t.h || "-") + (t.kind === "sash"&&(t.sashType||"normal")==="normal" ? " · " + (t.panels || "") : "");
@@ -2221,13 +2233,13 @@
       planH = Math.max(1, Math.round(img.naturalHeight * planScale));
     }
     var measure = document.createElement("canvas").getContext("2d");
-    measure.font = '25px "Malgun Gothic", sans-serif';
+    measure.font = '25px "Gulim", sans-serif';
     var siteLines = wrapCanvasText(measure, normalizedSetup(state.siteSetup).address || "현장주소 미입력", W - pad * 2);
     var globalSummary=[state.overallNotes?"전체 참고사항: "+state.overallNotes:"",liftingText()].filter(Boolean).join("\n");
-    measure.font='22px "Malgun Gothic", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
+    measure.font='22px "Gulim", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
     var py = 128 + siteLines.length * 34 + globalLines.length*30, panelGap=24, panelW=(W-pad*2-panelGap)/2;
     var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
-    function panelFooterData(p){measure.font='17px "Malgun Gothic"';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28),notes:p.notes?wrapCanvasText(measure,"개별 참고사항:\n"+p.notes,panelW-28):[]};}
+    function panelFooterData(p){measure.font='17px "Gulim"';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28),notes:p.notes?wrapCanvasText(measure,"개별 참고사항:\n"+p.notes,panelW-28):[]};}
     function footerHeight(data){return Math.max(150,65+data.details.length*20+data.notes.length*32);}
     function panelHeightFor(p){return 570+footerHeight(panelFooterData(p));}
     var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
@@ -2235,45 +2247,45 @@
     var panelsHeight=rowHeights.reduce(function(n,v){return n+v;},0)+Math.max(0,rowHeights.length-1)*panelGap;
     var H=py+planH+35+panelsHeight+60;
     var canvas=document.createElement("canvas"); canvas.width=W; canvas.height=H; var c=canvas.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.fillStyle="#111";
-    c.font='bold 40px "Malgun Gothic", sans-serif'; siteLines.forEach(function(line, i){ c.fillText(line, pad, 58 + i * 46); });
-    c.font='22px "Malgun Gothic", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);}); c.font='25px "Malgun Gothic", sans-serif';
+    c.font='bold 40px "Gulim", sans-serif'; siteLines.forEach(function(line, i){ c.fillText(line, pad, 58 + i * 46); });
+    c.font='22px "Gulim", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);}); c.font='25px "Gulim", sans-serif';
     var planX=Math.round((W-planW)/2); c.strokeStyle="#bbb"; c.strokeRect(planX,py,planW,planH);
     if(img){ c.save(); c.translate(state.flipH?planX+planW:planX,state.flipV?py+planH:py); c.scale(state.flipH?-1:1,state.flipV?-1:1); c.drawImage(img,0,0,planW,planH); c.restore();
-      state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW, y=py+dispY(p.y)*planH, entry=isEntryPin(p); c.beginPath(); c.arc(x,y,18,0,Math.PI*2); c.fillStyle=entry?"#287a68":"#ffd66b"; c.fill(); c.strokeStyle=entry?"#287a68":"#6d571d"; c.lineWidth=2; c.stroke(); c.fillStyle=entry?"#fff":"#111"; c.textAlign="center"; c.textBaseline="middle"; c.font=entry?'bold 11px "Malgun Gothic"':'bold 20px "Malgun Gothic"'; c.fillText(visiblePinLabel(p,i),x,y);}); }
-    else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Malgun Gothic"'; c.fillText("평면도 없음",W/2,py+planH/2); }
+      state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW, y=py+dispY(p.y)*planH, entry=isEntryPin(p); c.beginPath(); c.arc(x,y,18,0,Math.PI*2); c.fillStyle=entry?"#287a68":"#ffd66b"; c.fill(); c.strokeStyle=entry?"#287a68":"#6d571d"; c.lineWidth=2; c.stroke(); c.fillStyle=entry?"#fff":"#111"; c.textAlign="center"; c.textBaseline="middle"; c.font=entry?'bold 11px "Gulim"':'bold 20px "Gulim"'; c.fillText(visiblePinLabel(p,i),x,y);}); }
+    else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Gulim"'; c.fillText("평면도 없음",W/2,py+planH/2); }
     function partSize(t){
-      if(t.kind==="mullion"){var layers=t._layers||mullionLayers(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;})),count=Math.max(1,parseInt(t.count,10)||1),stacked=!!(t._groupId||(t.stack&&t.stack.trim())),totalDepth=layers.reduce(function(n,v){return n+v.depth;},0);return {w:mw,h:100,kind:t.kind,count:count,layers:layers,groupId:t._groupId||"",fixedW:mw<=40?12:28,label:t._groupId?"통바 그룹 "+t._groupId+" · "+Math.round(totalDepth)+"mm":stacked?"적층통바 "+Math.round(totalDepth)+"mm":(mw<=40?"통바40":"통바100")+(count>1?" × "+count:"")};}
+      if(t.kind==="mullion"){var layers=mullionLayers(t),rows=mullionLayerRows(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;}));return {w:mw,h:100,kind:t.kind,layers:layers,rows:rows,fixedW:mw<=40?12:28,label:"통바"};}
       var pw=parseFloat(t.w)|| (t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
       var names={normal:"일반 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},stype=t.kind==="turn"?"turn":(t.sashType||"normal");
-      return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
+      return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
     }
     function drawPanel(p,i,x,y,panelH){
       var footerData=panelFooterData(p),headH=48,footH=footerHeight(footerData),topViewH=190,drawTop=y+headH,drawH=panelH-headH-footH-topViewH,sizes=drawingPartsGrouped(p).map(partSize),layout=[],labelRequests=[];
       c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.moveTo(x,y+panelH-footH);c.lineTo(x+panelW,y+panelH-footH);c.stroke();
-      c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Malgun Gothic"';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
-      c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Malgun Gothic"';c.fillText("정면도",x+14,drawTop+8);
+      c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Gulim"';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
+      c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim"';c.fillText("정면도",x+14,drawTop+8);
       var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0), sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1,maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}));if(!isFinite(maxH))maxH=1;
       sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
       var scale=Math.min((panelW-70-fixedW)/sashTotal,(drawH-100)/maxH), renderedW=fixedW+sashTotal*scale,dx=x+(panelW-renderedW)/2, base=drawTop+drawH-38;
       sizes.forEach(function(s,partIndex){
         var sw=s.kind==="mullion"?s.fixedW:Math.max(10,s.w*scale),sh=Math.max(10,s.h*scale),sy=base-sh;layout.push({s:s,x:dx,w:sw});if(s.kind==="mullion"){c.fillStyle="#ccecf2";c.fillRect(dx,sy,sw,sh);}c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.lineWidth=2;c.strokeRect(dx,sy,sw,sh);
-        if(s.kind!=="mullion"&&/^(B\/F235|B\/F250)$/i.test((p.frame||"").trim()))c.strokeRect(dx+6,sy+6,Math.max(1,sw-12),Math.max(1,sh-12));
         if(s.kind==="turn"||s.kind==="entry"||s.sashType==="turn"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.stroke();}
-        if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0];c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Malgun Gothic"';primaryPanels.forEach(function(pi){c.fillText("#",dx+sw*(pi+.5)/s.panels,sy+sh/2);});}
-        labelRequests.push({text:s.label,targetX:dx+sw/2,targetY:sy,side:(dx+sw/2)<x+panelW/2?"left":"right"});dx+=sw;
+        if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0];c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Gulim"';primaryPanels.forEach(function(pi){c.fillText("#",dx+sw*(pi+.5)/s.panels,sy+sh/2);});}
+        if(s.kind!=="mullion")labelRequests.push({text:s.label,targetX:dx+sw/2,targetY:sy,side:(dx+sw/2)<x+panelW/2?"left":"right"});dx+=sw;
       });
-      c.font='16px "Malgun Gothic"';labelRequests.forEach(function(label,labelIndex){var metrics=c.measureText(label.text),tw=metrics.width,fontSize=16;if(tw>panelW-36){fontSize=13;c.font='13px "Malgun Gothic"';tw=c.measureText(label.text).width;}var labelY=drawTop+38+labelIndex*24,labelX=label.side==="left"?x+18+tw/2:x+panelW-18-tw/2;labelX=Math.max(x+18+tw/2,Math.min(x+panelW-18-tw/2,labelX));var edgeX=label.side==="left"?x+10:x+panelW-10;c.strokeStyle="#777";c.lineWidth=1;c.beginPath();c.moveTo(label.targetX,label.targetY);c.lineTo(edgeX,label.targetY-6);c.lineTo(edgeX,labelY+6);c.lineTo(labelX,labelY+6);c.stroke();c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font=fontSize+'px "Malgun Gothic"';c.fillText(label.text,labelX,labelY);});
+      c.font='16px "Gulim"';labelRequests.forEach(function(label,labelIndex){var metrics=c.measureText(label.text),tw=metrics.width,fontSize=16;if(tw>panelW-36){fontSize=13;c.font='13px "Gulim"';tw=c.measureText(label.text).width;}var labelY=drawTop+38+labelIndex*24,labelX=label.side==="left"?x+18+tw/2:x+panelW-18-tw/2;labelX=Math.max(x+18+tw/2,Math.min(x+panelW-18-tw/2,labelX));var edgeX=label.side==="left"?x+10:x+panelW-10;c.strokeStyle="#777";c.lineWidth=1;c.beginPath();c.moveTo(label.targetX,label.targetY);c.lineTo(edgeX,label.targetY-6);c.lineTo(edgeX,labelY+6);c.lineTo(labelX,labelY+6);c.stroke();c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font=fontSize+'px "Gulim"';c.fillText(label.text,labelX,labelY);});
       var topY=y+headH+drawH, frameDepth=(function(v){var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:null);})(p.frame),drawDepth=frameDepth||115;
-      c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Malgun Gothic"';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
-      var topBase=topY+52, depthPx=Math.max(32,Math.min(78,drawDepth*.28));layout.forEach(function(item){var s=item.s;if(s.kind==="mullion"){var layerY=topBase,totalDepth=s.layers.reduce(function(n,v){return n+v.depth;},0),layerScale=Math.min(.28,78/Math.max(1,totalDepth));s.layers.forEach(function(layer,li){var lh=Math.max(5,layer.depth*layerScale);c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(item.x,layerY,item.w,lh);c.strokeStyle="#14748a";c.strokeRect(item.x,layerY,item.w,lh);layerY+=lh;});}else{c.fillStyle="#f6f6f6";c.fillRect(item.x,topBase,item.w,depthPx);c.strokeStyle="#111";c.strokeRect(item.x,topBase,item.w,depthPx);}});
-      var stackDepths=sizes.filter(function(s){return s.kind==="mullion"&&s.layers.length>1;}).map(function(s){return "적층 통바 총 "+Math.round(s.layers.reduce(function(n,v){return n+v.depth;},0))+"mm";});
-      var depthSummary="실내측 ↓  "+(requiresFrame(p)?(frameDepth?"프레임 깊이 "+p.frame+" ("+frameDepth+"mm)":"프레임 깊이 미입력"):"통바 구성 · 프레임 두께 해당없음")+(stackDepths.length?" · "+stackDepths.join(" / "):"");c.fillStyle="#555";c.textAlign="left";c.font='14px "Malgun Gothic"';wrapCanvasText(c,depthSummary,panelW-28).forEach(function(line,n){c.fillText(line,x+14,topY+135+n*18);});
-      c.textAlign="left";c.textBaseline="top";c.font='17px "Malgun Gothic"';
+      c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim"';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
+      var geometryW=renderedW/3,geometryX=x+(panelW-geometryW)/2,topBase=topY+52,depthPx=Math.max(10,Math.min(26,drawDepth*.09)),ratio=geometryW/renderedW,leftRows=[],rightRows=[];
+      layout.forEach(function(item){var s=item.s,gx=geometryX+(item.x-(x+(panelW-renderedW)/2))*ratio,gw=Math.max(4,item.w*ratio);if(s.kind==="mullion"){c.fillStyle="#ccecf2";c.fillRect(gx,topBase,gw,depthPx);c.strokeStyle="#14748a";c.strokeRect(gx,topBase,gw,depthPx);var target=(gx+gw/2)<x+panelW/2?leftRows:rightRows;s.rows.forEach(function(row){target.push(row.spec+" "+row.count+"개");});}else{c.fillStyle="#f6f6f6";c.fillRect(gx,topBase,gw,depthPx);c.strokeStyle="#111";c.strokeRect(gx,topBase,gw,depthPx);}});
+      c.font='15px "Gulim", sans-serif';c.textBaseline="top";c.fillStyle="#111";c.textAlign="left";leftRows.forEach(function(line,n){c.fillText(line,x+14,topBase+n*20);});c.textAlign="right";rightRows.forEach(function(line,n){c.fillText(line,x+panelW-14,topBase+n*20);});
+      var depthSummary="실내측 ↓  "+(requiresFrame(p)?(frameDepth?"프레임 깊이 "+p.frame+" ("+frameDepth+"mm)":"프레임 깊이 미입력"):"통바 구성 · 프레임 두께 해당없음");c.fillStyle="#555";c.textAlign="center";c.font='14px "Gulim", sans-serif';c.fillText(depthSummary,x+panelW/2,topY+135);
+      c.textAlign="left";c.textBaseline="top";c.font='17px "Gulim"';
       var footerY=y+panelH-footH+10;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});if(footerData.notes.length)footerY+=10;footerData.notes.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=32;});
-      c.font='15px "Malgun Gothic"';c.fillStyle="#555";c.fillText(plainParts(p)||"구성 미입력",x+14,y+panelH-25);
+      c.font='15px "Gulim"';c.fillStyle="#555";c.fillText(plainParts(p)||"구성 미입력",x+14,y+panelH-25);
     }
     var ty=py+planH+35;c.textBaseline="top";
-    if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Malgun Gothic"';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
+    if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim"';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
     return canvas;
   }
   async function saveDrawingPNG() {
@@ -2284,21 +2296,21 @@
   function buildJSON() {
     syncGlobalInputs();
     return {
-      schemaVersion: "0.2-draft",
+      schemaVersion: "0.3-draft",
       project: { name: state.site || "(현장명 없음)", surveyDate: state.surveyDate || todayLocal(), unit: "mm", siteSetup: normalizedSetup(state.siteSetup), overallNotes: state.overallNotes || "", lifting: normalizedLifting(state.lifting) },
-      floorplan: { file: state.planName || "", scale: state.scale || null, wallEdits: state.wallEdits },
+      floorplan: { file: state.planName || "", imageData: state.planData || "", scale: state.scale || null, flipH: !!state.flipH, flipV: !!state.flipV, wallEdits: state.wallEdits, workState: { selectedPin: sel, markerCount: state.pins.length } },
       openings: state.pins.map(function (p, i) {
         return {
           no: i + 1,
           name: p.name || "",
           frame: requiresFrame(p) ? (p.frame || null) : null,
-          frameMeta: { required: requiresFrame(p), doubleLine: requiresFrame(p) && /^(B\/F235|B\/F250)$/i.test((p.frame || "").trim()) },
+          frameMeta: { required: requiresFrame(p), doubleLine: false },
           notes: p.notes || "",
           composition: p.composition || "",
           drawInDrawing: isEntryPin(p) ? !!p.drawInDrawing : undefined,
           details: normalizedDetails(p.details),
           parts: p.parts.map(function (t) {
-            if (t.kind === "mullion") return { kind: "mullion", spec: t.spec, count: Math.max(1,parseInt(t.count,10)||1), stack: typeof t.stack==="string"?t.stack:"", groupId: typeof t.groupId==="string"?t.groupId:"" };
+            if (t.kind === "mullion") { normalizeMullionPart(t); return { kind: "mullion", spec: t.layers[0].spec, count: t.layers[0].count, layers: t.layers.map(function(v){return {spec:v.spec,count:v.count};}) }; }
             if (t.kind === "entry") return { kind: "entry", width: 900, height: 2100, drawInDrawing: !!t.drawInDrawing };
             if (t.kind === "turn") return { kind: "turn", width: num(t.w), height: num(t.h),
                                              swing: t.swing, handle: t.handle, openDegrees: 15 };
@@ -2397,7 +2409,7 @@
     try {
       var db = await openSurveyDB();
       var tx = db.transaction("surveys", "readwrite");
-      tx.objectStore("surveys").put({ id: surveyId(), site: state.site, surveyDate: state.surveyDate,
+      tx.objectStore("surveys").put({ id: surveyId(), siteKey: state.site, site: state.site, surveyDate: state.surveyDate,
         updatedAt: new Date().toISOString(), payload: JSON.stringify(state) });
       await new Promise(function (resolve, reject) { tx.oncomplete = resolve; tx.onerror = function () { reject(tx.error); }; });
       db.close(); persist(); toast(state.surveyDate + " · " + state.site + " 실측파일을 저장했습니다");
@@ -2421,7 +2433,7 @@
       p.details = normalizedDetails(p.details);
       if (!Array.isArray(p.parts)) p.parts = [];
       if (Array.isArray(p.parts)) p.parts.forEach(function (t) {
-        if (t.kind === "mullion") { t.spec=t.spec === "100×45"?"40×105":normalizeMullionSpec(t.spec); t.count=Math.max(1,parseInt(t.count,10)||1); t.stack=typeof t.stack==="string"?t.stack:""; t.groupId=typeof t.groupId==="string"?t.groupId:""; }
+        if (t.kind === "mullion") normalizeMullionPart(t);
         if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
         if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if(typeof t.drawInDrawing!=="boolean")t.drawInDrawing=false; }
         if (t.kind === "sash" && !t.sashType) t.sashType=t.panels==="고정"?"fix":"normal";
@@ -2478,6 +2490,9 @@
         state.overallNotes = (j.project && typeof j.project.overallNotes === "string") ? j.project.overallNotes : "";
         state.lifting = normalizedLifting(j.project && j.project.lifting);
         state.planName = (j.floorplan && j.floorplan.file) || "";
+        state.planData = (j.floorplan && j.floorplan.imageData) || "";
+        state.flipH = !!(j.floorplan && j.floorplan.flipH);
+        state.flipV = !!(j.floorplan && j.floorplan.flipV);
         state.scale = (j.floorplan && j.floorplan.scale &&
                       (j.floorplan.scale.mmPerPixel || j.floorplan.scale.mmPerFracX))
           ? j.floorplan.scale : null;
@@ -2488,7 +2503,7 @@
           var parts;
           if (Array.isArray(m.parts) && m.parts.length) {
             parts = m.parts.map(function (t) {
-              if (t.kind === "mullion") return { kind: "mullion", spec: t.spec === "100×45" ? "40×105" : normalizeMullionSpec(t.spec), count: Math.max(1,parseInt(t.count,10)||1), stack: typeof t.stack==="string"?t.stack:"", groupId: typeof t.groupId==="string"?t.groupId:"" };
+              if (t.kind === "mullion") return normalizeMullionPart({ kind: "mullion", spec: t.spec, count: t.count, layers: t.layers, stack: t.stack });
               if (t.kind === "entry") { var entry=newEntry(); entry.drawInDrawing=!!t.drawInDrawing; return entry; }
               if (t.kind === "turn") return { kind: "turn",
                        w: t.width === null || t.width === undefined ? "" : String(t.width),
@@ -2523,10 +2538,8 @@
         fillSetup(!!state.site);
         sel = null;
         updateScaleHint();
-        render();
-        toast(state.planName
-          ? "불러왔습니다 — 평면도(" + state.planName + ")는 다시 올려주세요"
-          : "불러왔습니다");
+        if(state.planData) showPlan(state.planData,state.planName); else render();
+        toast(state.planData ? "평면도와 위치·축척 상태까지 불러왔습니다" : "불러왔습니다 — 이 파일에는 평면도 원본이 없습니다");
       } catch (err) {
         toast("읽을 수 없는 파일입니다: " + err.message);
       }
