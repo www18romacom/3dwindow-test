@@ -383,7 +383,7 @@
           <button type="button" id="fliph" title="평면도 좌우 반전" aria-label="평면도 좌우 반전"><span class="full-label">좌우반전</span><span class="compact-label">↔ 좌우</span></button>
         </div>
         <div class="tool-group">
-          <button type="button" id="calibrate" title="도면의 두 점을 지정해 축척 설정" aria-label="도면의 두 점을 지정해 축척 설정"><span class="full-label">축척 설정 (도면의 두 점 지정)</span><span class="compact-label">축척 설정</span></button>
+          <button type="button" id="calibrate" title="실제 폭을 아는 기준 창의 양끝을 지정해 축척 설정" aria-label="기준 창 실측값으로 축척 설정"><span class="full-label">축척 설정 (기준 창 실측)</span><span class="compact-label">축척 설정</span></button>
           <span id="scalehint" role="status" aria-live="polite" style="margin-left:2px">미설정 — 번호가 점으로만 표시됩니다</span>
         </div>
         <div class="tool-group">
@@ -930,7 +930,7 @@
       }
       pickMode.points.push({ x: fx, y: fy });
       if (pickMode.points.length === 1) {
-        render(); toast("두 번째 점을 눌러주세요"); return;
+        render(); toast(pickMode.type === "scale" ? "기준 창의 반대쪽 끝점을 눌러주세요" : "두 번째 점을 눌러주세요"); return;
       }
       var a = pickMode.points[0], b = pickMode.points[1];
       if (pickMode.type === "scale") {
@@ -955,8 +955,8 @@
   function updateScaleHint() {
     var h = $("scalehint");
     h.textContent = state.scale
-      ? "설정됨 — 지정한 벽 길이와 실측 폭을 비교합니다"
-      : "미설정 — 도면의 치수선 양끝을 지정해주세요";
+      ? "설정됨 — 기준 창 실측값을 평면도 전체에 적용합니다"
+      : "미설정 — 실제 폭을 아는 기준 창으로 설정해주세요";
   }
 
   function imagePixelDistance(a, b) {
@@ -967,12 +967,12 @@
   $("calibrate").addEventListener("click", function () {
     if (!state.planData) { toast("평면도를 먼저 올려주세요"); return; }
     if (state.scale && !confirm("이미 축척이 설정되어 있습니다. 다시 설정할까요?")) return;
-    var mmStr = prompt("도면에 표시된 기준 치수를 입력하세요(mm)\n예: 7200");
+    var mmStr = prompt("기준 창의 실제 폭을 입력하세요(mm)\n예: 2400");
     var mm = parseFloat(mmStr);
     if (!mm || mm <= 0) { toast("취소되었습니다"); return; }
     pickMode = { type: "scale", mm: mm, points: [] };
-    $("planhint").textContent = "기준 치수선의 첫 번째 점을 눌러주세요";
-    toast("기준 치수선의 첫 번째 점을 눌러주세요");
+    $("planhint").textContent = "기준 창의 한쪽 끝점을 눌러주세요";
+    toast("기준 창의 한쪽 끝점을 눌러주세요");
     render();
   });
   function beginWallEdit(type, message) {
@@ -1246,7 +1246,7 @@
     if (pickMode && pickMode.points.length === 1) appendPickDot(stage, pickMode.points[0]);
     $("planhint").textContent = pickMode
       ? (pickMode.type === "entry" ? "현관 위치를 한 번 눌러주세요" :
-        (pickMode.points.length ? "두 번째 점을 눌러주세요" :
+        (pickMode.points.length ? (pickMode.type === "scale" ? "기준 창의 반대쪽 끝점을 눌러주세요" : "두 번째 점을 눌러주세요") :
           (pickMode.type === "wall-add" ? "추가할 벽의 시작점을 눌러주세요" :
             (pickMode.type === "wall-remove" ? "제외할 벽의 시작점을 눌러주세요" : "첫 번째 점을 눌러주세요"))))
       : "번호 위치의 벽선을 읽어 가로·세로를 자동 판별합니다";
@@ -2200,8 +2200,14 @@
     var siteLines = wrapCanvasText(measure, normalizedSetup(state.siteSetup).address || "현장주소 미입력", W - pad * 2);
     var globalSummary=[liftingText(),state.overallNotes?"전체 참고사항: "+state.overallNotes:""].filter(Boolean).join("  |  ");
     measure.font='22px "Malgun Gothic", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
-    var py = 128 + siteLines.length * 34 + globalLines.length*30, panelGap=24, panelW=(W-pad*2-panelGap)/2, panelH=680;
-    var panelRows=Math.max(1,Math.ceil(state.pins.length/2)), H=py+planH+35+panelRows*(panelH+panelGap)+60;
+    var py = 128 + siteLines.length * 34 + globalLines.length*30, panelGap=24, panelW=(W-pad*2-panelGap)/2;
+    var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
+    function panelFooterLines(p){measure.font='17px "Malgun Gothic"';var lines=wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28);if(p.notes)lines=lines.concat(wrapCanvasText(measure,"개별 참고사항: "+p.notes,panelW-28));return lines;}
+    function panelHeightFor(p){return 530+Math.max(150,65+panelFooterLines(p).length*20);}
+    var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
+    if(!rowHeights.length)rowHeights=[100];
+    var panelsHeight=rowHeights.reduce(function(n,v){return n+v;},0)+Math.max(0,rowHeights.length-1)*panelGap;
+    var H=py+planH+35+panelsHeight+60;
     var canvas=document.createElement("canvas"); canvas.width=W; canvas.height=H; var c=canvas.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.fillStyle="#111";
     c.font='bold 40px "Malgun Gothic", sans-serif'; siteLines.forEach(function(line, i){ c.fillText(line, pad, 58 + i * 46); });
     c.font='22px "Malgun Gothic", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);}); c.font='25px "Malgun Gothic", sans-serif';
@@ -2215,10 +2221,11 @@
       var names={normal:"일반 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},stype=t.kind==="turn"?"turn":(t.sashType||"normal");
       return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
     }
-    function drawPanel(p,i,x,y){
-      var headH=48, footH=150, topViewH=150, drawTop=y+headH, drawH=panelH-headH-footH-topViewH, sizes=p.parts.map(partSize), layout=[];
+    function drawPanel(p,i,x,y,panelH){
+      var footerLines=panelFooterLines(p),headH=48,footH=Math.max(150,65+footerLines.length*20),topViewH=150,drawTop=y+headH,drawH=panelH-headH-footH-topViewH,sizes=p.parts.map(partSize),layout=[];
       c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.moveTo(x,y+panelH-footH);c.lineTo(x+panelW,y+panelH-footH);c.stroke();
       c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Malgun Gothic"';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
+      c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Malgun Gothic"';c.fillText("정면도",x+14,drawTop+8);
       var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0), sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1,maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}));if(!isFinite(maxH))maxH=1;
       sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
       var scale=Math.min((panelW-70-fixedW)/sashTotal,(drawH-100)/maxH), renderedW=fixedW+sashTotal*scale,dx=x+(panelW-renderedW)/2, base=drawTop+drawH-38;
@@ -2228,19 +2235,18 @@
         if(s.kind==="sash"&&s.panels>1){var ratios=s.panels===3?[1,2,1]:null,totalRatio=ratios?4:s.panels,run=dx;for(var z=1;z<s.panels;z++){run+=sw*(ratios?ratios[z-1]:1)/totalRatio;c.beginPath();c.moveTo(run,sy);c.lineTo(run,base);c.stroke();}}
         if(s.kind==="turn"||s.kind==="entry"||s.sashType==="turn"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.stroke();}
         if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0];c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Malgun Gothic"';primaryPanels.forEach(function(pi){c.fillText("#",dx+sw*(pi+.5)/s.panels,sy+sh/2);});}
-        var slot=partIndex%3,labelY=drawTop+18+slot*24,labelX=Math.max(x+70,Math.min(x+panelW-70,dx+sw/2+(slot===1?-42:slot===2?42:0)));c.strokeStyle="#777";c.beginPath();c.moveTo(dx+sw/2,sy);c.lineTo(dx+sw/2,labelY+7);c.lineTo(labelX,labelY+7);c.stroke();c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font='16px "Malgun Gothic"';c.fillText(s.label,labelX,labelY);dx+=sw;
+        var slot=partIndex%3,labelY=drawTop+38+slot*24,labelX=Math.max(x+70,Math.min(x+panelW-70,dx+sw/2+(slot===1?-42:slot===2?42:0)));c.strokeStyle="#777";c.beginPath();c.moveTo(dx+sw/2,sy);c.lineTo(dx+sw/2,labelY+7);c.lineTo(labelX,labelY+7);c.stroke();c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font='16px "Malgun Gothic"';c.fillText(s.label,labelX,labelY);dx+=sw;
       });
-      var topY=y+headH+drawH, frameDepth=(function(v){var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:115);})(p.frame);
+      var topY=y+headH+drawH, frameDepth=(function(v){var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:null);})(p.frame),drawDepth=frameDepth||115;
       c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Malgun Gothic"';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
-      var topBase=topY+52, depthPx=Math.max(32,Math.min(78,frameDepth*.28));layout.forEach(function(item){var s=item.s,d=s.kind==="mullion"?(/통바40/.test(s.label)?105:100):frameDepth;c.fillStyle=s.kind==="mullion"?"#ccecf2":"#f6f6f6";c.fillRect(item.x,topBase,item.w,Math.max(28,Math.min(78,d*.28)));c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.strokeRect(item.x,topBase,item.w,Math.max(28,Math.min(78,d*.28)));if(s.kind!=="mullion"&&s.panels>0){c.beginPath();c.moveTo(item.x,topBase+depthPx*.35);c.lineTo(item.x+item.w,topBase+depthPx*.35);c.moveTo(item.x,topBase+depthPx*.7);c.lineTo(item.x+item.w,topBase+depthPx*.7);c.stroke();}});
-      c.fillStyle="#555";c.font='14px "Malgun Gothic"';c.fillText("실내측 ↓  "+(requiresFrame(p)?"프레임 깊이 "+(p.frame||"미입력")+" ("+frameDepth+"mm)":"통바 구성 · 프레임 두께 해당없음"),x+14,topY+125);
-      var footer=detailText(p)||"부가항목 미입력";c.textAlign="left";c.textBaseline="top";c.font='17px "Malgun Gothic"';
-      var footerLines=wrapCanvasText(c,footer,panelW-28);if(p.notes)footerLines=footerLines.concat(wrapCanvasText(c,"개별 참고사항: "+p.notes,panelW-28));
-      footerLines.slice(0,6).forEach(function(line,n){c.fillText(line,x+14,y+panelH-footH+10+n*20);});
+      var topBase=topY+52, depthPx=Math.max(32,Math.min(78,drawDepth*.28));layout.forEach(function(item){var s=item.s,d=s.kind==="mullion"?(/통바40/.test(s.label)?105:100):drawDepth;c.fillStyle=s.kind==="mullion"?"#ccecf2":"#f6f6f6";c.fillRect(item.x,topBase,item.w,Math.max(28,Math.min(78,d*.28)));c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.strokeRect(item.x,topBase,item.w,Math.max(28,Math.min(78,d*.28)));if(s.kind!=="mullion"&&s.panels>0){c.beginPath();c.moveTo(item.x,topBase+depthPx*.35);c.lineTo(item.x+item.w,topBase+depthPx*.35);c.moveTo(item.x,topBase+depthPx*.7);c.lineTo(item.x+item.w,topBase+depthPx*.7);c.stroke();}});
+      c.fillStyle="#555";c.font='14px "Malgun Gothic"';c.fillText("실내측 ↓  "+(requiresFrame(p)?(frameDepth?"프레임 깊이 "+p.frame+" ("+frameDepth+"mm)":"프레임 깊이 미입력"):"통바 구성 · 프레임 두께 해당없음"),x+14,topY+125);
+      c.textAlign="left";c.textBaseline="top";c.font='17px "Malgun Gothic"';
+      footerLines.forEach(function(line,n){c.fillText(line,x+14,y+panelH-footH+10+n*20);});
       c.font='15px "Malgun Gothic"';c.fillStyle="#555";c.fillText(plainParts(p)||"구성 미입력",x+14,y+panelH-25);
     }
-    var ty=py+planH+35,candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});c.textBaseline="top";
-    if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Malgun Gothic"';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else candidates.forEach(function(x,j){drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),ty+Math.floor(j/2)*(panelH+panelGap));});
+    var ty=py+planH+35;c.textBaseline="top";
+    if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Malgun Gothic"';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
     return canvas;
   }
   async function saveDrawingPNG() {
