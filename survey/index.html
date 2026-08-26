@@ -476,7 +476,7 @@
      선택 목록 — 항목을 추가/수정하려면 아래 배열만 고치면 된다.
      ========================================================= */
   var FRAME_TYPES   = ["B/F115", "B/F140", "B/F235", "B/F250", "B/FWA"]; // 추천값만 제한하며 구자료 값은 텍스트로 보존
-  var MULLION_SPECS = ["100×100", "40×105"];                        // 통바 규격
+  var MULLION_SPECS = ["100×100", "40×105", "105×40"];              // 통바 규격(정면 폭×평면 깊이)
   var PANEL_TYPES   = ["2짝", "3짝", "4짝", "고정"];                 // 창 짝수
   var PRIMARY_TYPES = [["left", "왼쪽"], ["right", "오른쪽"],
                        ["both", "양쪽"], ["none", "없음"]];          // 주 사용문
@@ -600,13 +600,14 @@
   var realX = dispX, realY = dispY;   // 뒤집기는 대칭이라 정방향/역방향 공식이 같다
 
   function newSash(type) { return { kind: "sash", sashType: type || "normal", w: "0", h: "0", panels: "2짝", primary: "right" }; }
-  function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0], count: 1, stack: "" }; }
+  function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0], count: 1, stack: "", groupId: "" }; }
   function newTurn() { return { kind: "turn", w: "0", h: "0", swing: "push", handle: "right" }; }
   function newEntry() { return { kind: "entry", w: "900", h: "2100", drawInDrawing: false }; }
   function normalizeMullionSpec(v) {
     var s=String(v||"").replace(/\s/g,"").replace(/X/g,"x");
     if (/100x100/.test(s)) return "100×100";
     if (/40x105/.test(s)) return "40×105";
+    if (/105x40/.test(s)) return "105×40";
     return v || MULLION_SPECS[0];
   }
   function mullionLayers(t) {
@@ -618,10 +619,15 @@
     return layers;
   }
   function mullionDepth(t){return mullionLayers(t).reduce(function(n,v){return n+v.depth;},0);}
+  function drawingPartsGrouped(p) {
+    var out=[],groups={};
+    (p.parts||[]).forEach(function(t){var gid=t.kind==="mullion"?String(t.groupId||"").trim():"";if(!gid){out.push(t);return;}if(groups[gid]){groups[gid]._groupParts.push(t);groups[gid]._layers=groups[gid]._layers.concat(mullionLayers(t));return;}var grouped=Object.assign({},t,{_groupId:gid,_groupParts:[t],_layers:mullionLayers(t)});groups[gid]=grouped;out.push(grouped);});
+    return out;
+  }
   function parseComposition(text) {
     var out=[];
     String(text||"").split(/\s*\+\s*/).forEach(function(token){
-      var m=token.match(/통바\s*(100\s*[xX×]\s*100|40\s*[xX×]\s*105)/i);
+      var m=token.match(/통바\s*(100\s*[xX×]\s*100|40\s*[xX×]\s*105|105\s*[xX×]\s*40)/i);
       if(m){out.push({kind:"mullion",spec:normalizeMullionSpec(m[1])});return;}
       var w=token.match(/창\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)(?:\s*[-·]?\s*(\d+)\s*짝)?/i);
       if(w){var sash=newSash("normal");sash.w=w[1];sash.h=w[2];sash.panels=(w[3]||"2")+"짝";out.push(sash);}
@@ -630,7 +636,7 @@
   }
   function compositionSummary(p) {
     return (p.parts || []).map(function(t){
-      if(t.kind==="mullion") return t.stack ? "통바 적층 "+mullionLayers(t).map(function(v){return v.label;}).join(" + ") : (/^40/.test(normalizeMullionSpec(t.spec))?"통바40":"통바100")+((parseInt(t.count,10)||1)>1?" × "+(parseInt(t.count,10)||1):"");
+      if(t.kind==="mullion") return (t.groupId?"[그룹 "+t.groupId+"] ":"")+(t.stack ? "통바 적층 "+mullionLayers(t).map(function(v){return v.label;}).join(" + ") : (/^40/.test(normalizeMullionSpec(t.spec))?"통바40":/^105/.test(normalizeMullionSpec(t.spec))?"통바105":"통바100")+((parseInt(t.count,10)||1)>1?" × "+(parseInt(t.count,10)||1):""));
       if(t.kind==="entry") return "현관문 900x2100";
       var st=t.kind==="turn"?"turn":(t.sashType||"normal"), names={normal:"창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
       return (names[st]||"창")+" "+(t.w||0)+"x"+(t.h||0)+(st==="normal"?" - "+(t.panels||"2짝"):"");
@@ -813,7 +819,7 @@
         state.pins.forEach(function (p) {
           if (!Array.isArray(p.parts)) p.parts = [];
           p.parts.forEach(function (t) {
-            if (t.kind === "mullion") { t.spec = t.spec === "100×45" ? "40×105" : normalizeMullionSpec(t.spec); t.count=Math.max(1,parseInt(t.count,10)||1); t.stack=typeof t.stack==="string"?t.stack:""; }
+            if (t.kind === "mullion") { t.spec = t.spec === "100×45" ? "40×105" : normalizeMullionSpec(t.spec); t.count=Math.max(1,parseInt(t.count,10)||1); t.stack=typeof t.stack==="string"?t.stack:""; t.groupId=typeof t.groupId==="string"?t.groupId:""; }
             if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
             if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if (typeof t.drawInDrawing !== "boolean") t.drawInDrawing = false; }
             if (t.kind === "sash" && !t.sashType) t.sashType = t.panels === "고정" ? "fix" : "normal";
@@ -1517,6 +1523,8 @@
       d.appendChild(labeled("적층 통바 묶음 · 입력 순서가 실외→실내 깊이 순서",stackInput));
       var stackHint=document.createElement("div");stackHint.className="cap2";stackHint.textContent=(t.stack?"총 깊이 "+Math.round(mullionDepth(t))+"mm":"비워두면 위 규격과 수량을 사용합니다");
       stackInput.addEventListener("input",function(){stackHint.textContent=this.value.trim()?"총 깊이 "+Math.round(mullionDepth(t))+"mm":"비워두면 위 규격과 수량을 사용합니다";});d.appendChild(stackHint);
+      var groupInput=document.createElement("input");groupInput.type="text";groupInput.value=t.groupId||"";groupInput.placeholder="예: A (같은 그룹끼리 깊이 적층)";
+      groupInput.addEventListener("input",function(){t.groupId=this.value;syncComposition(p);persist();});d.appendChild(labeled("통바 그룹 · 비우면 좌우 별도 배치",groupInput));
     }
 
     if (t.kind === "sash") {
@@ -2221,7 +2229,7 @@
     var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
     function panelFooterData(p){measure.font='17px "Malgun Gothic"';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28),notes:p.notes?wrapCanvasText(measure,"개별 참고사항:\n"+p.notes,panelW-28):[]};}
     function footerHeight(data){return Math.max(150,65+data.details.length*20+data.notes.length*32);}
-    function panelHeightFor(p){return 530+footerHeight(panelFooterData(p));}
+    function panelHeightFor(p){return 570+footerHeight(panelFooterData(p));}
     var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
     if(!rowHeights.length)rowHeights=[100];
     var panelsHeight=rowHeights.reduce(function(n,v){return n+v;},0)+Math.max(0,rowHeights.length-1)*panelGap;
@@ -2234,13 +2242,13 @@
       state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW, y=py+dispY(p.y)*planH, entry=isEntryPin(p); c.beginPath(); c.arc(x,y,18,0,Math.PI*2); c.fillStyle=entry?"#287a68":"#ffd66b"; c.fill(); c.strokeStyle=entry?"#287a68":"#6d571d"; c.lineWidth=2; c.stroke(); c.fillStyle=entry?"#fff":"#111"; c.textAlign="center"; c.textBaseline="middle"; c.font=entry?'bold 11px "Malgun Gothic"':'bold 20px "Malgun Gothic"'; c.fillText(visiblePinLabel(p,i),x,y);}); }
     else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Malgun Gothic"'; c.fillText("평면도 없음",W/2,py+planH/2); }
     function partSize(t){
-      if(t.kind==="mullion"){var layers=mullionLayers(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;})),count=Math.max(1,parseInt(t.count,10)||1),stacked=!!(t.stack&&t.stack.trim());return {w:mw,h:100,kind:t.kind,count:count,layers:layers,fixedW:mw<=40?12:28,label:stacked?"적층통바 "+Math.round(mullionDepth(t))+"mm":(mw<=40?"통바40":"통바100")+(count>1?" × "+count:"")};}
+      if(t.kind==="mullion"){var layers=t._layers||mullionLayers(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;})),count=Math.max(1,parseInt(t.count,10)||1),stacked=!!(t._groupId||(t.stack&&t.stack.trim())),totalDepth=layers.reduce(function(n,v){return n+v.depth;},0);return {w:mw,h:100,kind:t.kind,count:count,layers:layers,groupId:t._groupId||"",fixedW:mw<=40?12:28,label:t._groupId?"통바 그룹 "+t._groupId+" · "+Math.round(totalDepth)+"mm":stacked?"적층통바 "+Math.round(totalDepth)+"mm":(mw<=40?"통바40":"통바100")+(count>1?" × "+count:"")};}
       var pw=parseFloat(t.w)|| (t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
       var names={normal:"일반 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},stype=t.kind==="turn"?"turn":(t.sashType||"normal");
       return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
     }
     function drawPanel(p,i,x,y,panelH){
-      var footerData=panelFooterData(p),headH=48,footH=footerHeight(footerData),topViewH=150,drawTop=y+headH,drawH=panelH-headH-footH-topViewH,sizes=p.parts.map(partSize),layout=[];
+      var footerData=panelFooterData(p),headH=48,footH=footerHeight(footerData),topViewH=190,drawTop=y+headH,drawH=panelH-headH-footH-topViewH,sizes=drawingPartsGrouped(p).map(partSize),layout=[],labelRequests=[];
       c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.moveTo(x,y+panelH-footH);c.lineTo(x+panelW,y+panelH-footH);c.stroke();
       c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Malgun Gothic"';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
       c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Malgun Gothic"';c.fillText("정면도",x+14,drawTop+8);
@@ -2252,13 +2260,14 @@
         if(s.kind!=="mullion"&&/^(B\/F235|B\/F250)$/i.test((p.frame||"").trim()))c.strokeRect(dx+6,sy+6,Math.max(1,sw-12),Math.max(1,sh-12));
         if(s.kind==="turn"||s.kind==="entry"||s.sashType==="turn"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.stroke();}
         if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0];c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Malgun Gothic"';primaryPanels.forEach(function(pi){c.fillText("#",dx+sw*(pi+.5)/s.panels,sy+sh/2);});}
-        var labelY=drawTop+38+partIndex*23,labelX=Math.max(x+90,Math.min(x+panelW-90,dx+sw/2+(partIndex%2?-54:54)));c.strokeStyle="#777";c.beginPath();c.moveTo(dx+sw/2,sy);c.lineTo(dx+sw/2,labelY+7);c.lineTo(labelX,labelY+7);c.stroke();c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font='16px "Malgun Gothic"';c.fillText(s.label,labelX,labelY);dx+=sw;
+        labelRequests.push({text:s.label,targetX:dx+sw/2,targetY:sy,side:(dx+sw/2)<x+panelW/2?"left":"right"});dx+=sw;
       });
+      c.font='16px "Malgun Gothic"';labelRequests.forEach(function(label,labelIndex){var metrics=c.measureText(label.text),tw=metrics.width,fontSize=16;if(tw>panelW-36){fontSize=13;c.font='13px "Malgun Gothic"';tw=c.measureText(label.text).width;}var labelY=drawTop+38+labelIndex*24,labelX=label.side==="left"?x+18+tw/2:x+panelW-18-tw/2;labelX=Math.max(x+18+tw/2,Math.min(x+panelW-18-tw/2,labelX));var edgeX=label.side==="left"?x+10:x+panelW-10;c.strokeStyle="#777";c.lineWidth=1;c.beginPath();c.moveTo(label.targetX,label.targetY);c.lineTo(edgeX,label.targetY-6);c.lineTo(edgeX,labelY+6);c.lineTo(labelX,labelY+6);c.stroke();c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font=fontSize+'px "Malgun Gothic"';c.fillText(label.text,labelX,labelY);});
       var topY=y+headH+drawH, frameDepth=(function(v){var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:null);})(p.frame),drawDepth=frameDepth||115;
       c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Malgun Gothic"';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
-      var topBase=topY+52, depthPx=Math.max(32,Math.min(78,drawDepth*.28));layout.forEach(function(item){var s=item.s;if(s.kind==="mullion"){var layerY=topBase,totalDepth=s.layers.reduce(function(n,v){return n+v.depth;},0),layerScale=Math.min(.28,78/Math.max(1,totalDepth));s.layers.forEach(function(layer,li){var lh=Math.max(5,layer.depth*layerScale);c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(item.x,layerY,item.w,lh);c.strokeStyle="#14748a";c.strokeRect(item.x,layerY,item.w,lh);layerY+=lh;});}else{c.fillStyle="#f6f6f6";c.fillRect(item.x,topBase,item.w,depthPx);c.strokeStyle="#111";c.strokeRect(item.x,topBase,item.w,depthPx);var panels=Math.max(1,s.panels||1),leafW=item.w/panels;for(var pi=0;pi<panels;pi++){var leafY=topBase+8+(pi%2)*Math.max(10,(depthPx-26)/2);c.strokeStyle="#333";c.strokeRect(item.x+pi*leafW+2,leafY,Math.max(3,leafW-4),8);}}});
+      var topBase=topY+52, depthPx=Math.max(32,Math.min(78,drawDepth*.28));layout.forEach(function(item){var s=item.s;if(s.kind==="mullion"){var layerY=topBase,totalDepth=s.layers.reduce(function(n,v){return n+v.depth;},0),layerScale=Math.min(.28,78/Math.max(1,totalDepth));s.layers.forEach(function(layer,li){var lh=Math.max(5,layer.depth*layerScale);c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(item.x,layerY,item.w,lh);c.strokeStyle="#14748a";c.strokeRect(item.x,layerY,item.w,lh);layerY+=lh;});}else{c.fillStyle="#f6f6f6";c.fillRect(item.x,topBase,item.w,depthPx);c.strokeStyle="#111";c.strokeRect(item.x,topBase,item.w,depthPx);}});
       var stackDepths=sizes.filter(function(s){return s.kind==="mullion"&&s.layers.length>1;}).map(function(s){return "적층 통바 총 "+Math.round(s.layers.reduce(function(n,v){return n+v.depth;},0))+"mm";});
-      c.fillStyle="#555";c.textAlign="left";c.font='14px "Malgun Gothic"';c.fillText("실내측 ↓  "+(requiresFrame(p)?(frameDepth?"프레임 깊이 "+p.frame+" ("+frameDepth+"mm)":"프레임 깊이 미입력"):"통바 구성 · 프레임 두께 해당없음")+(stackDepths.length?" · "+stackDepths.join(" / "):""),x+14,topY+125);
+      var depthSummary="실내측 ↓  "+(requiresFrame(p)?(frameDepth?"프레임 깊이 "+p.frame+" ("+frameDepth+"mm)":"프레임 깊이 미입력"):"통바 구성 · 프레임 두께 해당없음")+(stackDepths.length?" · "+stackDepths.join(" / "):"");c.fillStyle="#555";c.textAlign="left";c.font='14px "Malgun Gothic"';wrapCanvasText(c,depthSummary,panelW-28).forEach(function(line,n){c.fillText(line,x+14,topY+135+n*18);});
       c.textAlign="left";c.textBaseline="top";c.font='17px "Malgun Gothic"';
       var footerY=y+panelH-footH+10;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});if(footerData.notes.length)footerY+=10;footerData.notes.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=32;});
       c.font='15px "Malgun Gothic"';c.fillStyle="#555";c.fillText(plainParts(p)||"구성 미입력",x+14,y+panelH-25);
@@ -2289,7 +2298,7 @@
           drawInDrawing: isEntryPin(p) ? !!p.drawInDrawing : undefined,
           details: normalizedDetails(p.details),
           parts: p.parts.map(function (t) {
-            if (t.kind === "mullion") return { kind: "mullion", spec: t.spec, count: Math.max(1,parseInt(t.count,10)||1), stack: typeof t.stack==="string"?t.stack:"" };
+            if (t.kind === "mullion") return { kind: "mullion", spec: t.spec, count: Math.max(1,parseInt(t.count,10)||1), stack: typeof t.stack==="string"?t.stack:"", groupId: typeof t.groupId==="string"?t.groupId:"" };
             if (t.kind === "entry") return { kind: "entry", width: 900, height: 2100, drawInDrawing: !!t.drawInDrawing };
             if (t.kind === "turn") return { kind: "turn", width: num(t.w), height: num(t.h),
                                              swing: t.swing, handle: t.handle, openDegrees: 15 };
@@ -2412,7 +2421,7 @@
       p.details = normalizedDetails(p.details);
       if (!Array.isArray(p.parts)) p.parts = [];
       if (Array.isArray(p.parts)) p.parts.forEach(function (t) {
-        if (t.kind === "mullion") { t.spec=t.spec === "100×45"?"40×105":normalizeMullionSpec(t.spec); t.count=Math.max(1,parseInt(t.count,10)||1); t.stack=typeof t.stack==="string"?t.stack:""; }
+        if (t.kind === "mullion") { t.spec=t.spec === "100×45"?"40×105":normalizeMullionSpec(t.spec); t.count=Math.max(1,parseInt(t.count,10)||1); t.stack=typeof t.stack==="string"?t.stack:""; t.groupId=typeof t.groupId==="string"?t.groupId:""; }
         if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
         if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if(typeof t.drawInDrawing!=="boolean")t.drawInDrawing=false; }
         if (t.kind === "sash" && !t.sashType) t.sashType=t.panels==="고정"?"fix":"normal";
@@ -2479,7 +2488,7 @@
           var parts;
           if (Array.isArray(m.parts) && m.parts.length) {
             parts = m.parts.map(function (t) {
-              if (t.kind === "mullion") return { kind: "mullion", spec: t.spec === "100×45" ? "40×105" : normalizeMullionSpec(t.spec), count: Math.max(1,parseInt(t.count,10)||1), stack: typeof t.stack==="string"?t.stack:"" };
+              if (t.kind === "mullion") return { kind: "mullion", spec: t.spec === "100×45" ? "40×105" : normalizeMullionSpec(t.spec), count: Math.max(1,parseInt(t.count,10)||1), stack: typeof t.stack==="string"?t.stack:"", groupId: typeof t.groupId==="string"?t.groupId:"" };
               if (t.kind === "entry") { var entry=newEntry(); entry.drawInDrawing=!!t.drawInDrawing; return entry; }
               if (t.kind === "turn") return { kind: "turn",
                        w: t.width === null || t.width === undefined ? "" : String(t.width),
