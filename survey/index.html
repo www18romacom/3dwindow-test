@@ -71,8 +71,8 @@
     .marker { width: 20px; height: 20px; margin: -10px 0 0 -10px;
       border-width: 1.5px; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
     .marker.sel { transform: scale(1.15); box-shadow: 0 0 0 2px var(--accent); }
-    .marker.entry-marker { width: 14px; height: 14px; min-width: 0; margin: -7px 0 0 -7px;
-      padding: 0; border-radius: 50%; font-size: 8px; }
+    .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff;
+      font-size: 7px; letter-spacing: -.08em; }
   }
 
   .card {
@@ -91,7 +91,7 @@
   .body { padding: 16px; }
 
   label.field { display: block; margin-bottom: 6px; font-size: 12.5px; color: var(--ink-2); }
-  input[type="text"], input[type="number"], select {
+  input[type="text"], input[type="number"], select, textarea {
     width: 100%; padding: 8px 10px; font: inherit; color: var(--ink);
     background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
   }
@@ -100,6 +100,7 @@
     outline: 2px solid var(--accent-solid); outline-offset: 2px;
   }
   input.dim { text-align: right; font-variant-numeric: tabular-nums; }
+  textarea { min-height: 76px; resize: vertical; }
 
   button {
     font: inherit; padding: 8px 13px; border-radius: 8px; cursor: pointer;
@@ -154,8 +155,15 @@
   }
   .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
   .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
-  .marker.entry-marker { width: 18px; height: 18px; min-width: 0; margin: -9px 0 0 -9px;
-    padding: 0; border-radius: 50%; font-size: 9px; }
+  .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff;
+    font-size: 10px; letter-spacing: -.08em; }
+  .survey-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .survey-actions button { min-width: 0; }
+  .survey-actions #generate3d { grid-column: auto; color: var(--ink-3); background: transparent; }
+  @media (max-width: 600px) {
+    .survey-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .survey-actions #generate3d { grid-column: 1 / -1; }
+  }
   .wall-edit { position: absolute; height: 4px; transform-origin: 0 50%; pointer-events: none;
     z-index: 3; border-radius: 2px; opacity: .9; }
   .wall-edit.add { background: #2185d0; }
@@ -205,7 +213,8 @@
     font: 700 12px/1 system-ui, sans-serif; background: var(--panel);
   }
   .no.done { background: var(--accent-solid); color: var(--accent-ink); }
-  .no.entry-no { width: auto; min-width: 42px; padding: 0 7px; border-radius: 12px; }
+  .no.entry-no { background: #287a68; border-color: #287a68; color: #fff;
+    font-size: 8px; letter-spacing: -.08em; }
 
   .nm { flex: 1; min-width: 0; }
 
@@ -226,7 +235,7 @@
   .op-body { display: none; padding: 0 12px 12px; }
   .op.open .op-body { display: block; }
 
-  .frame-row { margin-top: 10px; }
+  .frame-row { margin-top: 10px; display: grid; gap: 10px; }
   .frame-row .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
@@ -359,10 +368,12 @@
       <div id="ops" style="margin-top:16px"></div>
       <div class="empty" id="empty">평면도에서 창호 위치를 클릭하면(또는 "+ 번호 추가") 여기에 입력칸이 생깁니다.</div>
 
-      <div class="btnrow" style="margin-top:14px">
-        <button type="button" class="primary" id="generate3d">3D 생성</button>
-        <button type="button" id="save">실측파일 저장</button>
-        <button type="button" id="load">실측현장 열기</button>
+      <div class="survey-actions" style="margin-top:14px">
+        <button type="button" class="primary" id="save">실측저장</button>
+        <button type="button" id="load">실측열기</button>
+        <button type="button" id="savedrawing">도면저장</button>
+        <button type="button" id="printdrawing">도면인쇄</button>
+        <button type="button" id="generate3d">3D생성</button>
       </div>
     </div>
     <div class="status">
@@ -388,6 +399,10 @@
 </dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
+<datalist id="frame-options">
+  <option value="B/F115"><option value="B/F140"><option value="B/F235"><option value="B/F250">
+  <option value="B/FWA"><option value="궁굴100"><option value="궁굴40"><option value="W/B">
+</datalist>
 
 <script type="importmap">
 { "imports": {
@@ -410,7 +425,7 @@
   /* =========================================================
      선택 목록 — 항목을 추가/수정하려면 아래 배열만 고치면 된다.
      ========================================================= */
-  var FRAME_TYPES   = ["B/F250", "B/F235", "B/F140", "W/B"];       // 프레임 두께
+  var FRAME_TYPES   = ["B/F115", "B/F140", "B/F235", "B/F250", "B/FWA", "궁굴100", "궁굴40", "W/B"]; // 직접 입력도 가능
   var MULLION_SPECS = ["100×100", "40×105"];                        // 통바 규격
   var PANEL_TYPES   = ["2짝", "3짝", "4짝", "고정"];                 // 창 짝수
   var PRIMARY_TYPES = [["left", "왼쪽"], ["right", "오른쪽"],
@@ -449,13 +464,13 @@
     return !!(p && p.parts && p.parts.some(function (t) { return t.kind === "entry"; }));
   }
   function visiblePinLabel(p, index) {
-    if (isEntryPin(p)) return "0";
+    if (isEntryPin(p)) return "현관";
     var number = 0;
     for (var i = 0; i <= index; i++) if (!isEntryPin(state.pins[i])) number++;
     return String(number);
   }
   function markerSizeForPin(p) {
-    if (!planPixels || isEntryPin(p)) return null;
+    if (!planPixels) return null;
     var cx = Math.round(p.x * planPixels.w), cy = Math.round(p.y * planPixels.h);
     var vertical = (p.angle || 0) === 90, first = null, last = null;
     for (var off = -30; off <= 30; off++) {
@@ -581,7 +596,7 @@
     return edgeFallbackAngle(x, y);
   }
   function newPin(x, y) {
-    var p = { name: "", frame: "", parts: [], x: x, y: y, angle: 0,
+    var p = { name: "", frame: "", notes: "", parts: [], x: x, y: y, angle: 0,
               placementMode: "free", wallLock: null };
     applyPlacement(p);
     return p;
@@ -617,6 +632,7 @@
             return t.kind === "turn" ? newEntry() : t;
           });
           if (typeof p.frame !== "string") p.frame = "";
+          if (typeof p.notes !== "string") p.notes = "";
           if (typeof p.angle !== "number") p.angle = 0;
           if (p.placementMode !== "wall") p.placementMode = "free";
           if (!p.wallLock || typeof p.wallLock.coordinate !== "number") p.wallLock = null;
@@ -1031,7 +1047,7 @@
       if (markerSize) {
         m.style.width = markerSize + "px"; m.style.height = markerSize + "px";
         m.style.marginLeft = (-markerSize / 2) + "px"; m.style.marginTop = (-markerSize / 2) + "px";
-        m.style.fontSize = Math.max(8, markerSize * .46) + "px";
+        m.style.fontSize = (isEntryPin(p) ? Math.max(4.5, markerSize * .24) : Math.max(8, markerSize * .46)) + "px";
       }
       m.dataset.i = i;
       m.title = (p.name || "이름 없음") + " — 드래그해서 위치 조정";
@@ -1186,12 +1202,20 @@
       return card;
     }
 
+    if (!isEntryPin(p)) {
     var fr = document.createElement("div");
     fr.className = "frame-row";
-    fr.appendChild(labeled("프레임", sel1(FRAME_TYPES, p.frame, function (v) {
-      p.frame = v; persist(); refreshDone();
-    }, null, "선택 안 함")));
+    var frameInput = document.createElement("input");
+    frameInput.type = "text"; frameInput.value = p.frame || ""; frameInput.placeholder = "예: B/F115, 궁굴100";
+    frameInput.setAttribute("list", "frame-options");
+    frameInput.addEventListener("input", function () { p.frame = this.value; persist(); refreshDone(); });
+    fr.appendChild(labeled("프레임 두께", frameInput));
+    var notes = document.createElement("textarea");
+    notes.value = p.notes || ""; notes.placeholder = "시공 조건, 색상, 철거·마감 등 참고사항";
+    notes.addEventListener("input", function () { p.notes = this.value; persist(); });
+    fr.appendChild(labeled("참고사항", notes));
     body.appendChild(fr);
+    }
 
     var wrap = document.createElement("div");
     wrap.className = "parts";
@@ -1881,6 +1905,48 @@
   }
   function num(v) { return v === "" || v === null || v === undefined ? null : Number(v); }
 
+  function escapeHTML(v) {
+    return String(v === null || v === undefined ? "" : v).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function drawingParts(p) {
+    return p.parts.map(function (t) {
+      if (t.kind === "mullion") return "통바 " + escapeHTML(t.spec || "");
+      if (t.kind === "entry") return "현관문 900×2100";
+      var kind = t.kind === "turn" ? "터닝도어" : "창";
+      var extra = t.kind === "sash" ? " · " + escapeHTML(t.panels || "") : "";
+      return kind + " " + escapeHTML(t.w || "-") + "×" + escapeHTML(t.h || "-") + extra;
+    }).join("<br>");
+  }
+  function buildDrawingHTML(autoPrint) {
+    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); persist();
+    var rows = state.pins.map(function (p, i) {
+      return '<tr><td class="no-cell">' + escapeHTML(visiblePinLabel(p, i)) + '</td>' +
+        '<td>' + escapeHTML(p.name || (isEntryPin(p) ? "현관" : "")) + '</td>' +
+        '<td>' + drawingParts(p) + '</td><td>' + escapeHTML(isEntryPin(p) ? "-" : (p.frame || "")) + '</td>' +
+        '<td class="notes">' + escapeHTML(isEntryPin(p) ? "" : (p.notes || "")).replace(/\n/g, "<br>") + '</td></tr>';
+    }).join("");
+    var planMarkers = state.pins.map(function (p, i) {
+      var entry = isEntryPin(p), label = visiblePinLabel(p, i);
+      return '<span class="plan-marker' + (entry ? ' entry' : '') + '" style="left:' +
+        (dispX(p.x) * 100) + '%;top:' + (dispY(p.y) * 100) + '%">' + escapeHTML(label) + '</span>';
+    }).join("");
+    var planRatio = planPixels && planPixels.w && planPixels.h ? (planPixels.w + " / " + planPixels.h) : "4 / 3";
+    var plan = state.planData ? '<div class="plan-wrap" style="aspect-ratio:' + planRatio + '"><img class="plan" src="' +
+      state.planData + '" alt="평면도">' + planMarkers + '</div>' : '<div class="no-plan">평면도 없음</div>';
+    return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>' + escapeHTML(state.site || "실측도면") +
+      '</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:"Malgun Gothic",sans-serif;color:#111;margin:0;font-size:11px}' +
+      'h1{font-size:20px;margin:0 0 6px}.meta{display:flex;gap:28px;border:1px solid #111;padding:7px 10px;margin-bottom:8px}.plan-wrap{position:relative;width:100%;margin:0 auto 9px;overflow:hidden;page-break-inside:avoid}.plan{display:block;width:100%;height:100%;object-fit:contain}.plan-marker{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#ffd66b;border:1.5px solid #6d571d;color:#17130a;font-weight:700;font-size:10px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.28)}.plan-marker.entry{background:#287a68;border-color:#287a68;color:#fff;font-size:6px;letter-spacing:-.08em}.no-plan{text-align:center;padding:30px;border:1px solid #aaa}' +
+      'table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:5px;vertical-align:top;word-break:break-word}th{background:#eee}.no-cell{width:8%;text-align:center;font-weight:bold}th:nth-child(2){width:17%}th:nth-child(3){width:28%}th:nth-child(4){width:16%}.notes{white-space:normal}@media print{.no-print{display:none}}</style></head><body>' +
+      '<h1>창호 실측도면</h1><div class="meta"><b>현장명&nbsp; ' + escapeHTML(state.site || "-") + '</b><span>실측일&nbsp; ' + escapeHTML(state.surveyDate) + '</span></div>' + plan +
+      '<table><thead><tr><th>번호</th><th>위치</th><th>치수·구성</th><th>프레임 두께</th><th>참고사항</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">입력된 창호가 없습니다.</td></tr>') +
+      '</tbody></table>' + (autoPrint ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script>' : '') + '</body></html>';
+  }
+  function drawingFileName() {
+    return ((state.surveyDate || todayLocal()) + "_" + (state.site || "실측도면")).replace(/[\\/:*?"<>|]/g, "_") + ".html";
+  }
+
   function buildJSON() {
     return {
       schemaVersion: "0.2-draft",
@@ -1891,6 +1957,7 @@
           no: i + 1,
           name: p.name || "",
           frame: p.frame || null,
+          notes: p.notes || "",
           parts: p.parts.map(function (t) {
             if (t.kind === "mullion") return { kind: "mullion", spec: t.spec };
             if (t.kind === "entry") return { kind: "entry", width: 900, height: 2100 };
@@ -1905,6 +1972,18 @@
       })
     };
   }
+
+  $("savedrawing").addEventListener("click", function () {
+    var blob = new Blob([buildDrawingHTML(false)], { type: "text/html;charset=utf-8" });
+    var a = document.createElement("a"), url = URL.createObjectURL(blob);
+    a.href = url; a.download = drawingFileName(); document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000); toast("실측도면을 저장했습니다");
+  });
+  $("printdrawing").addEventListener("click", function () {
+    var w = window.open("", "_blank");
+    if (!w) { toast("인쇄 창이 차단되었습니다"); return; }
+    w.document.open(); w.document.write(buildDrawingHTML(true)); w.document.close();
+  });
 
   // 로컬 개발 화면은 관리자 테스트로 열고, 웹 배포 시에는 홈페이지 로그인 코드가
   // window.YK_CURRENT_USER_ROLE = "admin"을 주입한 경우에만 버튼을 표시한다.
@@ -1987,6 +2066,9 @@
     if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
     if (!Array.isArray(state.wallEdits.remove)) state.wallEdits.remove = [];
     state.pins.forEach(function (p) {
+      if (typeof p.frame !== "string") p.frame = "";
+      if (typeof p.notes !== "string") p.notes = "";
+      if (!Array.isArray(p.parts)) p.parts = [];
       if (Array.isArray(p.parts)) p.parts.forEach(function (t) {
         if (t.kind === "mullion" && t.spec === "100×45") t.spec = "40×105";
         if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
@@ -2072,7 +2154,7 @@
           if (/현관/.test(m.name || "")) parts = parts.map(function (t) {
             return t.kind === "turn" ? newEntry() : t;
           });
-          return { name: m.name || "", frame: m.frame || "", parts: parts,
+          return { name: m.name || "", frame: m.frame || "", notes: m.notes || "", parts: parts,
                    x: (m.plan && m.plan.x) || 0.5, y: (m.plan && m.plan.y) || 0.5,
                    angle: (m.plan && m.plan.angle) || 0,
                    placementMode: (m.plan && m.plan.placementMode) || "free", wallLock: null };
