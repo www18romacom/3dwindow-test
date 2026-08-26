@@ -199,6 +199,10 @@
   .mullion-layer-row { display:grid; grid-template-columns:minmax(120px,1fr) 86px 38px; gap:7px; align-items:end; }
   .mullion-layer-row label { margin:0; }
   .mullion-layer-row .x { min-width:38px; padding:7px; }
+  .part-drag-handle { display:inline-grid; place-items:center; min-width:34px; min-height:34px;
+    border:1px solid var(--line); border-radius:7px; color:var(--ink-2); cursor:grab;
+    touch-action:none; user-select:none; font-weight:700; }
+  .part-dragging .part-drag-handle { cursor:grabbing; color:var(--accent-solid); border-color:var(--accent-solid); }
   @media (max-width: 600px) {
     .site-fields { grid-template-columns:1fr; }
     .site-fields .wide { grid-column:auto; }
@@ -683,6 +687,10 @@
     var layers=[];mullionLayerRows(t).forEach(function(row){var spec=String(row.spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=spec?Number(spec[1]):100,depth=spec?Number(spec[2]):100;for(var i=0;i<row.count;i++)layers.push({face:face,depth:depth,label:Math.round(face)+"×"+Math.round(depth)});});return t.stackDirection==="inside-out"?layers.reverse():layers;
   }
   function mullionDepth(t){return mullionLayers(t).reduce(function(n,v){return n+v.depth;},0);}
+  function placedMullionLayers(t,frameDepth){
+    var layers=mullionLayers(t),total=layers.reduce(function(n,v){return n+v.depth;},0),at=t.stackDirection==="inside-out"?frameDepth:-total;
+    return layers.map(function(layer){var placed={face:layer.face,depth:layer.depth,label:layer.label,y:at};at+=layer.depth;return placed;});
+  }
   function drawingPartsGrouped(p) { return (p.parts||[]).slice(); }
   function parseComposition(text) {
     var out=[];
@@ -1529,11 +1537,12 @@
 
   var PART_TAGS = { mullion: "통바", turn: "터닝도어", entry: "현관문", sash: "창" };
   function installPartDrag(el,p,t,k,pinIndex){
-    var timer=null,startY=0,dragging=false;
-    function blocked(target){return !!target.closest("input,select,button,textarea,label,a");}
-    el.addEventListener("pointerdown",function(e){if(blocked(e.target))return;startY=e.clientY;timer=setTimeout(function(){dragging=true;el.classList.add("part-dragging");el.setPointerCapture(e.pointerId);},380);});
-    el.addEventListener("pointermove",function(e){if(!dragging)return;e.preventDefault();var cards=Array.from(el.parentNode.querySelectorAll(".part")),target=cards.findIndex(function(card){var r=card.getBoundingClientRect();return e.clientY<r.top+r.height/2;});if(target<0)target=cards.length-1;var current=p.parts.indexOf(t);if(target!==current){var moved=p.parts.splice(current,1)[0];p.parts.splice(target,0,moved);syncComposition(p);persist();sel=pinIndex;render();}});
-    function end(){if(timer)clearTimeout(timer);timer=null;dragging=false;el.classList.remove("part-dragging");}
+    var timer=null,dragging=false,dragTarget=k,pointerId=null;
+    function blocked(target){return !!target.closest("input,select,button,textarea,label,a")&&!target.closest(".part-drag-handle");}
+    function begin(e){dragging=true;pointerId=e.pointerId;dragTarget=p.parts.indexOf(t);el.classList.add("part-dragging");el.setPointerCapture(e.pointerId);}
+    el.addEventListener("pointerdown",function(e){if(blocked(e.target))return;if(e.target.closest(".part-drag-handle")){e.preventDefault();begin(e);}else timer=setTimeout(function(){begin(e);},380);});
+    el.addEventListener("pointermove",function(e){if(!dragging)return;e.preventDefault();var cards=Array.from(el.parentNode.querySelectorAll(".part")),target=cards.findIndex(function(card){var r=card.getBoundingClientRect();return e.clientY<r.top+r.height/2;});dragTarget=target<0?cards.length-1:target;});
+    function end(){if(timer)clearTimeout(timer);timer=null;if(dragging){var current=p.parts.indexOf(t),target=Math.max(0,Math.min(p.parts.length-1,dragTarget));if(target!==current){var moved=p.parts.splice(current,1)[0];p.parts.splice(target,0,moved);syncComposition(p);persist();sel=pinIndex;}dragging=false;el.classList.remove("part-dragging");render();}pointerId=null;}
     el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
   }
 
@@ -1550,6 +1559,7 @@
     var tag = document.createElement("span");
     tag.className = "tag"; tag.textContent = PART_TAGS[t.kind] || t.kind;
     top.appendChild(tag);
+    if(t.kind==="mullion"){var handle=document.createElement("span");handle.className="part-drag-handle";handle.textContent="↕";handle.title="통바 위치를 드래그해 좌우 순서 변경";handle.setAttribute("role","button");handle.setAttribute("aria-label","통바 위치 좌우 순서 드래그");top.appendChild(handle);}
 
     var sp = document.createElement("span"); sp.className = "sp"; top.appendChild(sp);
     var x = document.createElement("button");
@@ -1611,25 +1621,25 @@
   }
 
   function planStructure(p){
-    var x=0,depth=frameDepthMm(p.frame)||140,items=[];
+    var x=0,frameDepth=frameDepthMm(p.frame)||140,minY=0,maxY=frameDepth,items=[];
     (p.parts||[]).forEach(function(t){
       if(t.kind==="mullion"){
-        var layers=mullionLayers(t),w=Math.max.apply(null,layers.map(function(v){return v.face;}).concat([40])),d=layers.reduce(function(n,v){return n+v.depth;},0);
-        items.push({kind:"mullion",x:x,w:w,depth:d,layers:layers,direction:t.stackDirection});x+=w;depth=Math.max(depth,d);
+        var layers=placedMullionLayers(t,frameDepth),w=Math.max.apply(null,layers.map(function(v){return v.face;}).concat([40]));
+        layers.forEach(function(v){minY=Math.min(minY,v.y);maxY=Math.max(maxY,v.y+v.depth);});items.push({kind:"mullion",x:x,w:w,layers:layers,direction:t.stackDirection});x+=w;
       }else{
-        var w=Number(t.w)||(t.kind==="entry"?900:0),d=t.kind==="entry"?140:(frameDepthMm(p.frame)||140);
-        if(w>0){items.push({kind:t.kind,x:x,w:w,depth:d,layers:[]});x+=w;depth=Math.max(depth,d);}
+        var w=Number(t.w)||(t.kind==="entry"?900:0),d=t.kind==="entry"?140:frameDepth;
+        if(w>0){items.push({kind:t.kind,x:x,w:w,y:0,depth:d,layers:[]});x+=w;maxY=Math.max(maxY,d);}
       }
     });
-    return {width:Math.max(1,x),depth:Math.max(1,depth),items:items};
+    return {width:Math.max(1,x),depth:Math.max(1,maxY-minY),frameDepth:frameDepth,minY:minY,maxY:maxY,items:items};
   }
   function drawPlanStructureSvg(host,layout){
-    host.textContent="";var ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 "+layout.width+" "+layout.depth);svg.setAttribute("preserveAspectRatio","none");
+    host.textContent="";var ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 "+layout.minY+" "+layout.width+" "+layout.depth);svg.setAttribute("preserveAspectRatio","none");
     layout.items.forEach(function(item){
       if(item.kind!=="mullion"){
-        var frame=document.createElementNS(ns,"rect");frame.setAttribute("x",item.x);frame.setAttribute("y",0);frame.setAttribute("width",item.w);frame.setAttribute("height",item.depth);frame.setAttribute("fill","#fffdf2");frame.setAttribute("stroke","#555");frame.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(frame);return;
+        var frame=document.createElementNS(ns,"rect");frame.setAttribute("x",item.x);frame.setAttribute("y",item.y);frame.setAttribute("width",item.w);frame.setAttribute("height",item.depth);frame.setAttribute("fill","#fffdf2");frame.setAttribute("stroke","#555");frame.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(frame);return;
       }
-      var y=0;item.layers.forEach(function(layer){var r=document.createElementNS(ns,"rect");r.setAttribute("x",item.x);r.setAttribute("y",y);r.setAttribute("width",layer.face);r.setAttribute("height",layer.depth);r.setAttribute("fill",layer.label==="100×100"?"#75c9ec":"#c8ebfa");r.setAttribute("stroke","#14748a");r.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(r);y+=layer.depth;});
+      item.layers.forEach(function(layer){var r=document.createElementNS(ns,"rect");r.setAttribute("x",item.x);r.setAttribute("y",layer.y);r.setAttribute("width",layer.face);r.setAttribute("height",layer.depth);r.setAttribute("fill",layer.label==="100×100"?"#75c9ec":"#c8ebfa");r.setAttribute("stroke","#14748a");r.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(r);});
     });host.appendChild(svg);
   }
   function planOverlayPixels(p,planW,planH,img){
@@ -1638,14 +1648,15 @@
     if(!px)px=Math.max(54,Math.min(150,layout.width/24));if(!depthPx)depthPx=Math.max(8,Math.min(34,layout.depth/10));return {layout:layout,width:px,depth:depthPx};
   }
   function drawPlanStructureCanvas(ctx,p,cx,cy,planW,planH,img){
-    var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth;ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.translate(-view.width/2,-view.depth/2);
-    view.layout.items.forEach(function(item){if(item.kind!=="mullion"){ctx.fillStyle="#fffdf2";ctx.fillRect(item.x*sx,0,item.w*sx,item.depth*sy);ctx.strokeStyle="#555";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,0,item.w*sx,item.depth*sy);return;}var y=0;item.layers.forEach(function(layer){ctx.fillStyle=layer.label==="100×100"?"#75c9ec":"#c8ebfa";ctx.fillRect(item.x*sx,y*sy,layer.face*sx,layer.depth*sy);ctx.strokeStyle="#14748a";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,y*sy,layer.face*sx,layer.depth*sy);y+=layer.depth;});});ctx.restore();
+    var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth;ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.translate(-view.width/2,-view.layout.frameDepth*sy/2);
+    view.layout.items.forEach(function(item){if(item.kind!=="mullion"){ctx.fillStyle="#fffdf2";ctx.fillRect(item.x*sx,item.y*sy,item.w*sx,item.depth*sy);ctx.strokeStyle="#555";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,item.y*sy,item.w*sx,item.depth*sy);return;}item.layers.forEach(function(layer){ctx.fillStyle=layer.label==="100×100"?"#75c9ec":"#c8ebfa";ctx.fillRect(item.x*sx,layer.y*sy,layer.face*sx,layer.depth*sy);ctx.strokeStyle="#14748a";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,layer.y*sy,layer.face*sx,layer.depth*sy);});});ctx.restore();
   }
   function refreshSpanBar(i) {
     var p = state.pins[i], bar = document.querySelector('.span-bar[data-i="' + i + '"]');
     if (!p || !bar) return;
     var view=planOverlayPixels(p,$("stage").clientWidth,$("stage").clientHeight,$("plan"));
-    bar.style.width=view.width+"px";bar.style.height=view.depth+"px";bar.style.transform="translate(-50%, -50%) rotate("+(p.angle||0)+"deg)";drawPlanStructureSvg(bar,view.layout);
+    var sy=view.depth/view.layout.depth,offset=(view.layout.minY-view.layout.frameDepth/2)*sy;
+    bar.style.width=view.width+"px";bar.style.height=view.depth+"px";bar.style.transform="rotate("+(p.angle||0)+"deg) translate(-50%, "+offset+"px)";bar.style.transformOrigin="0 0";drawPlanStructureSvg(bar,view.layout);
   }
 
   function refreshDone() {
@@ -1719,8 +1730,8 @@
         boxes.push({ mat: "divider", pos: [x, maxH / 2, 72], size: [8, maxH, 5] });
       }
       if (t.kind === "mullion") {
-        var mlayers=mullionLayers(t),mw=Math.max.apply(null,mlayers.map(function(v){return v.face;}).concat([40])),totalDepth=mlayers.reduce(function(n,v){return n+v.depth;},0),mz=-totalDepth/2;
-        mlayers.forEach(function(layer){var mullionMat=layer.label==="100×100"?"mullion100":"mullion40105";boxes.push({mat:mullionMat,pos:[x+mw/2,maxH/2,mz+layer.depth/2],size:[layer.face,maxH,layer.depth]});mz+=layer.depth;});
+        var mlayers=placedMullionLayers(t,selectedFrameDepth),mw=Math.max.apply(null,mlayers.map(function(v){return v.face;}).concat([40]));
+        mlayers.forEach(function(layer){var mullionMat=layer.label==="100×100"?"mullion100":"mullion40105",mz=-selectedFrameDepth/2+layer.y;boxes.push({mat:mullionMat,pos:[x+mw/2,maxH/2,mz+layer.depth/2],size:[layer.face,maxH,layer.depth]});});
         x += mw;
       } else if (t.kind === "turn" || t.kind === "entry") {
         var isEntry = t.kind === "entry";
@@ -2311,7 +2322,7 @@
       state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW,y=py+dispY(p.y)*planH,entry=isEntryPin(p);drawPlanStructureCanvas(c,p,x,y,planW,planH,img);c.beginPath();c.arc(x,y,18,0,Math.PI*2);c.fillStyle=entry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=entry?"#287a68":"#6d571d";c.lineWidth=2;c.stroke();c.fillStyle=entry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font=entry?'bold 11px "Gulim"':'bold 20px "Gulim"';c.fillText(visiblePinLabel(p,i),x,y);}); }
     else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Gulim"'; c.fillText("평면도 없음",W/2,py+planH/2); }
     function partSize(t){
-      if(t.kind==="mullion"){var layers=mullionLayers(t),rows=mullionLayerRows(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;}));return {w:mw,h:100,kind:t.kind,layers:layers,rows:rows,fixedW:mw<=40?12:28,label:"통바"};}
+      if(t.kind==="mullion"){var layers=mullionLayers(t),rows=mullionLayerRows(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;}));return {w:mw,h:100,kind:t.kind,layers:layers,rows:rows,stackDirection:t.stackDirection,fixedW:mw<=40?12:28,label:"통바"};}
       var pw=parseFloat(t.w)|| (t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
       var names={normal:"일반 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},stype=t.kind==="turn"?"turn":(t.sashType||"normal");
       return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
@@ -2333,13 +2344,13 @@
       });
       var topY=y+headH+drawH, frameDepth=frameDepthMm(p.frame),drawDepth=frameDepth||115;
       c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim"';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
-      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,topBase=topY+52,ratio=geometryW/renderedW,leftTotals={},rightTotals={},specOrder=[],maxPlanDepth=Math.max(drawDepth,Math.max.apply(null,sizes.filter(function(s){return s.kind==="mullion";}).map(function(s){return s.layers.reduce(function(n,v){return n+v.depth;},0);}).concat([0]))),depthScale=70/Math.max(1,maxPlanDepth);
+      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,framePlanY=topY+90,ratio=geometryW/renderedW,leftTotals={},rightTotals={},specOrder=[],maxMullionDepth=Math.max.apply(null,sizes.filter(function(s){return s.kind==="mullion";}).map(function(s){return s.layers.reduce(function(n,v){return n+v.depth;},0);}).concat([0])),depthScale=60/Math.max(1,drawDepth+maxMullionDepth);
       function addTotals(target,rows){rows.forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
-      layout.forEach(function(item){var s=item.s,gx=geometryX+(item.x-(x+(panelW-renderedW)/2))*ratio,gw=Math.max(4,item.w*ratio);if(s.kind==="mullion"){var layerY=topBase;s.layers.forEach(function(layer,li){var lh=Math.max(2,layer.depth*depthScale);c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);layerY+=lh;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{var framePlanDepth=drawDepth*depthScale;c.fillStyle="#f6f6f6";c.fillRect(gx,topBase,gw,framePlanDepth);c.strokeStyle="#111";c.strokeRect(gx,topBase,gw,framePlanDepth);}});
+      layout.forEach(function(item){var s=item.s,gx=geometryX+(item.x-(x+(panelW-renderedW)/2))*ratio,gw=Math.max(4,item.w*ratio);if(s.kind==="mullion"){var total=s.layers.reduce(function(n,v){return n+v.depth;},0),layerAt=s.stackDirection==="inside-out"?drawDepth:-total;s.layers.forEach(function(layer,li){var lh=Math.max(2,layer.depth*depthScale),layerY=framePlanY+layerAt*depthScale;c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);layerAt+=layer.depth;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{var framePlanDepth=drawDepth*depthScale;c.fillStyle="#f6f6f6";c.fillRect(gx,framePlanY,gw,framePlanDepth);c.strokeStyle="#111";c.strokeRect(gx,framePlanY,gw,framePlanDepth);}});
       var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return spec+" "+leftTotals[spec]+"개";}),rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return spec+" "+rightTotals[spec]+"개";});
-      c.font='15px "Gulim", sans-serif';c.textBaseline="top";c.fillStyle="#111";c.textAlign="left";leftRows.forEach(function(line,n){c.fillText(line,x+14,topBase+n*20);});c.textAlign="right";rightRows.forEach(function(line,n){c.fillText(line,x+panelW-14,topBase+n*20);});
+      c.font='15px "Gulim", sans-serif';c.textBaseline="top";c.fillStyle="#111";c.textAlign="left";leftRows.forEach(function(line,n){c.fillText(line,x+14,topY+52+n*20);});c.textAlign="right";rightRows.forEach(function(line,n){c.fillText(line,x+panelW-14,topY+52+n*20);});
       c.textAlign="left";c.textBaseline="top";c.font='17px "Gulim"';
-      var footerY=topY+135;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});
+      var footerY=topY+158;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});
     }
     var ty=py+planH+35;c.textBaseline="top";
     if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim"';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
