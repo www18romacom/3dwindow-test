@@ -73,8 +73,7 @@
     .marker { width: 20px; height: 20px; margin: -10px 0 0 -10px;
       border-width: 1.5px; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
     .marker.sel { transform: scale(1.15); box-shadow: 0 0 0 2px var(--accent); }
-    .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff;
-      font-size: 7px; letter-spacing: -.08em; }
+    .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff; }
     .card { border-radius: 9px; }
     .body { padding: 10px; }
     input[type="text"], input[type="number"], select, textarea, button { min-height: 44px; }
@@ -151,7 +150,7 @@
     background: var(--panel-2); min-height: 300px; display: grid; place-items: center;
     text-align: center; color: var(--ink-3); padding: 30px 20px;
   }
-  #drop.hasimg { border-style: solid; padding: 0; background: none; display: block; }
+  #drop.hasimg { border-style: solid; padding: 0; background: none; display: block; overflow:auto; }
   #drop.drag { border-color: var(--accent-solid); background: var(--accent); }
   #stage { position: relative; line-height: 0; overflow: hidden; border-radius: 8px; }
   #plan { width: 100%; display: block; }
@@ -166,8 +165,12 @@
   }
   .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
   .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
-  .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff;
-    font-size: 10px; letter-spacing: -.08em; }
+  .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff; }
+  .zoom-tools { display:flex; gap:6px; align-items:center; }
+  .dialog-head > .sp { flex:1; }
+  .zoom-tools button { min-width:42px; font-weight:700; }
+  .preview-zoom-wrap { overflow:auto; max-height:75vh; background:var(--panel-2); }
+  #drawingpreviewimage { transform-origin:0 0; }
   .survey-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
   .survey-actions button { min-width: 0; }
   .survey-actions #generate3d { grid-column: auto; color: var(--ink-3); background: transparent; }
@@ -396,6 +399,8 @@
         <div class="tool-group">
           <button type="button" id="flipv" title="평면도 상하 반전" aria-label="평면도 상하 반전"><span class="full-label">상하반전</span><span class="compact-label">↕ 상하</span></button>
           <button type="button" id="fliph" title="평면도 좌우 반전" aria-label="평면도 좌우 반전"><span class="full-label">좌우반전</span><span class="compact-label">↔ 좌우</span></button>
+          <button type="button" id="planzoomout" title="평면도 축소" aria-label="평면도 축소">−</button>
+          <button type="button" id="planzoomin" title="평면도 확대" aria-label="평면도 확대">＋</button>
         </div>
         <div class="tool-group">
           <button type="button" id="calibrate" title="실제 폭을 아는 기준 창의 양끝을 지정해 축척 설정" aria-label="기준 창 실측값으로 축척 설정"><span class="full-label">축척 설정 (기준 창 실측)</span><span class="compact-label">축척 설정</span></button>
@@ -453,7 +458,7 @@
   <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div></div>
 </dialog>
 
-<dialog id="drawingpreview"><div class="dialog-head"><b>도면 미리보기</b><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body"><img id="drawingpreviewimage" alt="도면 미리보기" style="display:block;max-width:100%;height:auto"></div></dialog>
+<dialog id="drawingpreview"><div class="dialog-head"><b>도면 미리보기</b><span class="sp"></span><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><img id="drawingpreviewimage" alt="도면 미리보기" style="display:block;width:100%;height:auto"></div></dialog>
 
 <dialog id="savedialog">
   <div class="dialog-head"><b>저장된 실측현장</b><button type="button" class="x" id="closesaved">×</button></div>
@@ -514,6 +519,14 @@
   var activeMini3D = null;   // 현재 열린 카드의 3D 프리뷰 정리 함수 보관(WebGL 컨텍스트 누수 방지)
   var activeProject3D = null;
   var planPixels = null;     // 업로드한 원본 평면도의 굵은 벽선 방향 판별용
+  var planZoom = 1, previewZoom = 1;
+
+  function applyPlanZoom() {
+    $("stage").style.width = Math.round(planZoom * 100) + "%";
+    $("stage").style.maxWidth = "none";
+    render();
+  }
+  function applyPreviewZoom() { $("drawingpreviewimage").style.width = Math.round(previewZoom * 100) + "%"; }
 
   var SETUP_FIELDS = ["manager", "vendor", "vendorCustom", "vendorName", "address", "siteName", "note", "baseText"];
   function normalizedSetup(v) {
@@ -672,25 +685,14 @@
   function requiresFrame(p) {
     return !!(p && p.parts && p.parts.some(function(t){ return t.kind === "sash" || t.kind === "turn"; }));
   }
+  function frameDepthMm(v) { var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:null); }
   function visiblePinLabel(p, index) {
     if (isEntryPin(p)) return "현관";
     var number = 0;
     for (var i = 0; i <= index; i++) if (!isEntryPin(state.pins[i])) number++;
     return String(number);
   }
-  function markerSizeForPin(p) {
-    if (!planPixels) return null;
-    var cx = Math.round(p.x * planPixels.w), cy = Math.round(p.y * planPixels.h);
-    var vertical = (p.angle || 0) === 90, first = null, last = null;
-    for (var off = -30; off <= 30; off++) {
-      var x = vertical ? cx + off : cx, y = vertical ? cy : cy + off;
-      if (isWallPixel(x, y)) { if (first === null) first = off; last = off; }
-    }
-    var sourceThickness = first === null ? 4 : Math.max(2, last - first + 1);
-    var stage = $("stage"), shown = vertical ? stage.clientWidth : stage.clientHeight;
-    var source = vertical ? planPixels.w : planPixels.h;
-    return Math.max(8, Math.min(24, sourceThickness * 2 * shown / Math.max(1, source)));
-  }
+  function markerSizeForPin() { return (window.matchMedia("(max-width:600px)").matches ? 18 : 24) * planZoom; }
   function edgeFallbackAngle(x, y) {
     var toLR = Math.min(x, 1 - x);   // 좌/우 가장자리까지 거리 — 가까우면 세로벽(세로 막대)
     var toTB = Math.min(y, 1 - y);   // 상/하 가장자리까지 거리 — 가까우면 가로벽(가로 막대)
@@ -895,6 +897,7 @@
     if (!f || !/^image\//.test(f.type)) { toast("이미지 파일만 올릴 수 있습니다"); return; }
     var r = new FileReader();
     r.onload = function () {
+      planZoom = 1; $("stage").style.width = "100%";
       state.flipV = false; state.flipH = false;
       state.scale = null;
       state.wallEdits = { add: [], remove: [] };
@@ -928,6 +931,8 @@
     if (!state.planData) { toast("평면도를 먼저 올려주세요"); return; }
     state.flipH = !state.flipH; applyFlip(); persist(); render();
   });
+  $("planzoomout").addEventListener("click",function(){planZoom=Math.max(.5,Math.round((planZoom-.25)*100)/100);applyPlanZoom();});
+  $("planzoomin").addEventListener("click",function(){planZoom=Math.min(3,Math.round((planZoom+.25)*100)/100);applyPlanZoom();});
 
   /* ---------------- 아코디언 열기(공용) ---------------- */
   function openCard(i, focusName) {
@@ -1260,7 +1265,7 @@
       if (markerSize) {
         m.style.width = markerSize + "px"; m.style.height = markerSize + "px";
         m.style.marginLeft = (-markerSize / 2) + "px"; m.style.marginTop = (-markerSize / 2) + "px";
-        m.style.fontSize = (isEntryPin(p) ? Math.max(4.5, markerSize * .24) : Math.max(8, markerSize * .46)) + "px";
+        m.style.fontSize = Math.max(8, markerSize * .46) + "px";
       }
       m.dataset.i = i;
       m.title = (p.name || "이름 없음") + " — 드래그해서 위치 조정";
@@ -1635,6 +1640,7 @@
   var MINI3D_LAST_ID = 0;
   function opGeometryBoxes(p) {
     var T_OUTER = 60, T_PANEL = 50, D_PANEL = 70, GLASS_T = 8, RAIL_OFF = 18;
+    var selectedFrameDepth = frameDepthMm(p.frame) || 140;
     var PRIMARY_MAP = {
       2: { left: [0], right: [1], both: [0, 1], none: [] },
       3: { left: [0], right: [2], both: [0, 2], none: [] },
@@ -1667,7 +1673,7 @@
         var isEntry = t.kind === "entry";
         var tw = Number(t.w) || (isEntry ? 900 : 0), th = Number(t.h) || (isEntry ? 2100 : maxH);
         if (!tw || !th) { return; }
-        ring(x, 0, tw, th, T_OUTER, 140, 0, isEntry ? "entry" : "frame");
+        ring(x, 0, tw, th, T_OUTER, isEntry ? 140 : selectedFrameDepth, 0, isEntry ? "entry" : "frame");
         if (isEntry) { x += tw; previousKind = t.kind; return; }
         var leafT = 45, innerW = tw - 2 * T_OUTER, innerH = th - 2 * T_OUTER;
         var handle = isEntry ? "left" : "right";
@@ -1700,7 +1706,7 @@
         var w = Number(t.w) || 0, h = Number(t.h) || maxH;
         if (!w || !h) { return; }
         var sashY = maxH - h;                         // 창은 공통 상단선부터 아래로 배치
-        ring(x, sashY, w, h, T_OUTER, 140, 0, "frame");
+        ring(x, sashY, w, h, T_OUTER, selectedFrameDepth, 0, "frame");
         var iw = w - 2 * T_OUTER, ih = h - 2 * T_OUTER;
         var n = (t.panels === "fix" || t.panels === "고정") ? 1 : (parseInt(t.panels, 10) || 2);
         var ratios = n === 3 ? [1, 2, 1] : new Array(n).fill(1);
@@ -2233,11 +2239,12 @@
     var measure = document.createElement("canvas").getContext("2d");
     measure.font = '25px "Gulim", sans-serif';
     var siteLines = wrapCanvasText(measure, normalizedSetup(state.siteSetup).address || "현장주소 미입력", W - pad * 2);
-    var globalLines=[];
+    var globalSummary=[liftingText(),state.overallNotes?"전체 특이사항: "+state.overallNotes:""].filter(Boolean).join(" · ");
+    measure.font='22px "Gulim", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
     var py = 128 + siteLines.length * 34 + globalLines.length*30, panelGap=24, panelW=(W-pad*2-panelGap)/2;
     var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
-    function panelFooterData(p){measure.font='17px "Gulim"';var overall=[liftingText(),state.overallNotes?"전체 특이사항: "+state.overallNotes:""].filter(Boolean).join(" · ")||"양중: 미정 · 전체 특이사항: 없음";return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28),overall:wrapCanvasText(measure,overall,panelW-28)};}
-    function footerHeight(data){return Math.max(150,42+data.details.length*22+22+data.overall.length*22);}
+    function panelFooterData(p){measure.font='17px "Gulim"';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28)};}
+    function footerHeight(data){return Math.max(82,28+data.details.length*22);}
     function panelHeightFor(p){return 570+footerHeight(panelFooterData(p));}
     var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
     if(!rowHeights.length)rowHeights=[100];
@@ -2271,16 +2278,16 @@
         if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0],markRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),markTotal=markRatios.reduce(function(a,b){return a+b;},0);c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Gulim"';primaryPanels.forEach(function(pi){var before=markRatios.slice(0,pi).reduce(function(a,b){return a+b;},0);c.fillText("#",dx+sw*(before+markRatios[pi]/2)/markTotal,sy+sh/2);});}
         if(s.kind!=="mullion"){c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font='16px "Gulim"';c.fillText(s.label,dx+sw/2,sy-7);}dx+=sw;
       });
-      var topY=y+headH+drawH, frameDepth=(function(v){var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:null);})(p.frame),drawDepth=frameDepth||115;
+      var topY=y+headH+drawH, frameDepth=frameDepthMm(p.frame),drawDepth=frameDepth||115;
       c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim"';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
-      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,topBase=topY+52,depthPx=Math.max(16,Math.min(39,drawDepth*.14)),ratio=geometryW/renderedW,leftTotals={},rightTotals={},specOrder=[];
+      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,topBase=topY+52,ratio=geometryW/renderedW,leftTotals={},rightTotals={},specOrder=[],maxPlanDepth=Math.max(drawDepth,Math.max.apply(null,sizes.filter(function(s){return s.kind==="mullion";}).map(function(s){return s.layers.reduce(function(n,v){return n+v.depth;},0);}).concat([0]))),depthScale=70/Math.max(1,maxPlanDepth);
       function addTotals(target,rows){rows.forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
-      layout.forEach(function(item){var s=item.s,gx=geometryX+(item.x-(x+(panelW-renderedW)/2))*ratio,gw=Math.max(4,item.w*ratio);if(s.kind==="mullion"){var totalDepth=s.layers.reduce(function(n,v){return n+v.depth;},0)||1,layerY=topBase;s.layers.forEach(function(layer,li){var lh=li===s.layers.length-1?topBase+depthPx-layerY:Math.max(2,depthPx*layer.depth/totalDepth);c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);layerY+=lh;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{c.fillStyle="#f6f6f6";c.fillRect(gx,topBase,gw,depthPx);c.strokeStyle="#111";c.strokeRect(gx,topBase,gw,depthPx);}});
+      layout.forEach(function(item){var s=item.s,gx=geometryX+(item.x-(x+(panelW-renderedW)/2))*ratio,gw=Math.max(4,item.w*ratio);if(s.kind==="mullion"){var layerY=topBase;s.layers.forEach(function(layer,li){var lh=Math.max(2,layer.depth*depthScale);c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);layerY+=lh;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{var framePlanDepth=drawDepth*depthScale;c.fillStyle="#f6f6f6";c.fillRect(gx,topBase,gw,framePlanDepth);c.strokeStyle="#111";c.strokeRect(gx,topBase,gw,framePlanDepth);}});
       var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return spec+" "+leftTotals[spec]+"개";}),rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return spec+" "+rightTotals[spec]+"개";});
       c.font='15px "Gulim", sans-serif';c.textBaseline="top";c.fillStyle="#111";c.textAlign="left";leftRows.forEach(function(line,n){c.fillText(line,x+14,topBase+n*20);});c.textAlign="right";rightRows.forEach(function(line,n){c.fillText(line,x+panelW-14,topBase+n*20);});
       var depthSummary="실내측 ↓  "+(requiresFrame(p)?(frameDepth?"프레임 깊이 "+p.frame+" ("+frameDepth+"mm)":"프레임 깊이 미입력"):"통바 구성 · 프레임 두께 해당없음");c.fillStyle="#555";c.textAlign="center";c.font='14px "Gulim", sans-serif';c.fillText(depthSummary,x+panelW/2,topY+135);
       c.textAlign="left";c.textBaseline="top";c.font='17px "Gulim"';
-      var footerTop=y+panelH-footH,footerY=footerTop+10;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=22;});footerY+=8;c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,footerY);c.lineTo(x+panelW,footerY);c.stroke();footerY+=10;footerData.overall.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=22;});
+      var footerTop=y+panelH-footH,footerY=footerTop+10;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=22;});
     }
     var ty=py+planH+35;c.textBaseline="top";
     if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim"';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
@@ -2330,10 +2337,12 @@
   });
   $("previewdrawing").addEventListener("click", async function(){
     var button=this;button.disabled=true;
-    try{var canvas=await buildDrawingCanvas();$("drawingpreviewimage").src=canvas.toDataURL("image/png");showDialogSafe($("drawingpreview"));}
+    try{var canvas=await buildDrawingCanvas();previewZoom=1;$("drawingpreviewimage").src=canvas.toDataURL("image/png");applyPreviewZoom();showDialogSafe($("drawingpreview"));}
     catch(e){toast(e.message||"도면 미리보기를 만들지 못했습니다");}
     finally{button.disabled=false;}
   });
+  $("previewzoomout").addEventListener("click",function(){previewZoom=Math.max(.5,Math.round((previewZoom-.25)*100)/100);applyPreviewZoom();});
+  $("previewzoomin").addEventListener("click",function(){previewZoom=Math.min(4,Math.round((previewZoom+.25)*100)/100);applyPreviewZoom();});
   $("closepreview").addEventListener("click",function(){$("drawingpreview").close();});
   $("printdrawing").addEventListener("click", function () {
     var w = window.open("", "_blank");
