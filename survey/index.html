@@ -425,7 +425,7 @@
           </select>
         </label>
         <label class="field" id="liftingotherwrap" hidden>기타 양중방법<input type="text" id="liftingother" placeholder="양중방법 직접 입력"></label>
-        <label class="field wide">전체 참고사항<textarea id="overallnotes" placeholder="현장 전체에 적용되는 참고사항"></textarea></label>
+        <label class="field wide">전체 특이사항<textarea id="overallnotes" placeholder="현장 전체에 적용되는 특이사항" rows="3"></textarea></label>
       </div>
 
       <div id="ops" style="margin-top:16px"></div>
@@ -536,7 +536,7 @@
   }
   function liftingText() {
     var l=normalizedLifting(state.lifting), value=l.method==="기타"?l.other:l.method;
-    return value ? "양중방법: "+value : "";
+    return value ? "양중: "+value : "";
   }
   function syncGlobalInputs() {
     state.overallNotes=$("overallnotes").value || "";
@@ -1471,10 +1471,6 @@
       var compInput = document.createElement("textarea"); compInput.value = p.composition; compInput.readOnly = true; compInput.dataset.compositionPin=i;
       comp.appendChild(labeled("창호 구성 문자열 · 자동 요약", compInput)); body.appendChild(comp);
     }
-    var notes = document.createElement("textarea"); notes.value = p.notes || ""; notes.placeholder = "시공 조건, 색상, 철거·마감 등 참고사항";
-    notes.addEventListener("input", function () { p.notes = this.value; persist(); });
-    body.appendChild(labeled("참고사항", notes));
-
     // ---- 3D 미리보기 ----
     var m3wrap = document.createElement("div");
     m3wrap.className = "mini3d-wrap";
@@ -2185,7 +2181,7 @@
       return '<tr><td class="no-cell">' + escapeHTML(visiblePinLabel(p, i)) + '</td>' +
         '<td>' + escapeHTML(p.name || (isEntryPin(p) ? "현관" : "")) + '</td>' +
         '<td>' + drawingParts(p) + '</td><td>' + escapeHTML(requiresFrame(p) ? (p.frame || "") : "해당없음") + '</td>' +
-        '<td class="notes">' + escapeHTML(isEntryPin(p) ? (p.notes || "") : (detailText(p)+(p.notes?"\n개별 참고사항: "+p.notes:""))).replace(/\n/g, "<br>") + '</td></tr>';
+        '<td class="notes">' + escapeHTML(isEntryPin(p) ? "" : detailText(p)).replace(/\n/g, "<br>") + '</td></tr>';
     }).join("");
     var planMarkers = state.pins.map(function (p, i) {
       var entry = isEntryPin(p), label = visiblePinLabel(p, i);
@@ -2200,7 +2196,7 @@
       'h1{font-size:20px;margin:0 0 6px}.meta{display:flex;gap:28px;border:1px solid #111;padding:7px 10px;margin-bottom:8px}.plan-wrap{position:relative;width:100%;margin:0 auto 9px;overflow:hidden;page-break-inside:avoid}.plan{display:block;width:100%;height:100%;object-fit:contain}.plan-marker{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#ffd66b;border:1.5px solid #6d571d;color:#17130a;font-weight:700;font-size:10px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.28)}.plan-marker.entry{background:#287a68;border-color:#287a68;color:#fff;font-size:6px;letter-spacing:-.08em}.no-plan{text-align:center;padding:30px;border:1px solid #aaa}' +
       'table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:5px;vertical-align:top;word-break:break-word}th{background:#eee}.no-cell{width:8%;text-align:center;font-weight:bold}th:nth-child(2){width:17%}th:nth-child(3){width:28%}th:nth-child(4){width:16%}.notes{white-space:normal}@media print{.no-print{display:none}}</style></head><body>' +
       '<h1>' + escapeHTML(normalizedSetup(state.siteSetup).address || "현장주소 미입력") + '</h1>' +
-      ((liftingText()||state.overallNotes)?'<div class="meta">'+(state.overallNotes?'전체 참고사항: '+escapeHTML(state.overallNotes).replace(/\n/g,'<br>'):'')+(liftingText()?(state.overallNotes?'<br>':'')+escapeHTML(liftingText()):'')+'</div>':'') + plan +
+      ((liftingText()||state.overallNotes)?'<div class="meta">'+escapeHTML([liftingText(),state.overallNotes?'전체 특이사항: '+state.overallNotes:''].filter(Boolean).join(' · ')).replace(/\n/g,'<br>')+'</div>':'') + plan +
       '<table><thead><tr><th>번호</th><th>위치</th><th>치수·구성</th><th>프레임 두께</th><th>참고사항</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">입력된 창호가 없습니다.</td></tr>') +
       '</tbody></table>' + (autoPrint ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script>' : '') + '</body></html>';
   }
@@ -2237,12 +2233,11 @@
     var measure = document.createElement("canvas").getContext("2d");
     measure.font = '25px "Gulim", sans-serif';
     var siteLines = wrapCanvasText(measure, normalizedSetup(state.siteSetup).address || "현장주소 미입력", W - pad * 2);
-    var globalSummary=[state.overallNotes?"전체 참고사항: "+state.overallNotes:"",liftingText()].filter(Boolean).join("\n");
-    measure.font='22px "Gulim", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
+    var globalLines=[];
     var py = 128 + siteLines.length * 34 + globalLines.length*30, panelGap=24, panelW=(W-pad*2-panelGap)/2;
     var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
-    function panelFooterData(p){measure.font='17px "Gulim"';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28),notes:p.notes?wrapCanvasText(measure,"개별 참고사항:\n"+p.notes,panelW-28):[]};}
-    function footerHeight(data){return Math.max(150,65+data.details.length*20+data.notes.length*32);}
+    function panelFooterData(p){measure.font='17px "Gulim"';var overall=[liftingText(),state.overallNotes?"전체 특이사항: "+state.overallNotes:""].filter(Boolean).join(" · ")||"양중: 미정 · 전체 특이사항: 없음";return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28),overall:wrapCanvasText(measure,overall,panelW-28)};}
+    function footerHeight(data){return Math.max(150,42+data.details.length*22+22+data.overall.length*22);}
     function panelHeightFor(p){return 570+footerHeight(panelFooterData(p));}
     var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
     if(!rowHeights.length)rowHeights=[100];
@@ -2265,7 +2260,7 @@
       var footerData=panelFooterData(p),headH=48,footH=footerHeight(footerData),topViewH=190,drawTop=y+headH,drawH=panelH-headH-footH-topViewH,sizes=drawingPartsGrouped(p).map(partSize),layout=[];
       c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.moveTo(x,y+panelH-footH);c.lineTo(x+panelW,y+panelH-footH);c.stroke();
       c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Gulim"';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
-      c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim"';c.fillText("정면도",x+14,drawTop+8);
+      c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim"';c.fillText("정면도 (실내에서 봄)",x+14,drawTop+8);
       var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0), sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1,maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}));if(!isFinite(maxH))maxH=1;
       sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
       var scale=Math.min((panelW-70-fixedW)/sashTotal,(drawH-100)/maxH), renderedW=fixedW+sashTotal*scale,dx=x+(panelW-renderedW)/2, base=drawTop+drawH-38;
@@ -2278,12 +2273,14 @@
       });
       var topY=y+headH+drawH, frameDepth=(function(v){var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:null);})(p.frame),drawDepth=frameDepth||115;
       c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim"';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
-      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,topBase=topY+52,depthPx=Math.max(16,Math.min(39,drawDepth*.14)),ratio=geometryW/renderedW,leftRows=[];
-      layout.forEach(function(item){var s=item.s,gx=geometryX+(item.x-(x+(panelW-renderedW)/2))*ratio,gw=Math.max(4,item.w*ratio);if(s.kind==="mullion"){c.fillStyle="#ccecf2";c.fillRect(gx,topBase,gw,depthPx);c.strokeStyle="#14748a";c.strokeRect(gx,topBase,gw,depthPx);if((gx+gw/2)<x+panelW/2)s.rows.forEach(function(row){leftRows.push(row.spec+" "+row.count+"개");});}else{c.fillStyle="#f6f6f6";c.fillRect(gx,topBase,gw,depthPx);c.strokeStyle="#111";c.strokeRect(gx,topBase,gw,depthPx);}});
-      c.font='15px "Gulim", sans-serif';c.textBaseline="top";c.fillStyle="#111";c.textAlign="left";leftRows.forEach(function(line,n){c.fillText(line,x+14,topBase+n*20);});
+      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,topBase=topY+52,depthPx=Math.max(16,Math.min(39,drawDepth*.14)),ratio=geometryW/renderedW,leftTotals={},rightTotals={},specOrder=[];
+      function addTotals(target,rows){rows.forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
+      layout.forEach(function(item){var s=item.s,gx=geometryX+(item.x-(x+(panelW-renderedW)/2))*ratio,gw=Math.max(4,item.w*ratio);if(s.kind==="mullion"){var totalDepth=s.layers.reduce(function(n,v){return n+v.depth;},0)||1,layerY=topBase;s.layers.forEach(function(layer,li){var lh=li===s.layers.length-1?topBase+depthPx-layerY:Math.max(2,depthPx*layer.depth/totalDepth);c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);layerY+=lh;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{c.fillStyle="#f6f6f6";c.fillRect(gx,topBase,gw,depthPx);c.strokeStyle="#111";c.strokeRect(gx,topBase,gw,depthPx);}});
+      var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return spec+" "+leftTotals[spec]+"개";}),rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return spec+" "+rightTotals[spec]+"개";});
+      c.font='15px "Gulim", sans-serif';c.textBaseline="top";c.fillStyle="#111";c.textAlign="left";leftRows.forEach(function(line,n){c.fillText(line,x+14,topBase+n*20);});c.textAlign="right";rightRows.forEach(function(line,n){c.fillText(line,x+panelW-14,topBase+n*20);});
       var depthSummary="실내측 ↓  "+(requiresFrame(p)?(frameDepth?"프레임 깊이 "+p.frame+" ("+frameDepth+"mm)":"프레임 깊이 미입력"):"통바 구성 · 프레임 두께 해당없음");c.fillStyle="#555";c.textAlign="center";c.font='14px "Gulim", sans-serif';c.fillText(depthSummary,x+panelW/2,topY+135);
       c.textAlign="left";c.textBaseline="top";c.font='17px "Gulim"';
-      var footerY=y+panelH-footH+10;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});if(footerData.notes.length)footerY+=10;footerData.notes.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=32;});
+      var footerTop=y+panelH-footH,footerY=footerTop+10;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=22;});footerY+=8;c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,footerY);c.lineTo(x+panelW,footerY);c.stroke();footerY+=10;footerData.overall.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=22;});
     }
     var ty=py+planH+35;c.textBaseline="top";
     if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim"';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
