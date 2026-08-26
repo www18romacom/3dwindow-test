@@ -213,9 +213,10 @@
   /* ---- 실제 비율 폭 표시 막대(축척 설정 후) — 각진 직사각형(둥근 모서리 아님) ---- */
   .span-bar {
     position: absolute; transform: translate(-50%, -50%);
-    background: var(--accent-solid); opacity: .5; border-radius: 0;
-    pointer-events: none; z-index: 3; min-width: 10px; min-height: 10px;
+    background: transparent; opacity: .82; border-radius: 0;
+    pointer-events: none; z-index: 3; min-width: 10px; min-height: 8px;
   }
+  .span-bar svg { display:block; width:100%; height:100%; overflow:visible; }
   .span-bar.sel { opacity: .8; }
   .pick-dot {
     position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
@@ -660,7 +661,7 @@
   var realX = dispX, realY = dispY;   // 뒤집기는 대칭이라 정방향/역방향 공식이 같다
 
   function newSash(type) { return { kind: "sash", sashType: type || "normal", w: "0", h: "0", panels: "2짝", primary: "right" }; }
-  function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0], count: 1, layers: [{ spec: MULLION_SPECS[0], count: 1 }] }; }
+  function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0], count: 1, stackDirection: "outside-in", layers: [{ spec: MULLION_SPECS[0], count: 1 }] }; }
   function newTurn() { return { kind: "turn", w: "0", h: "0", swing: "push", handle: "right" }; }
   function newEntry() { return { kind: "entry", w: "900", h: "2100", drawInDrawing: false }; }
   function normalizeMullionSpec(v) {
@@ -672,14 +673,14 @@
   }
   function normalizeMullionPart(t) {
     var rows=[];
-    if(Array.isArray(t.layers)) t.layers.forEach(function(v){rows.push({spec:normalizeMullionSpec(v.spec),count:Math.max(1,parseInt(v.count,10)||1)});});
+    if(Array.isArray(t.layers)) t.layers.forEach(function(v){v.spec=normalizeMullionSpec(v.spec);v.count=Math.max(1,parseInt(v.count,10)||1);rows.push(v);});
     if(!rows.length&&typeof t.stack==="string"&&t.stack.trim()) t.stack.trim().split(/\s*\+\s*/).forEach(function(token){var m=token.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);if(m)rows.push({spec:normalizeMullionSpec(m[1]+"×"+m[2]),count:1});});
     if(!rows.length) rows=[{spec:normalizeMullionSpec(t.spec==="100×45"?"40×105":t.spec),count:Math.max(1,parseInt(t.count,10)||1)}];
-    t.layers=rows; t.spec=rows[0].spec; t.count=rows[0].count; delete t.stack; delete t.groupId; return t;
+    t.layers=rows; t.spec=rows[0].spec; t.count=rows[0].count; t.stackDirection=t.stackDirection==="inside-out"?"inside-out":"outside-in"; delete t.stack; delete t.groupId; return t;
   }
   function mullionLayerRows(t){return normalizeMullionPart(t).layers;}
   function mullionLayers(t) {
-    var layers=[];mullionLayerRows(t).forEach(function(row){var spec=String(row.spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=spec?Number(spec[1]):100,depth=spec?Number(spec[2]):100;for(var i=0;i<row.count;i++)layers.push({face:face,depth:depth,label:Math.round(face)+"×"+Math.round(depth)});});return layers;
+    var layers=[];mullionLayerRows(t).forEach(function(row){var spec=String(row.spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=spec?Number(spec[1]):100,depth=spec?Number(spec[2]):100;for(var i=0;i<row.count;i++)layers.push({face:face,depth:depth,label:Math.round(face)+"×"+Math.round(depth)});});return t.stackDirection==="inside-out"?layers.reverse():layers;
   }
   function mullionDepth(t){return mullionLayers(t).reduce(function(n,v){return n+v.depth;},0);}
   function drawingPartsGrouped(p) { return (p.parts||[]).slice(); }
@@ -1274,17 +1275,14 @@
     state.wallEdits.remove.forEach(function (line) { appendWallEdit(stage, line, "remove"); });
     state.pins.forEach(function (p, i) {
       var sx = dispX(p.x), sy = dispY(p.y);
-      if (state.scale) {
-        var totalMm = opGeometryBoxes(p).width;
+      if ((p.parts||[]).length) {
+        var totalMm = planStructure(p).width;
         if (totalMm > 0) {
-          var horiz = (p.angle || 0) === 0;
           var bar = document.createElement("div");
           bar.className = "span-bar" + (sel === i ? " sel" : "");
           bar.dataset.i = i;
           bar.style.left = (sx * 100) + "%";
           bar.style.top = (sy * 100) + "%";
-          if (horiz) { bar.style.width = "10px"; bar.style.height = "12px"; }
-          else { bar.style.height = "10px"; bar.style.width = "12px"; }
           stage.appendChild(bar);
           refreshSpanBar(i);
         }
@@ -1564,6 +1562,7 @@
 
     if (t.kind === "mullion") {
       normalizeMullionPart(t);
+      d.appendChild(labeled("적층 방향",sel1([["outside-in","실외 → 실내"],["inside-out","실내 → 실외"]],t.stackDirection,function(v){t.stackDirection=v;syncComposition(p);persist();refreshDone();},"stackDirection")));
       var layerList=document.createElement("div");layerList.className="mullion-layer-list";
       function rebuildLayers(){layerList.innerHTML="";t.layers.forEach(function(layer,layerIndex){
         var row=document.createElement("div");row.className="mullion-layer-row";
@@ -1611,24 +1610,42 @@
     return d;
   }
 
+  function planStructure(p){
+    var x=0,depth=frameDepthMm(p.frame)||140,items=[];
+    (p.parts||[]).forEach(function(t){
+      if(t.kind==="mullion"){
+        var layers=mullionLayers(t),w=Math.max.apply(null,layers.map(function(v){return v.face;}).concat([40])),d=layers.reduce(function(n,v){return n+v.depth;},0);
+        items.push({kind:"mullion",x:x,w:w,depth:d,layers:layers,direction:t.stackDirection});x+=w;depth=Math.max(depth,d);
+      }else{
+        var w=Number(t.w)||(t.kind==="entry"?900:0),d=t.kind==="entry"?140:(frameDepthMm(p.frame)||140);
+        if(w>0){items.push({kind:t.kind,x:x,w:w,depth:d,layers:[]});x+=w;depth=Math.max(depth,d);}
+      }
+    });
+    return {width:Math.max(1,x),depth:Math.max(1,depth),items:items};
+  }
+  function drawPlanStructureSvg(host,layout){
+    host.textContent="";var ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 "+layout.width+" "+layout.depth);svg.setAttribute("preserveAspectRatio","none");
+    layout.items.forEach(function(item){
+      if(item.kind!=="mullion"){
+        var frame=document.createElementNS(ns,"rect");frame.setAttribute("x",item.x);frame.setAttribute("y",0);frame.setAttribute("width",item.w);frame.setAttribute("height",item.depth);frame.setAttribute("fill","#fffdf2");frame.setAttribute("stroke","#555");frame.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(frame);return;
+      }
+      var y=0;item.layers.forEach(function(layer){var r=document.createElementNS(ns,"rect");r.setAttribute("x",item.x);r.setAttribute("y",y);r.setAttribute("width",layer.face);r.setAttribute("height",layer.depth);r.setAttribute("fill",layer.label==="100×100"?"#75c9ec":"#c8ebfa");r.setAttribute("stroke","#14748a");r.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(r);y+=layer.depth;});
+    });host.appendChild(svg);
+  }
+  function planOverlayPixels(p,planW,planH,img){
+    var layout=planStructure(p),horiz=(p.angle||0)===0,shown=horiz?planW:planH,natural=horiz?(img&&img.naturalWidth):(img&&img.naturalHeight),px=0,depthPx=0,denominator=state.scale?(horiz?state.scale.mmPerFracX:state.scale.mmPerFracY):0;
+    if(state.scale&&state.scale.mmPerPixel&&natural){px=layout.width/state.scale.mmPerPixel*(shown/natural);depthPx=layout.depth/state.scale.mmPerPixel*(shown/natural);}else if(denominator){px=layout.width/denominator*shown;depthPx=layout.depth/denominator*shown;}
+    if(!px)px=Math.max(54,Math.min(150,layout.width/24));if(!depthPx)depthPx=Math.max(8,Math.min(34,layout.depth/10));return {layout:layout,width:px,depth:depthPx};
+  }
+  function drawPlanStructureCanvas(ctx,p,cx,cy,planW,planH,img){
+    var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth;ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.translate(-view.width/2,-view.depth/2);
+    view.layout.items.forEach(function(item){if(item.kind!=="mullion"){ctx.fillStyle="#fffdf2";ctx.fillRect(item.x*sx,0,item.w*sx,item.depth*sy);ctx.strokeStyle="#555";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,0,item.w*sx,item.depth*sy);return;}var y=0;item.layers.forEach(function(layer){ctx.fillStyle=layer.label==="100×100"?"#75c9ec":"#c8ebfa";ctx.fillRect(item.x*sx,y*sy,layer.face*sx,layer.depth*sy);ctx.strokeStyle="#14748a";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,y*sy,layer.face*sx,layer.depth*sy);y+=layer.depth;});});ctx.restore();
+  }
   function refreshSpanBar(i) {
     var p = state.pins[i], bar = document.querySelector('.span-bar[data-i="' + i + '"]');
-    if (!p || !bar || !state.scale) return;
-    var totalMm = opGeometryBoxes(p).width;
-    var horiz = (p.angle || 0) === 0;
-    var denominator = horiz ? state.scale.mmPerFracX : state.scale.mmPerFracY;
-    // 새 2점 축척은 이미지 픽셀 기준이므로 현재 화면의 픽셀 길이로 환산한다.
-    if (state.scale.mmPerPixel) {
-      var stageRect = $("stage").getBoundingClientRect();
-      var natural = horiz ? ($("plan").naturalWidth || state.scale.imageWidth) :
-                            ($("plan").naturalHeight || state.scale.imageHeight);
-      var shown = horiz ? stageRect.width : stageRect.height;
-      var px = totalMm / state.scale.mmPerPixel * (shown / natural);
-      if (horiz) bar.style.width = px + "px"; else bar.style.height = px + "px";
-    } else if (denominator) {
-      var pct = totalMm / denominator * 100;
-      if (horiz) bar.style.width = pct + "%"; else bar.style.height = pct + "%";
-    }
+    if (!p || !bar) return;
+    var view=planOverlayPixels(p,$("stage").clientWidth,$("stage").clientHeight,$("plan"));
+    bar.style.width=view.width+"px";bar.style.height=view.depth+"px";bar.style.transform="translate(-50%, -50%) rotate("+(p.angle||0)+"deg)";drawPlanStructureSvg(bar,view.layout);
   }
 
   function refreshDone() {
@@ -1646,6 +1663,7 @@
       var d = isDone(p);
       var mk = document.querySelector('.marker[data-i="' + i + '"]');
       if (mk) mk.classList.toggle("done", d);
+      refreshSpanBar(i);
       var op = cards[i];
       if (op) {
         var b = op.querySelector(".no");
@@ -1701,9 +1719,8 @@
         boxes.push({ mat: "divider", pos: [x, maxH / 2, 72], size: [8, maxH, 5] });
       }
       if (t.kind === "mullion") {
-        var mw = parseInt((t.spec || "100").split("×")[0], 10) || 100;
-        var mullionMat = /40×105/.test(t.spec || "") ? "mullion40105" : "mullion100";
-        boxes.push({ mat: mullionMat, pos: [x + mw / 2, maxH / 2, 0], size: [mw, maxH, 140] });
+        var mlayers=mullionLayers(t),mw=Math.max.apply(null,mlayers.map(function(v){return v.face;}).concat([40])),totalDepth=mlayers.reduce(function(n,v){return n+v.depth;},0),mz=-totalDepth/2;
+        mlayers.forEach(function(layer){var mullionMat=layer.label==="100×100"?"mullion100":"mullion40105";boxes.push({mat:mullionMat,pos:[x+mw/2,maxH/2,mz+layer.depth/2],size:[layer.face,maxH,layer.depth]});mz+=layer.depth;});
         x += mw;
       } else if (t.kind === "turn" || t.kind === "entry") {
         var isEntry = t.kind === "entry";
@@ -2291,7 +2308,7 @@
     c.textAlign="left";c.font='22px "Gulim", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);}); c.font='25px "Gulim", sans-serif';
     var planX=Math.round((W-planW)/2); c.strokeStyle="#bbb"; c.strokeRect(planX,py,planW,planH);
     if(img){ c.save(); c.translate(state.flipH?planX+planW:planX,state.flipV?py+planH:py); c.scale(state.flipH?-1:1,state.flipV?-1:1); c.drawImage(img,0,0,planW,planH); c.restore();
-      state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW, y=py+dispY(p.y)*planH, entry=isEntryPin(p); c.beginPath(); c.arc(x,y,18,0,Math.PI*2); c.fillStyle=entry?"#287a68":"#ffd66b"; c.fill(); c.strokeStyle=entry?"#287a68":"#6d571d"; c.lineWidth=2; c.stroke(); c.fillStyle=entry?"#fff":"#111"; c.textAlign="center"; c.textBaseline="middle"; c.font=entry?'bold 11px "Gulim"':'bold 20px "Gulim"'; c.fillText(visiblePinLabel(p,i),x,y);}); }
+      state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW,y=py+dispY(p.y)*planH,entry=isEntryPin(p);drawPlanStructureCanvas(c,p,x,y,planW,planH,img);c.beginPath();c.arc(x,y,18,0,Math.PI*2);c.fillStyle=entry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=entry?"#287a68":"#6d571d";c.lineWidth=2;c.stroke();c.fillStyle=entry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font=entry?'bold 11px "Gulim"':'bold 20px "Gulim"';c.fillText(visiblePinLabel(p,i),x,y);}); }
     else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Gulim"'; c.fillText("평면도 없음",W/2,py+planH/2); }
     function partSize(t){
       if(t.kind==="mullion"){var layers=mullionLayers(t),rows=mullionLayerRows(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;}));return {w:mw,h:100,kind:t.kind,layers:layers,rows:rows,fixedW:mw<=40?12:28,label:"통바"};}
@@ -2361,7 +2378,7 @@
           drawInDrawing: isEntryPin(p) ? !!p.drawInDrawing : undefined,
           details: normalizedDetails(p.details),
           parts: p.parts.map(function (t) {
-            if (t.kind === "mullion") { normalizeMullionPart(t); return { kind: "mullion", spec: t.layers[0].spec, count: t.layers[0].count, layers: t.layers.map(function(v){return {spec:v.spec,count:v.count};}) }; }
+            if (t.kind === "mullion") { normalizeMullionPart(t); return { kind: "mullion", spec: t.layers[0].spec, count: t.layers[0].count, stackDirection:t.stackDirection, layers: t.layers.map(function(v){return {spec:v.spec,count:v.count};}) }; }
             if (t.kind === "entry") return { kind: "entry", width: 900, height: 2100, drawInDrawing: !!t.drawInDrawing };
             if (t.kind === "turn") return { kind: "turn", width: num(t.w), height: num(t.h),
                                              swing: t.swing, handle: t.handle, openDegrees: 15 };
@@ -2559,7 +2576,7 @@
           var parts;
           if (Array.isArray(m.parts) && m.parts.length) {
             parts = m.parts.map(function (t) {
-              if (t.kind === "mullion") return normalizeMullionPart({ kind: "mullion", spec: t.spec, count: t.count, layers: t.layers, stack: t.stack });
+              if (t.kind === "mullion") return normalizeMullionPart({ kind: "mullion", spec: t.spec, count: t.count, stackDirection:t.stackDirection, layers: t.layers, stack: t.stack });
               if (t.kind === "entry") { var entry=newEntry(); entry.drawInDrawing=!!t.drawInDrawing; return entry; }
               if (t.kind === "turn") return { kind: "turn",
                        w: t.width === null || t.width === undefined ? "" : String(t.width),
