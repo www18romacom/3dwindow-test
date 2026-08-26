@@ -170,8 +170,11 @@
   .zoom-tools { display:flex; gap:6px; align-items:center; }
   .dialog-head > .sp { flex:1; }
   .zoom-tools button { min-width:42px; font-weight:700; }
-  .preview-zoom-wrap { overflow:auto; max-width:90vw; max-height:75vh; background:var(--panel-2); touch-action:none; cursor:grab; }
-  #drawingpreviewimage { transform-origin:0 0; }
+  .plan-view-tools { display:flex; justify-content:flex-end; gap:6px; margin:0 0 7px; }
+  .plan-view-tools button { min-width:44px; font-weight:700; }
+  #drawingpreview { width:min(94vw,1100px); max-width:94vw; }
+  .preview-zoom-wrap { overflow:auto; width:100%; max-height:75vh; background:var(--panel-2); touch-action:none; cursor:grab; }
+  #drawingpreviewcontent { transform-origin:0 0; }
   .survey-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
   .survey-actions button { min-width: 0; }
   .survey-actions #generate3d { grid-column: auto; color: var(--ink-3); background: transparent; }
@@ -381,6 +384,7 @@
   <section class="card floorplan-card">
     <h2>평면도 <span class="hint" id="planhint">이미지를 올린 뒤 클릭하면 번호가 찍힙니다</span></h2>
     <div class="body">
+      <div class="plan-view-tools" id="planviewtools" aria-label="평면도 확대 축소" hidden><button type="button" id="planzoomout" title="평면도 축소" aria-label="평면도 축소">−</button><button type="button" id="planzoomin" title="평면도 확대" aria-label="평면도 확대">＋</button></div>
       <div id="drop">
         <div id="ph">
           <p style="margin:0 0 10px"><b>평면도 이미지를 끌어다 놓거나</b></p>
@@ -400,8 +404,6 @@
         <div class="tool-group">
           <button type="button" id="flipv" title="평면도 상하 반전" aria-label="평면도 상하 반전"><span class="full-label">상하반전</span><span class="compact-label">↕ 상하</span></button>
           <button type="button" id="fliph" title="평면도 좌우 반전" aria-label="평면도 좌우 반전"><span class="full-label">좌우반전</span><span class="compact-label">↔ 좌우</span></button>
-          <button type="button" id="planzoomout" title="평면도 축소" aria-label="평면도 축소">−</button>
-          <button type="button" id="planzoomin" title="평면도 확대" aria-label="평면도 확대">＋</button>
         </div>
         <div class="tool-group">
           <button type="button" id="calibrate" title="실제 폭을 아는 기준 창의 양끝을 지정해 축척 설정" aria-label="기준 창 실측값으로 축척 설정"><span class="full-label">축척 설정 (기준 창 실측)</span><span class="compact-label">축척 설정</span></button>
@@ -459,7 +461,7 @@
   <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div></div>
 </dialog>
 
-<dialog id="drawingpreview"><div class="dialog-head"><b>도면 미리보기</b><span class="sp"></span><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><img id="drawingpreviewimage" alt="도면 미리보기" style="display:block;width:100%;height:auto"></div></dialog>
+<dialog id="drawingpreview"><div class="dialog-head"><b>도면 미리보기</b><span class="sp"></span><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><div id="drawingpreviewcontent"><img id="drawingpreviewimage" alt="도면 미리보기" style="display:block;width:100%;height:auto"></div></div></dialog>
 
 <dialog id="savedialog">
   <div class="dialog-head"><b>저장된 실측현장</b><button type="button" class="x" id="closesaved">×</button></div>
@@ -527,7 +529,7 @@
     $("stage").style.maxWidth = "none";
     render();
   }
-  function applyPreviewZoom() { $("drawingpreviewimage").style.width = Math.round(previewZoom * 100) + "%"; }
+  function applyPreviewZoom() { var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap"),left=viewport.scrollLeft,top=viewport.scrollTop;$("drawingpreviewcontent").style.width=Math.round(previewZoom*100)+"%";viewport.scrollLeft=left;viewport.scrollTop=top; }
   function installPanScroller(el,enabled) {
     var active=false,startX=0,startY=0,startLeft=0,startTop=0;
     el.addEventListener("pointerdown",function(e){if(!enabled()||e.target.closest(".marker,.span-bar,button"))return;active=true;panMoved=false;startX=e.clientX;startY=e.clientY;startLeft=el.scrollLeft;startTop=el.scrollTop;el.classList.add("panning");el.setPointerCapture(e.pointerId);});
@@ -882,6 +884,7 @@
     state.planName = name || state.planName;
     $("plan").src = dataUrl;
     $("stage").hidden = false;
+    $("planviewtools").hidden = false;
     $("ph").hidden = true;
     $("drop").classList.add("hasimg");
     applyFlip();
