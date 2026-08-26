@@ -71,7 +71,8 @@
     .marker { width: 20px; height: 20px; margin: -10px 0 0 -10px;
       border-width: 1.5px; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
     .marker.sel { transform: scale(1.15); box-shadow: 0 0 0 2px var(--accent); }
-    .marker.entry-marker { min-width: 38px; height: 20px; padding: 0 5px; border-radius: 10px; font-size: 9px; }
+    .marker.entry-marker { width: 14px; height: 14px; min-width: 0; margin: -7px 0 0 -7px;
+      padding: 0; border-radius: 50%; font-size: 8px; }
   }
 
   .card {
@@ -112,6 +113,25 @@
   button.primary:hover { filter: brightness(1.06); }
   button.tiny { padding: 5px 10px; font-size: 13px; }
   .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .plan-tools { margin-top: 12px; }
+  .plan-tools .tool-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .plan-tools .tool-group:first-child { margin-top: 0; }
+  .plan-tools .danger-tool { color: #b52d26; border-color: #d8aaa5; background: #fff7f6; }
+  .plan-tools .danger-tool:hover { border-color: #b52d26; }
+  .compact-label { display: none; }
+  @media (max-width: 600px) {
+    .plan-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 5px; margin-top: 7px; }
+    .plan-tools .tool-group { display: contents; }
+    .plan-tools button { min-width: 0; min-height: 34px; padding: 5px 2px;
+      border-radius: 6px; font-size: 11.5px; line-height: 1.15; white-space: nowrap; }
+    .plan-tools #calibrate { grid-column: span 2; }
+    .plan-tools #scalehint { grid-column: 1 / -1; min-width: 0; margin: -1px 2px 0 !important;
+      font-size: 10.5px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; }
+    .full-label { display: none; }
+    .plan-tools .compact-label { display: inline; }
+  }
 
   /* ---- 평면도 ---- */
   #drop {
@@ -134,7 +154,8 @@
   }
   .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
   .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
-  .marker.entry-marker { width: auto; min-width: 54px; padding: 0 10px; border-radius: 18px; }
+  .marker.entry-marker { width: 18px; height: 18px; min-width: 0; margin: -9px 0 0 -9px;
+    padding: 0; border-radius: 50%; font-size: 9px; }
   .wall-edit { position: absolute; height: 4px; transform-origin: 0 50%; pointer-events: none;
     z-index: 3; border-radius: 2px; opacity: .9; }
   .wall-edit.add { background: #2185d0; }
@@ -303,24 +324,26 @@
         <div id="stage" hidden><img id="plan" alt="평면도"></div>
       </div>
       <input type="file" id="file" accept="image/*" class="sr">
-      <div class="btnrow" style="margin-top:12px">
-        <button type="button" id="addnum">+ 번호 추가</button>
-        <button type="button" id="addentry">+ 현관문 지정</button>
-        <button type="button" id="clearpins">번호 전체 삭제</button>
-        <button type="button" id="repick">평면도 교체</button>
-      </div>
-      <div class="btnrow" style="margin-top:8px">
-        <button type="button" id="flipv">상하반전</button>
-        <button type="button" id="fliph">좌우반전</button>
-      </div>
-      <div class="btnrow" style="margin-top:8px">
-        <button type="button" id="calibrate">축척 설정 (도면의 두 점 지정)</button>
-        <span id="scalehint" style="margin-left:2px">미설정 — 번호가 점으로만 표시됩니다</span>
-      </div>
-      <div class="btnrow" style="margin-top:8px">
-        <button type="button" id="walladd">+ 누락 벽 추가</button>
-        <button type="button" id="wallremove">잘못된 벽 제외</button>
-        <button type="button" id="wallreset">벽 보정 초기화</button>
+      <div class="plan-tools" role="toolbar" aria-label="평면도 편집 도구">
+        <div class="tool-group">
+          <button type="button" id="addnum" title="창호 번호 추가" aria-label="창호 번호 추가"><span class="full-label">+ 번호 추가</span><span class="compact-label">+ 번호</span></button>
+          <button type="button" id="addentry" title="현관문 위치 지정" aria-label="현관문 위치 지정"><span class="full-label">+ 현관문 지정</span><span class="compact-label">+ 현관문</span></button>
+          <button type="button" id="clearpins" class="danger-tool" title="창호 번호 전체 삭제" aria-label="창호 번호 전체 삭제"><span class="full-label">번호 전체 삭제</span><span class="compact-label">번호 삭제</span></button>
+          <button type="button" id="repick" title="평면도 이미지 교체" aria-label="평면도 이미지 교체"><span class="full-label">평면도 교체</span><span class="compact-label">도면 교체</span></button>
+        </div>
+        <div class="tool-group">
+          <button type="button" id="flipv" title="평면도 상하 반전" aria-label="평면도 상하 반전"><span class="full-label">상하반전</span><span class="compact-label">↕ 상하</span></button>
+          <button type="button" id="fliph" title="평면도 좌우 반전" aria-label="평면도 좌우 반전"><span class="full-label">좌우반전</span><span class="compact-label">↔ 좌우</span></button>
+        </div>
+        <div class="tool-group">
+          <button type="button" id="calibrate" title="도면의 두 점을 지정해 축척 설정" aria-label="도면의 두 점을 지정해 축척 설정"><span class="full-label">축척 설정 (도면의 두 점 지정)</span><span class="compact-label">축척 설정</span></button>
+          <span id="scalehint" role="status" aria-live="polite" style="margin-left:2px">미설정 — 번호가 점으로만 표시됩니다</span>
+        </div>
+        <div class="tool-group">
+          <button type="button" id="walladd" title="누락된 벽 추가" aria-label="누락된 벽 추가"><span class="full-label">+ 누락 벽 추가</span><span class="compact-label">+ 벽 추가</span></button>
+          <button type="button" id="wallremove" title="잘못 인식된 벽 제외" aria-label="잘못 인식된 벽 제외"><span class="full-label">잘못된 벽 제외</span><span class="compact-label">벽 제외</span></button>
+          <button type="button" id="wallreset" class="danger-tool" title="벽 보정 내용 초기화" aria-label="벽 보정 내용 초기화"><span class="full-label">벽 보정 초기화</span><span class="compact-label">벽 초기화</span></button>
+        </div>
       </div>
     </div>
   </section>
@@ -426,7 +449,7 @@
     return !!(p && p.parts && p.parts.some(function (t) { return t.kind === "entry"; }));
   }
   function visiblePinLabel(p, index) {
-    if (isEntryPin(p)) return "현관";
+    if (isEntryPin(p)) return "0";
     var number = 0;
     for (var i = 0; i <= index; i++) if (!isEntryPin(state.pins[i])) number++;
     return String(number);
@@ -1267,7 +1290,7 @@
     } else if (t.kind === "entry") {
       t.w = "900"; t.h = "2100";
       var fixed = document.createElement("div"); fixed.className = "cap2";
-      fixed.textContent = "현관 위치 표시 · 벽 개구부 900×2100mm";
+      fixed.textContent = "기본 현관문으로 자동 적용됩니다";
       d.appendChild(fixed);
     }
     return d;
