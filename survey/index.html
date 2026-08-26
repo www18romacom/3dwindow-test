@@ -403,6 +403,16 @@
       <label class="field" for="surveydate" style="margin-top:12px">실측 날짜</label>
       <input type="date" id="surveydate">
 
+      <div class="site-fields" style="margin-top:12px">
+        <label class="field">양중방법
+          <select id="liftingmethod">
+            <option value="">미정</option><option>사다리차</option><option>윈치</option><option>엘리베이터</option><option>계단 운반</option><option value="기타">기타</option>
+          </select>
+        </label>
+        <label class="field" id="liftingotherwrap" hidden>기타 양중방법<input type="text" id="liftingother" placeholder="양중방법 직접 입력"></label>
+        <label class="field wide">전체 참고사항<textarea id="overallnotes" placeholder="현장 전체에 적용되는 참고사항"></textarea></label>
+      </div>
+
       <div id="ops" style="margin-top:16px"></div>
       <div class="empty" id="empty">평면도에서 창호 위치를 클릭하면(또는 "+ 번호 추가") 여기에 입력칸이 생깁니다.</div>
 
@@ -482,7 +492,7 @@
     var d = new Date(), z = function (v) { return String(v).padStart(2, "0"); };
     return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
   }
-  var state = { site: "", surveyDate: todayLocal(), siteSetup: {}, planName: "", planData: "", pins: [], scale: null,
+  var state = { site: "", surveyDate: todayLocal(), siteSetup: {}, overallNotes: "", lifting: { method: "", other: "" }, planName: "", planData: "", pins: [], scale: null,
                 flipV: false, flipH: false, wallEdits: { add: [], remove: [] } };
   var sel = null;
   var pickMode = null;
@@ -504,6 +514,25 @@
     var s = normalizedSetup(state.siteSetup), vendor = s.vendor === "custom" ? s.vendorCustom : s.vendor;
     var people = [s.manager || "박", vendor || "LX", s.vendorName || "와이케이"].map(function(v){return v.trim();}).filter(Boolean);
     return [compactDate(state.surveyDate), "[실측]", "(" + people.join("-") + ")", s.address.trim(), s.note.trim() ? "(" + s.note.trim() + ")" : ""].filter(Boolean).join(" ").replace(/[\\/:*?\"<>|\x00-\x1f]/g, "_");
+  }
+  function normalizedLifting(v) {
+    var src=v||{}, method=typeof src.method==="string"?src.method:"", other=typeof src.other==="string"?src.other:"";
+    return { method: method, other: other };
+  }
+  function liftingText() {
+    var l=normalizedLifting(state.lifting), value=l.method==="기타"?l.other:l.method;
+    return value ? "양중방법: "+value : "";
+  }
+  function syncGlobalInputs() {
+    state.overallNotes=$("overallnotes").value || "";
+    state.lifting={method:$("liftingmethod").value || "",other:$("liftingother").value || ""};
+    $("liftingotherwrap").hidden=state.lifting.method!=="기타";
+  }
+  function fillGlobalInputs() {
+    state.overallNotes=typeof state.overallNotes==="string"?state.overallNotes:"";
+    state.lifting=normalizedLifting(state.lifting);
+    $("overallnotes").value=state.overallNotes; $("liftingmethod").value=state.lifting.method; $("liftingother").value=state.lifting.other;
+    $("liftingotherwrap").hidden=state.lifting.method!=="기타";
   }
   function setupFromInputs() {
     state.surveyDate = $("setupdate").value || todayLocal();
@@ -560,6 +589,9 @@
   $("basetext").addEventListener("input", parseBaseText);
   $("applysite").addEventListener("click", function(){ setupFromInputs(); var name = generatedSiteName(); if (!state.siteSetup.address.trim()) { toast("현장주소를 확인해주세요"); $("setupaddress").focus(); return; } $("site").value = state.site = name; $("surveydate").value = state.surveyDate; persist(); fillSetup(true); toast("기초정보를 적용했습니다"); });
   $("editsitesetup").addEventListener("click", function(){ fillSetup(false); $("basetext").focus(); });
+  ["overallnotes","liftingmethod","liftingother"].forEach(function(id){
+    $(id).addEventListener(id==="liftingmethod"?"change":"input",function(){syncGlobalInputs();persist();});
+  });
 
   // 평면도를 화면에 뒤집어 보여줄 때(상하/좌우), 저장되는 좌표는 항상 "원본 이미지
   // 기준"으로 유지한다 — 화면표시용 변환과 클릭입력 역변환에 같은 공식(자기 자신의 역)을 쓴다.
@@ -607,6 +639,9 @@
   }
   function isEntryPin(p) {
     return !!(p && p.parts && p.parts.some(function (t) { return t.kind === "entry"; }));
+  }
+  function requiresFrame(p) {
+    return !!(p && p.parts && p.parts.some(function(t){ return t.kind === "sash" || t.kind === "turn"; }));
   }
   function visiblePinLabel(p, index) {
     if (isEntryPin(p)) return "현관";
@@ -758,7 +793,7 @@
     try {
       var s = JSON.parse(raw);
       if (s && Array.isArray(s.pins)) {
-        state = { site: s.site || "", siteSetup: s.siteSetup || {}, planName: s.planName || "",
+        state = { site: s.site || "", siteSetup: s.siteSetup || {}, overallNotes: typeof s.overallNotes==="string"?s.overallNotes:"", lifting: normalizedLifting(s.lifting), planName: s.planName || "",
                   surveyDate: s.surveyDate || todayLocal(),
                   planData: s.planData || "", pins: s.pins,
                   scale: s.scale && (s.scale.mmPerPixel || s.scale.mmPerFracX) ? s.scale : null,
@@ -1092,7 +1127,7 @@
     var s = sizedParts(p);
     var base = (s.length && hasSize(s[0])) ? (s[0].w + "×" + s[0].h) : "치수 미입력";
     var extra = p.parts.length > 1 ? (" 외 " + (p.parts.length - 1) + "개 구성") : "";
-    var frame = p.frame ? (" · " + p.frame) : "";
+    var frame = requiresFrame(p) && p.frame ? (" · " + p.frame) : "";
     return base + extra + frame;
   }
 
@@ -1348,7 +1383,7 @@
       return card;
     }
 
-    if (!isEntryPin(p)) {
+    if (!isEntryPin(p) && requiresFrame(p)) {
     var fr = document.createElement("div");
     fr.className = "frame-row";
     var frameInput = document.createElement("input");
@@ -2054,7 +2089,7 @@
       if (!hasDoor && pOutside > 0) group.scale.x = -1;
       scene.add(group);
       var labelName = p.name || ((pinIndex + 1) + "번");
-      var frameName = p.frame || (p.parts.some(function (t) { return t.kind === "entry"; }) ? "현관문" : "프레임 미선택");
+      var frameName = isEntryPin(p) ? "현관문" : (requiresFrame(p) ? (p.frame || "프레임 미선택") : "통바");
       var label = makeLabelSprite(THREE, labelName + " · " + frameName + " · " + Math.round(geo.width) + "×" + Math.round(geo.height));
       label.position.set(p.x * planWmm * mm, baseY + geo.height * mm + .95, p.y * planHmm * mm);
       scene.add(label);
@@ -2101,18 +2136,17 @@
     }).join("<br>");
   }
   function detailText(p) {
-    var d=normalizedDetails(p.details), values=["프레임 "+(p.frame||"X")];
+    var d=normalizedDetails(p.details), values=[requiresFrame(p)?"프레임 "+(p.frame||"X"):"프레임 해당없음"];
     [["drainHole","물구멍"],["screen","방충망"],["filling","사춤"],["tile","타일"],["molding","몰딩"],["brick","벽돌"]].forEach(function(item){var v=d[item[0]];values.push(item[1]+" "+(typeof v==="string"?(v||"X"):(v?"O":"X")));});
-    if (p.notes) values.push("참고사항 "+p.notes);
     return values.join(" · ");
   }
   function buildDrawingHTML(autoPrint) {
-    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); persist();
+    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); syncGlobalInputs(); persist();
     var rows = state.pins.map(function (p, i) {
       return '<tr><td class="no-cell">' + escapeHTML(visiblePinLabel(p, i)) + '</td>' +
         '<td>' + escapeHTML(p.name || (isEntryPin(p) ? "현관" : "")) + '</td>' +
-        '<td>' + drawingParts(p) + '</td><td>' + escapeHTML(isEntryPin(p) ? "-" : (p.frame || "")) + '</td>' +
-        '<td class="notes">' + escapeHTML(isEntryPin(p) ? "" : detailText(p)).replace(/\n/g, "<br>") + '</td></tr>';
+        '<td>' + drawingParts(p) + '</td><td>' + escapeHTML(requiresFrame(p) ? (p.frame || "") : "해당없음") + '</td>' +
+        '<td class="notes">' + escapeHTML(isEntryPin(p) ? (p.notes || "") : (detailText(p)+(p.notes?"\n개별 참고사항: "+p.notes:""))).replace(/\n/g, "<br>") + '</td></tr>';
     }).join("");
     var planMarkers = state.pins.map(function (p, i) {
       var entry = isEntryPin(p), label = visiblePinLabel(p, i);
@@ -2126,7 +2160,8 @@
       '</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:"Malgun Gothic",sans-serif;color:#111;margin:0;font-size:11px}' +
       'h1{font-size:20px;margin:0 0 6px}.meta{display:flex;gap:28px;border:1px solid #111;padding:7px 10px;margin-bottom:8px}.plan-wrap{position:relative;width:100%;margin:0 auto 9px;overflow:hidden;page-break-inside:avoid}.plan{display:block;width:100%;height:100%;object-fit:contain}.plan-marker{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#ffd66b;border:1.5px solid #6d571d;color:#17130a;font-weight:700;font-size:10px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.28)}.plan-marker.entry{background:#287a68;border-color:#287a68;color:#fff;font-size:6px;letter-spacing:-.08em}.no-plan{text-align:center;padding:30px;border:1px solid #aaa}' +
       'table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:5px;vertical-align:top;word-break:break-word}th{background:#eee}.no-cell{width:8%;text-align:center;font-weight:bold}th:nth-child(2){width:17%}th:nth-child(3){width:28%}th:nth-child(4){width:16%}.notes{white-space:normal}@media print{.no-print{display:none}}</style></head><body>' +
-      '<h1>' + escapeHTML(normalizedSetup(state.siteSetup).address || "현장주소 미입력") + '</h1>' + plan +
+      '<h1>' + escapeHTML(normalizedSetup(state.siteSetup).address || "현장주소 미입력") + '</h1>' +
+      ((liftingText()||state.overallNotes)?'<div class="meta">'+escapeHTML(liftingText())+(state.overallNotes?' · 전체 참고사항: '+escapeHTML(state.overallNotes):'')+'</div>':'') + plan +
       '<table><thead><tr><th>번호</th><th>위치</th><th>치수·구성</th><th>프레임 두께</th><th>참고사항</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">입력된 창호가 없습니다.</td></tr>') +
       '</tbody></table>' + (autoPrint ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script>' : '') + '</body></html>';
   }
@@ -2153,7 +2188,7 @@
   }
   function loadPlanImage() { return new Promise(function(resolve, reject){ if (!state.planData) { resolve(null); return; } var img = new Image(); img.onload=function(){resolve(img);}; img.onerror=function(){reject(new Error("평면도 이미지를 읽지 못했습니다"));}; img.src=state.planData; }); }
   async function buildDrawingCanvas() {
-    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); persist();
+    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); syncGlobalInputs(); persist();
     var img = await loadPlanImage(), W = 1600, pad = 60, planW = W - pad * 2, planH = 180;
     if (img) {
       var planScale = Math.min((W - pad * 2) / img.naturalWidth, 1000 / img.naturalHeight);
@@ -2163,10 +2198,13 @@
     var measure = document.createElement("canvas").getContext("2d");
     measure.font = '25px "Malgun Gothic", sans-serif';
     var siteLines = wrapCanvasText(measure, normalizedSetup(state.siteSetup).address || "현장주소 미입력", W - pad * 2);
-    var py = 128 + siteLines.length * 34, panelGap=24, panelW=(W-pad*2-panelGap)/2, panelH=520;
+    var globalSummary=[liftingText(),state.overallNotes?"전체 참고사항: "+state.overallNotes:""].filter(Boolean).join("  |  ");
+    measure.font='22px "Malgun Gothic", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
+    var py = 128 + siteLines.length * 34 + globalLines.length*30, panelGap=24, panelW=(W-pad*2-panelGap)/2, panelH=680;
     var panelRows=Math.max(1,Math.ceil(state.pins.length/2)), H=py+planH+35+panelRows*(panelH+panelGap)+60;
     var canvas=document.createElement("canvas"); canvas.width=W; canvas.height=H; var c=canvas.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.fillStyle="#111";
-    c.font='bold 40px "Malgun Gothic", sans-serif'; siteLines.forEach(function(line, i){ c.fillText(line, pad, 58 + i * 46); }); c.font='25px "Malgun Gothic", sans-serif';
+    c.font='bold 40px "Malgun Gothic", sans-serif'; siteLines.forEach(function(line, i){ c.fillText(line, pad, 58 + i * 46); });
+    c.font='22px "Malgun Gothic", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);}); c.font='25px "Malgun Gothic", sans-serif';
     var planX=Math.round((W-planW)/2); c.strokeStyle="#bbb"; c.strokeRect(planX,py,planW,planH);
     if(img){ c.save(); c.translate(state.flipH?planX+planW:planX,state.flipV?py+planH:py); c.scale(state.flipH?-1:1,state.flipV?-1:1); c.drawImage(img,0,0,planW,planH); c.restore();
       state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW, y=py+dispY(p.y)*planH, entry=isEntryPin(p); c.beginPath(); c.arc(x,y,18,0,Math.PI*2); c.fillStyle=entry?"#287a68":"#ffd66b"; c.fill(); c.strokeStyle=entry?"#287a68":"#6d571d"; c.lineWidth=2; c.stroke(); c.fillStyle=entry?"#fff":"#111"; c.textAlign="center"; c.textBaseline="middle"; c.font=entry?'bold 11px "Malgun Gothic"':'bold 20px "Malgun Gothic"'; c.fillText(visiblePinLabel(p,i),x,y);}); }
@@ -2178,22 +2216,27 @@
       return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
     }
     function drawPanel(p,i,x,y){
-      var headH=48, footH=128, drawTop=y+headH, drawH=panelH-headH-footH, sizes=p.parts.map(partSize);
+      var headH=48, footH=150, topViewH=150, drawTop=y+headH, drawH=panelH-headH-footH-topViewH, sizes=p.parts.map(partSize), layout=[];
       c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.moveTo(x,y+panelH-footH);c.lineTo(x+panelW,y+panelH-footH);c.stroke();
       c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Malgun Gothic"';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
       var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0), sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1,maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}));if(!isFinite(maxH))maxH=1;
       sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
       var scale=Math.min((panelW-70-fixedW)/sashTotal,(drawH-100)/maxH), renderedW=fixedW+sashTotal*scale,dx=x+(panelW-renderedW)/2, base=drawTop+drawH-38;
       sizes.forEach(function(s,partIndex){
-        var sw=s.kind==="mullion"?s.fixedW:Math.max(10,s.w*scale),sh=Math.max(10,s.h*scale),sy=base-sh;if(s.kind==="mullion"){c.fillStyle="#ccecf2";c.fillRect(dx,sy,sw,sh);}c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.lineWidth=2;c.strokeRect(dx,sy,sw,sh);
+        var sw=s.kind==="mullion"?s.fixedW:Math.max(10,s.w*scale),sh=Math.max(10,s.h*scale),sy=base-sh;layout.push({s:s,x:dx,w:sw});if(s.kind==="mullion"){c.fillStyle="#ccecf2";c.fillRect(dx,sy,sw,sh);}c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.lineWidth=2;c.strokeRect(dx,sy,sw,sh);
         if(s.kind!=="mullion"&&/^(B\/F235|B\/F250)$/i.test((p.frame||"").trim()))c.strokeRect(dx+6,sy+6,Math.max(1,sw-12),Math.max(1,sh-12));
         if(s.kind==="sash"&&s.panels>1){var ratios=s.panels===3?[1,2,1]:null,totalRatio=ratios?4:s.panels,run=dx;for(var z=1;z<s.panels;z++){run+=sw*(ratios?ratios[z-1]:1)/totalRatio;c.beginPath();c.moveTo(run,sy);c.lineTo(run,base);c.stroke();}}
         if(s.kind==="turn"||s.kind==="entry"||s.sashType==="turn"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.stroke();}
         if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0];c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Malgun Gothic"';primaryPanels.forEach(function(pi){c.fillText("#",dx+sw*(pi+.5)/s.panels,sy+sh/2);});}
         var slot=partIndex%3,labelY=drawTop+18+slot*24,labelX=Math.max(x+70,Math.min(x+panelW-70,dx+sw/2+(slot===1?-42:slot===2?42:0)));c.strokeStyle="#777";c.beginPath();c.moveTo(dx+sw/2,sy);c.lineTo(dx+sw/2,labelY+7);c.lineTo(labelX,labelY+7);c.stroke();c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font='16px "Malgun Gothic"';c.fillText(s.label,labelX,labelY);dx+=sw;
       });
+      var topY=y+headH+drawH, frameDepth=(function(v){var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:115);})(p.frame);
+      c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Malgun Gothic"';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
+      var topBase=topY+52, depthPx=Math.max(32,Math.min(78,frameDepth*.28));layout.forEach(function(item){var s=item.s,d=s.kind==="mullion"?(/통바40/.test(s.label)?105:100):frameDepth;c.fillStyle=s.kind==="mullion"?"#ccecf2":"#f6f6f6";c.fillRect(item.x,topBase,item.w,Math.max(28,Math.min(78,d*.28)));c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.strokeRect(item.x,topBase,item.w,Math.max(28,Math.min(78,d*.28)));if(s.kind!=="mullion"&&s.panels>0){c.beginPath();c.moveTo(item.x,topBase+depthPx*.35);c.lineTo(item.x+item.w,topBase+depthPx*.35);c.moveTo(item.x,topBase+depthPx*.7);c.lineTo(item.x+item.w,topBase+depthPx*.7);c.stroke();}});
+      c.fillStyle="#555";c.font='14px "Malgun Gothic"';c.fillText("실내측 ↓  "+(requiresFrame(p)?"프레임 깊이 "+(p.frame||"미입력")+" ("+frameDepth+"mm)":"통바 구성 · 프레임 두께 해당없음"),x+14,topY+125);
       var footer=detailText(p)||"부가항목 미입력";c.textAlign="left";c.textBaseline="top";c.font='17px "Malgun Gothic"';
-      wrapCanvasText(c,footer,panelW-28).slice(0,5).forEach(function(line,n){c.fillText(line,x+14,y+panelH-footH+13+n*22);});
+      var footerLines=wrapCanvasText(c,footer,panelW-28);if(p.notes)footerLines=footerLines.concat(wrapCanvasText(c,"개별 참고사항: "+p.notes,panelW-28));
+      footerLines.slice(0,6).forEach(function(line,n){c.fillText(line,x+14,y+panelH-footH+10+n*20);});
       c.font='15px "Malgun Gothic"';c.fillStyle="#555";c.fillText(plainParts(p)||"구성 미입력",x+14,y+panelH-25);
     }
     var ty=py+planH+35,candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});c.textBaseline="top";
@@ -2206,16 +2249,17 @@
   }
 
   function buildJSON() {
+    syncGlobalInputs();
     return {
       schemaVersion: "0.2-draft",
-      project: { name: state.site || "(현장명 없음)", surveyDate: state.surveyDate || todayLocal(), unit: "mm", siteSetup: normalizedSetup(state.siteSetup) },
+      project: { name: state.site || "(현장명 없음)", surveyDate: state.surveyDate || todayLocal(), unit: "mm", siteSetup: normalizedSetup(state.siteSetup), overallNotes: state.overallNotes || "", lifting: normalizedLifting(state.lifting) },
       floorplan: { file: state.planName || "", scale: state.scale || null, wallEdits: state.wallEdits },
       openings: state.pins.map(function (p, i) {
         return {
           no: i + 1,
           name: p.name || "",
-          frame: p.frame || null,
-          frameMeta: { doubleLine: /^(B\/F235|B\/F250)$/i.test((p.frame || "").trim()) },
+          frame: requiresFrame(p) ? (p.frame || null) : null,
+          frameMeta: { required: requiresFrame(p), doubleLine: requiresFrame(p) && /^(B\/F235|B\/F250)$/i.test((p.frame || "").trim()) },
           notes: p.notes || "",
           composition: p.composition || "",
           drawInDrawing: isEntryPin(p) ? !!p.drawInDrawing : undefined,
@@ -2331,6 +2375,8 @@
     state = saved;
     state.site = state.site || ""; state.surveyDate = state.surveyDate || todayLocal();
     state.siteSetup = normalizedSetup(state.siteSetup || (state.project && state.project.siteSetup));
+    state.overallNotes = typeof state.overallNotes === "string" ? state.overallNotes : ((state.project && state.project.overallNotes) || "");
+    state.lifting = normalizedLifting(state.lifting || (state.project && state.project.lifting));
     state.pins = Array.isArray(state.pins) ? state.pins : [];
     state.wallEdits = state.wallEdits || { add: [], remove: [] };
     if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
@@ -2352,7 +2398,7 @@
       });
       if(isEntryPin(p)&&typeof p.drawInDrawing!=="boolean")p.drawInDrawing=!!(p.parts.filter(function(t){return t.kind==="entry";})[0]||{}).drawInDrawing;
     });
-    $("site").value = state.site; $("surveydate").value = state.surveyDate;
+    $("site").value = state.site; $("surveydate").value = state.surveyDate; fillGlobalInputs();
     fillSetup(!!state.site);
     sel = null; updateScaleHint();
     if (state.planData) showPlan(state.planData, state.planName); else render();
@@ -2396,6 +2442,8 @@
         state.site = (j.project && j.project.name) || "";
         state.surveyDate = (j.project && j.project.surveyDate) || todayLocal();
         state.siteSetup = normalizedSetup(j.project && j.project.siteSetup);
+        state.overallNotes = (j.project && typeof j.project.overallNotes === "string") ? j.project.overallNotes : "";
+        state.lifting = normalizedLifting(j.project && j.project.lifting);
         state.planName = (j.floorplan && j.floorplan.file) || "";
         state.scale = (j.floorplan && j.floorplan.scale &&
                       (j.floorplan.scale.mmPerPixel || j.floorplan.scale.mmPerFracX))
@@ -2438,6 +2486,7 @@
         });
         $("site").value = state.site;
         $("surveydate").value = state.surveyDate;
+        fillGlobalInputs();
         fillSetup(!!state.site);
         sel = null;
         updateScaleHint();
@@ -2457,6 +2506,7 @@
   state.siteSetup = normalizedSetup(state.siteSetup);
   $("site").value = state.site;
   $("surveydate").value = state.surveyDate || todayLocal();
+  fillGlobalInputs();
   fillSetup(!!state.site);
   updateScaleHint();
   if (state.planData) showPlan(state.planData, state.planName);
