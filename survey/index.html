@@ -160,7 +160,19 @@
   .survey-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
   .survey-actions button { min-width: 0; }
   .survey-actions #generate3d { grid-column: auto; color: var(--ink-3); background: transparent; }
+  .site-setup { margin-bottom: 16px; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+  .site-setup-head { display:flex; align-items:center; gap:8px; }
+  .site-setup-head b { flex:1; }
+  .site-setup textarea { margin-top:10px; min-height:86px; background:var(--panel); }
+  .site-fields { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:10px; }
+  .site-fields .wide { grid-column:1 / -1; }
+  .site-preview { margin-top:10px; padding:9px 10px; border-radius:8px; background:var(--panel); color:var(--ink-2); font-size:12.5px; word-break:break-word; }
+  .site-setup-actions { display:flex; gap:8px; margin-top:10px; }
+  .site-setup-actions button { flex:1; }
+  .site-setup.collapsed > :not(.site-setup-head) { display:none; }
   @media (max-width: 600px) {
+    .site-fields { grid-template-columns:1fr; }
+    .site-fields .wide { grid-column:auto; }
     .survey-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .survey-actions #generate3d { grid-column: 1 / -1; }
   }
@@ -321,6 +333,27 @@
 
 <div class="wrap">
 
+  <section class="card">
+    <div class="body">
+      <div class="site-setup" id="sitesetup">
+        <div class="site-setup-head"><b>기초내용 붙여넣기</b><button type="button" class="tiny" id="editsitesetup" hidden>기초내용 수정</button></div>
+        <label class="field" for="basetext" style="margin-top:8px">일정 내용을 붙여넣으면 가능한 항목을 자동으로 채웁니다</label>
+        <textarea id="basetext" placeholder="예: 실측(박) | 10년 보증 체크 / 구리시 교문동 덕현아파트 107동 1903호 / 010-0000-0000"></textarea>
+        <button type="button" class="tiny" id="parsebase" style="margin-top:7px">붙여넣은 내용 분석</button>
+        <div class="site-fields">
+          <label class="field">실측 날짜<input type="date" id="setupdate"></label>
+          <label class="field">담당자<input type="text" id="setupmanager" placeholder="예: 박"></label>
+          <label class="field">거래처<input type="text" id="setupvendor" placeholder="예: LX"></label>
+          <label class="field">거래처명<input type="text" id="setupvendorname" placeholder="예: 와이케이"></label>
+          <label class="field wide">현장주소<input type="text" id="setupaddress" placeholder="예: 구리시 교문동 덕현아파트 107동 1903호"></label>
+          <label class="field wide">비고<input type="text" id="setupnote" placeholder="예: 10년 보증 체크, 49평형"></label>
+        </div>
+        <div class="site-preview" id="sitepreview" aria-live="polite"></div>
+        <div class="site-setup-actions"><button type="button" class="primary" id="applysite">현장명 적용</button></div>
+      </div>
+    </div>
+  </section>
+
   <section class="card floorplan-card">
     <h2>평면도 <span class="hint" id="planhint">이미지를 올린 뒤 클릭하면 번호가 찍힙니다</span></h2>
     <div class="body">
@@ -442,13 +475,60 @@
     var d = new Date(), z = function (v) { return String(v).padStart(2, "0"); };
     return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
   }
-  var state = { site: "", surveyDate: todayLocal(), planName: "", planData: "", pins: [], scale: null,
+  var state = { site: "", surveyDate: todayLocal(), siteSetup: {}, planName: "", planData: "", pins: [], scale: null,
                 flipV: false, flipH: false, wallEdits: { add: [], remove: [] } };
   var sel = null;
   var pickMode = null;
   var activeMini3D = null;   // 현재 열린 카드의 3D 프리뷰 정리 함수 보관(WebGL 컨텍스트 누수 방지)
   var activeProject3D = null;
   var planPixels = null;     // 업로드한 원본 평면도의 굵은 벽선 방향 판별용
+
+  var SETUP_FIELDS = ["manager", "vendor", "vendorName", "address", "note", "baseText"];
+  function normalizedSetup(v) {
+    var out = {}, src = v || {};
+    SETUP_FIELDS.forEach(function (k) { out[k] = typeof src[k] === "string" ? src[k] : ""; });
+    return out;
+  }
+  function compactDate(v) { return String(v || todayLocal()).replace(/-/g, "").slice(2); }
+  function generatedSiteName() {
+    var s = normalizedSetup(state.siteSetup), people = [s.manager, s.vendor, s.vendorName].map(function(v){return v.trim();}).filter(Boolean);
+    return [compactDate(state.surveyDate), "[실측]", people.length ? "(" + people.join("-") + ")" : "", s.address.trim(), s.note.trim() ? "(" + s.note.trim() + ")" : ""].filter(Boolean).join(" ");
+  }
+  function setupFromInputs() {
+    state.surveyDate = $("setupdate").value || todayLocal();
+    state.siteSetup = { baseText: $("basetext").value, manager: $("setupmanager").value, vendor: $("setupvendor").value,
+      vendorName: $("setupvendorname").value, address: $("setupaddress").value, note: $("setupnote").value };
+    $("sitepreview").textContent = generatedSiteName() || "현장명 미리보기";
+  }
+  function fillSetup(collapse) {
+    state.siteSetup = normalizedSetup(state.siteSetup);
+    $("basetext").value = state.siteSetup.baseText; $("setupmanager").value = state.siteSetup.manager;
+    $("setupvendor").value = state.siteSetup.vendor; $("setupvendorname").value = state.siteSetup.vendorName;
+    $("setupaddress").value = state.siteSetup.address; $("setupnote").value = state.siteSetup.note;
+    $("setupdate").value = state.surveyDate || todayLocal(); setupFromInputs();
+    $("sitesetup").classList.toggle("collapsed", !!collapse); $("editsitesetup").hidden = !collapse;
+  }
+  function parseBaseText() {
+    var raw = $("basetext").value.trim(), cleaned = raw.replace(/\r/g, "");
+    var first = cleaned.split(/\n|\//).map(function(v){return v.trim();}).filter(Boolean);
+    var head = first[0] || "", manager = (head.match(/(?:실측|시공|AS)\s*\(([^)]+)\)/i) || [])[1] || "";
+    var pipe = cleaned.split("|");
+    var afterPipe = pipe.length > 1 ? pipe.slice(1).join("|").split(/[\/\n]/)[0].trim() : "";
+    var phone = /(?:\+?82[- .]?)?0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}/g;
+    var candidates = first.map(function(v){return v.replace(phone, "").replace(/^(?:실측|시공|AS)\s*\([^)]*\)\s*(?:\|.*)?$/i, "").trim();}).filter(Boolean);
+    var address = candidates.filter(function(v){ return /(?:시|군|구|동|읍|면|리|아파트|빌라|로|길|번지|호)/.test(v) && v !== afterPipe; })[0] || "";
+    if (manager) $("setupmanager").value = manager;
+    if (address) $("setupaddress").value = address;
+    if (afterPipe && afterPipe !== address) $("setupnote").value = afterPipe;
+    setupFromInputs(); persist();
+  }
+  ["basetext","setupdate","setupmanager","setupvendor","setupvendorname","setupaddress","setupnote"].forEach(function(id){
+    $(id).addEventListener("input", function(){ setupFromInputs(); persist(); });
+  });
+  $("parsebase").addEventListener("click", parseBaseText);
+  $("basetext").addEventListener("paste", function(){ setTimeout(parseBaseText, 0); });
+  $("applysite").addEventListener("click", function(){ setupFromInputs(); var name = generatedSiteName(); if (!state.siteSetup.address.trim()) { toast("현장주소를 입력해주세요"); $("setupaddress").focus(); return; } $("site").value = state.site = name; $("surveydate").value = state.surveyDate; persist(); fillSetup(true); toast("현장명을 적용했습니다"); });
+  $("editsitesetup").addEventListener("click", function(){ fillSetup(false); $("basetext").focus(); });
 
   // 평면도를 화면에 뒤집어 보여줄 때(상하/좌우), 저장되는 좌표는 항상 "원본 이미지
   // 기준"으로 유지한다 — 화면표시용 변환과 클릭입력 역변환에 같은 공식(자기 자신의 역)을 쓴다.
@@ -613,7 +693,7 @@
     try {
       var s = JSON.parse(raw);
       if (s && Array.isArray(s.pins)) {
-        state = { site: s.site || "", planName: s.planName || "",
+        state = { site: s.site || "", siteSetup: s.siteSetup || {}, planName: s.planName || "",
                   surveyDate: s.surveyDate || todayLocal(),
                   planData: s.planData || "", pins: s.pins,
                   scale: s.scale && (s.scale.mmPerPixel || s.scale.mmPerFracX) ? s.scale : null,
@@ -1944,13 +2024,63 @@
       '</tbody></table>' + (autoPrint ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script>' : '') + '</body></html>';
   }
   function drawingFileName() {
-    return ((state.surveyDate || todayLocal()) + "_" + (state.site || "실측도면")).replace(/[\\/:*?"<>|]/g, "_") + ".html";
+    return (state.site || generatedSiteName() || "실측도면").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").replace(/[. ]+$/g, "").slice(0, 150) + ".png";
+  }
+
+  function plainParts(p) {
+    return p.parts.map(function(t){
+      if (t.kind === "mullion") return "통바 " + (t.spec || "");
+      if (t.kind === "entry") return "현관문 900×2100";
+      return (t.kind === "turn" ? "터닝도어 " : "창 ") + (t.w || "-") + "×" + (t.h || "-") + (t.kind === "sash" ? " · " + (t.panels || "") : "");
+    }).join(" / ");
+  }
+  function wrapCanvasText(ctx, text, maxWidth) {
+    var lines = [], paragraphs = String(text || "").split(/\n/);
+    paragraphs.forEach(function(par){ var words = par.split(/\s+/), line = ""; if (!par) { lines.push(""); return; }
+      words.forEach(function(word){
+        if (ctx.measureText(word).width > maxWidth) { if(line){lines.push(line);line="";} var chunk=""; Array.from(word).forEach(function(ch){var next=chunk+ch;if(chunk&&ctx.measureText(next).width>maxWidth){lines.push(chunk);chunk=ch;}else chunk=next;}); line=chunk; return; }
+        var test = line ? line + " " + word : word; if (line && ctx.measureText(test).width > maxWidth) { lines.push(line); line = word; } else line = test;
+      }); lines.push(line);
+    }); return lines;
+  }
+  function loadPlanImage() { return new Promise(function(resolve, reject){ if (!state.planData) { resolve(null); return; } var img = new Image(); img.onload=function(){resolve(img);}; img.onerror=function(){reject(new Error("평면도 이미지를 읽지 못했습니다"));}; img.src=state.planData; }); }
+  async function saveDrawingPNG() {
+    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); persist();
+    var img = await loadPlanImage(), W = 1600, pad = 60, planW = W - pad * 2, planH = 180;
+    if (img) {
+      var planScale = Math.min((W - pad * 2) / img.naturalWidth, 1000 / img.naturalHeight);
+      planW = Math.max(1, Math.round(img.naturalWidth * planScale));
+      planH = Math.max(1, Math.round(img.naturalHeight * planScale));
+    }
+    var measure = document.createElement("canvas").getContext("2d");
+    measure.font = '25px "Malgun Gothic", sans-serif';
+    var siteLines = wrapCanvasText(measure, "현장명  " + (state.site || "-"), W - pad * 2);
+    measure.font = '27px "Malgun Gothic", sans-serif';
+    var widths = [90, 220, 400, 240, 530], rowData = state.pins.map(function(p,i){
+      var vals=[visiblePinLabel(p,i), p.name || (isEntryPin(p)?"현관":""), plainParts(p), isEntryPin(p)?"-":(p.frame||""), isEntryPin(p)?"":(p.notes||"")];
+      var lines=vals.map(function(v,k){return wrapCanvasText(measure,v,widths[k]-24);}); return {lines:lines,h:Math.max(62, Math.max.apply(null,lines.map(function(x){return x.length;}))*36+20)};
+    });
+    var py = 128 + siteLines.length * 34, tableH = 58 + rowData.reduce(function(n,r){return n+r.h;}, state.pins.length ? 0 : 72), H = py + planH + 35 + tableH + 60;
+    var canvas=document.createElement("canvas"); canvas.width=W; canvas.height=H; var c=canvas.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.fillStyle="#111";
+    c.font='bold 40px "Malgun Gothic", sans-serif'; c.fillText("창호 실측도면",pad,58); c.font='25px "Malgun Gothic", sans-serif';
+    siteLines.forEach(function(line, i){ c.fillText(line, pad, 100 + i * 34); });
+    c.fillText("실측일  "+state.surveyDate,pad,100 + siteLines.length * 34);
+    var planX=Math.round((W-planW)/2); c.strokeStyle="#bbb"; c.strokeRect(planX,py,planW,planH);
+    if(img){ c.save(); c.translate(state.flipH?planX+planW:planX,state.flipV?py+planH:py); c.scale(state.flipH?-1:1,state.flipV?-1:1); c.drawImage(img,0,0,planW,planH); c.restore();
+      state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW, y=py+dispY(p.y)*planH, entry=isEntryPin(p); c.beginPath(); c.arc(x,y,18,0,Math.PI*2); c.fillStyle=entry?"#287a68":"#ffd66b"; c.fill(); c.strokeStyle=entry?"#287a68":"#6d571d"; c.lineWidth=2; c.stroke(); c.fillStyle=entry?"#fff":"#111"; c.textAlign="center"; c.textBaseline="middle"; c.font=entry?'bold 11px "Malgun Gothic"':'bold 20px "Malgun Gothic"'; c.fillText(visiblePinLabel(p,i),x,y);}); }
+    else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Malgun Gothic"'; c.fillText("평면도 없음",W/2,py+planH/2); }
+    var ty=py+planH+35, x=pad; c.textAlign="left"; c.textBaseline="top"; c.font='bold 24px "Malgun Gothic"'; c.fillStyle="#eee"; c.fillRect(pad,ty,W-pad*2,58); c.fillStyle="#111";
+    ["번호","위치","치수·구성","프레임 두께","참고사항"].forEach(function(v,k){c.fillText(v,x+12,ty+14); x+=widths[k];});
+    function gridRow(y,h){var xx=pad;c.strokeStyle="#333";c.lineWidth=1;c.strokeRect(pad,y,W-pad*2,h);widths.slice(0,-1).forEach(function(w){xx+=w;c.beginPath();c.moveTo(xx,y);c.lineTo(xx,y+h);c.stroke();});}
+    gridRow(ty,58); ty+=58; c.font='27px "Malgun Gothic"';
+    if(!rowData.length){gridRow(ty,72);c.fillText("입력된 창호가 없습니다.",pad+12,ty+18);} else rowData.forEach(function(r){gridRow(ty,r.h);var xx=pad;r.lines.forEach(function(lines,k){lines.forEach(function(line,n){c.fillText(line,xx+12,ty+12+n*36);});xx+=widths[k];});ty+=r.h;});
+    var blob=await new Promise(function(resolve){canvas.toBlob(resolve,"image/png");}); if(!blob) throw new Error("PNG 변환에 실패했습니다"); var a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=drawingFileName();document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
   }
 
   function buildJSON() {
     return {
       schemaVersion: "0.2-draft",
-      project: { name: state.site || "(현장명 없음)", surveyDate: state.surveyDate || todayLocal(), unit: "mm" },
+      project: { name: state.site || "(현장명 없음)", surveyDate: state.surveyDate || todayLocal(), unit: "mm", siteSetup: normalizedSetup(state.siteSetup) },
       floorplan: { file: state.planName || "", scale: state.scale || null, wallEdits: state.wallEdits },
       openings: state.pins.map(function (p, i) {
         return {
@@ -1973,11 +2103,11 @@
     };
   }
 
-  $("savedrawing").addEventListener("click", function () {
-    var blob = new Blob([buildDrawingHTML(false)], { type: "text/html;charset=utf-8" });
-    var a = document.createElement("a"), url = URL.createObjectURL(blob);
-    a.href = url; a.download = drawingFileName(); document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000); toast("실측도면을 저장했습니다");
+  $("savedrawing").addEventListener("click", async function () {
+    var button=this; button.disabled=true;
+    try { await saveDrawingPNG(); toast("실측도면 PNG를 저장했습니다"); }
+    catch(e) { toast(e.message || "도면을 저장하지 못했습니다"); }
+    finally { button.disabled=false; }
   });
   $("printdrawing").addEventListener("click", function () {
     var w = window.open("", "_blank");
@@ -2061,6 +2191,7 @@
   function applySavedState(saved) {
     state = saved;
     state.site = state.site || ""; state.surveyDate = state.surveyDate || todayLocal();
+    state.siteSetup = normalizedSetup(state.siteSetup || (state.project && state.project.siteSetup));
     state.pins = Array.isArray(state.pins) ? state.pins : [];
     state.wallEdits = state.wallEdits || { add: [], remove: [] };
     if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
@@ -2079,6 +2210,7 @@
       });
     });
     $("site").value = state.site; $("surveydate").value = state.surveyDate;
+    fillSetup(!!state.site);
     sel = null; updateScaleHint();
     if (state.planData) showPlan(state.planData, state.planName); else render();
     persist();
@@ -2120,6 +2252,7 @@
         if (!Array.isArray(list)) throw new Error("형식이 다릅니다");
         state.site = (j.project && j.project.name) || "";
         state.surveyDate = (j.project && j.project.surveyDate) || todayLocal();
+        state.siteSetup = normalizedSetup(j.project && j.project.siteSetup);
         state.planName = (j.floorplan && j.floorplan.file) || "";
         state.scale = (j.floorplan && j.floorplan.scale &&
                       (j.floorplan.scale.mmPerPixel || j.floorplan.scale.mmPerFracX))
@@ -2161,6 +2294,7 @@
         });
         $("site").value = state.site;
         $("surveydate").value = state.surveyDate;
+        fillSetup(!!state.site);
         sel = null;
         updateScaleHint();
         render();
@@ -2176,8 +2310,10 @@
 
   /* ---------------- 시작 ---------------- */
   restore();
+  state.siteSetup = normalizedSetup(state.siteSetup);
   $("site").value = state.site;
   $("surveydate").value = state.surveyDate || todayLocal();
+  fillSetup(!!state.site);
   updateScaleHint();
   if (state.planData) showPlan(state.planData, state.planName);
   render();
