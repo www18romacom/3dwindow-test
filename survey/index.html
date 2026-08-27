@@ -154,7 +154,7 @@
     background: var(--panel-2); min-height: 300px; display: grid; place-items: center;
     text-align: center; color: var(--ink-3); padding: 30px 20px;
   }
-  #drop.hasimg { border-style: solid; padding: 0; background: none; display: block; overflow:auto; max-height:75vh; touch-action:none; cursor:grab; }
+  #drop.hasimg { border-style: solid; padding: 0; background: none; display: block; overflow:auto; max-height:75vh; touch-action:none; cursor:default; }
   #drop.hasimg.panning, .preview-zoom-wrap.panning { cursor:grabbing; }
   #drop.drag { border-color: var(--accent-solid); background: var(--accent); }
   #stage { position: relative; line-height: 0; overflow: hidden; border-radius: 8px; margin:0 auto; }
@@ -179,6 +179,10 @@
   .zoom-tools button { min-width:42px; font-weight:700; }
   .plan-view-tools { display:flex; justify-content:flex-end; gap:6px; margin:0 0 7px; }
   .plan-view-tools button { min-width:44px; font-weight:700; }
+  @media (pointer:coarse) {
+    #drop.hasimg { cursor:grab; scrollbar-width:none; }
+    #drop.hasimg::-webkit-scrollbar { display:none; }
+  }
   #drawingpreview { width:min(94vw,1100px); max-width:94vw; }
   .preview-zoom-wrap { overflow:auto; width:100%; max-height:75vh; background:var(--panel-2); touch-action:none; cursor:grab; }
   #drawingpreviewcontent { transform-origin:0 0; }
@@ -403,7 +407,7 @@
   <section class="card floorplan-card">
     <h2>현장 평면도 <span class="hint" id="planhint">이미지를 올린 뒤 클릭하면 번호가 찍힙니다</span></h2>
     <div class="body">
-      <div class="plan-view-tools" id="planviewtools" aria-label="평면도 확대 축소" hidden><button type="button" id="planzoomout" title="평면도 축소" aria-label="평면도 축소">−</button><button type="button" id="planzoomin" title="평면도 확대" aria-label="평면도 확대">＋</button></div>
+      <div class="plan-view-tools" id="planviewtools" aria-label="평면도 확대 축소" hidden><button type="button" id="planzoomout" title="평면도 축소" aria-label="평면도 축소">−</button><button type="button" id="planzoomreset" title="원본 크기" aria-label="평면도 원본 크기">100%</button><button type="button" id="planzoomin" title="평면도 확대" aria-label="평면도 확대">＋</button></div>
       <div id="drop">
         <div id="ph">
           <p style="margin:0 0 10px"><b>현장 평면도 이미지를 끌어다 놓거나</b></p>
@@ -570,7 +574,7 @@
   }
   function installPanScroller(el,enabled) {
     var active=false,activeId=null,startX=0,startY=0,startLeft=0,startTop=0;
-    el.addEventListener("pointerdown",function(e){if(active||!enabled()||e.target.closest(".marker,.span-bar,button"))return;active=true;activeId=e.pointerId;panMoved=false;startX=e.clientX;startY=e.clientY;startLeft=el.scrollLeft;startTop=el.scrollTop;el.classList.add("panning");el.setPointerCapture(e.pointerId);});
+    el.addEventListener("pointerdown",function(e){if(active||!enabled(e)||e.target.closest(".marker,.span-bar,button"))return;active=true;activeId=e.pointerId;panMoved=false;startX=e.clientX;startY=e.clientY;startLeft=el.scrollLeft;startTop=el.scrollTop;el.classList.add("panning");el.setPointerCapture(e.pointerId);});
     el.addEventListener("pointermove",function(e){if(!active||e.pointerId!==activeId||pinching)return;var dx=e.clientX-startX,dy=e.clientY-startY;if(Math.abs(dx)+Math.abs(dy)>6)panMoved=true;if(panMoved){e.preventDefault();el.scrollLeft=startLeft-dx;el.scrollTop=startTop-dy;}});
     function end(e){if(!active||e.pointerId!==activeId)return;active=false;activeId=null;el.classList.remove("panning");try{el.releasePointerCapture(e.pointerId);}catch(_){ }setTimeout(function(){panMoved=false;},0);}
     el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
@@ -980,7 +984,7 @@
     e.target.value = "";
   });
   var drop = $("drop");
-  installPanScroller(drop,function(){return planZoom>1;});
+  installPanScroller(drop,function(e){return planZoom>1&&e.pointerType==="touch";});
   installPlanPinch(drop);
   installPanScroller($("drawingpreview").querySelector(".preview-zoom-wrap"),function(){return previewZoom>1;});
   ["dragenter", "dragover"].forEach(function (ev) {
@@ -1002,7 +1006,16 @@
     state.flipH = !state.flipH; applyFlip(); persist(); render();
   });
   $("planzoomout").addEventListener("click",function(){planZoom=Math.max(.5,Math.round((planZoom-.25)*100)/100);applyPlanZoom();});
+  $("planzoomreset").addEventListener("click",function(){planZoom=1;applyPlanZoom();drop.scrollLeft=0;drop.scrollTop=0;});
   $("planzoomin").addEventListener("click",function(){planZoom=Math.min(3,Math.round((planZoom+.25)*100)/100);applyPlanZoom();});
+
+  function planPointFromClient(clientX,clientY) {
+    var r=$("plan").getBoundingClientRect();
+    if(!r.width||!r.height)return null;
+    var rawX=Math.min(1,Math.max(0,(clientX-r.left)/r.width));
+    var rawY=Math.min(1,Math.max(0,(clientY-r.top)/r.height));
+    return {x:realX(rawX),y:realY(rawY),rawX:rawX,rawY:rawY};
+  }
 
   /* ---------------- 아코디언 열기(공용) ---------------- */
   function openCard(i, focusName) {
@@ -1023,9 +1036,9 @@
   $("stage").addEventListener("click", function (e) {
     if (e.target.classList.contains("marker")) return;
     if (dragMoved || panMoved) return;
-    var r = this.getBoundingClientRect();
-    var fx = realX((e.clientX - r.left) / r.width);
-    var fy = realY((e.clientY - r.top) / r.height);
+    var point=planPointFromClient(e.clientX,e.clientY);
+    if(!point)return;
+    var fx=point.x,fy=point.y;
     if (pickMode) {
       if (pickMode.type === "entry") {
         var entryPin = newPin(fx, fy); entryPin.name = "현관"; entryPin.drawInDrawing = false; entryPin.parts = [newEntry()];
@@ -1186,10 +1199,9 @@
   function onMove(e) {
     if (dragIdx < 0) return;
     dragMoved = true;
-    var r = $("stage").getBoundingClientRect(), p = state.pins[dragIdx];
-    var rawX = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-    var rawY = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-    var nx = realX(rawX), ny = realY(rawY);
+    var point=planPointFromClient(e.clientX,e.clientY),p=state.pins[dragIdx];
+    if(!point)return;
+    var rawX=point.rawX,rawY=point.rawY,nx=point.x,ny=point.y;
     if (p.placementMode === "wall" && p.wallLock) {
       if (p.wallLock.angle === 90) { p.x = p.wallLock.coordinate; p.y = ny; }
       else { p.x = nx; p.y = p.wallLock.coordinate; }
