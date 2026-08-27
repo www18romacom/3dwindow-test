@@ -158,7 +158,7 @@
   #drop.hasimg.panning, .preview-zoom-wrap.panning { cursor:grabbing; }
   #drop.drag { border-color: var(--accent-solid); background: var(--accent); }
   #stage { position: relative; line-height: 0; overflow: hidden; border-radius: 8px; margin:0 auto; }
-  #plan { width: 100%; display: block; }
+  #plan { width: 100%; display: block; user-select:none; -webkit-user-select:none; -webkit-user-drag:none; }
 
   .marker {
     position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px;
@@ -414,7 +414,7 @@
           <button type="button" id="pick">파일 선택</button>
           <p style="margin:10px 0 0; font-size:12.5px">PNG · JPG</p>
         </div>
-        <div id="stage" hidden><img id="plan" alt="평면도"></div>
+        <div id="stage" hidden><img id="plan" alt="평면도" draggable="false"></div>
       </div>
       <input type="file" id="file" accept="image/*" class="sr">
       <div class="plan-tools" role="toolbar" aria-label="평면도 편집 도구">
@@ -987,6 +987,7 @@
     e.target.value = "";
   });
   var drop = $("drop");
+  $("plan").addEventListener("dragstart",function(e){e.preventDefault();});
   installPanScroller(drop,function(){return planZoom>1;});
   installPlanPinch(drop);
   installPanScroller($("drawingpreview").querySelector(".preview-zoom-wrap"),function(){return previewZoom>1;});
