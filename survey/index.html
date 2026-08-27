@@ -59,9 +59,13 @@
   .wrap {
     display: grid; gap: 16px; padding: 16px 22px 40px;
     grid-template-columns: minmax(0, 1fr) minmax(430px, 480px);
+    grid-template-areas: "basic plan" "survey plan";
     align-items: start;
   }
-  @media (max-width: 1000px) { .wrap { grid-template-columns: minmax(0,1fr); } }
+  .wrap > .card:first-child { grid-area: basic; }
+  .wrap > .floorplan-card { grid-area: plan; }
+  .wrap > .card:last-child { grid-area: survey; }
+  @media (max-width: 1000px) { .wrap { grid-template-columns: minmax(0,1fr); grid-template-areas:"basic" "plan" "survey"; } }
   @media (max-width: 600px) {
     header { padding: 12px 8px 0; }
     header p { display:none; }
@@ -543,8 +547,10 @@
   function openDriveBridgePopup(){window.name="ykSurveyDriveClient";if(driveBridgeWindow&&!driveBridgeWindow.closed){driveBridgeWindow.focus();return driveBridgeWindow;}driveBridgeReady=false;driveBridgeChannel=null;driveBridgeWindow=window.open(DRIVE_BRIDGE_URL,"ykSurveyDriveBridge","popup=yes,width=520,height=420,resizable=yes,scrollbars=yes");if(!driveBridgeWindow)throw new Error("Drive 인증 팝업이 차단됐습니다. 팝업을 허용해주세요");return driveBridgeWindow;}
   window.addEventListener("message",function(event){var msg=event.data||{},googleOrigin=/^https:\/\/([a-z0-9-]+\.)?(script\.google\.com|googleusercontent\.com)$/.test(event.origin),isReady=msg==="Drive bridge ready"||msg.ready||msg.action==="ready"||msg.message==="Drive bridge ready"||msg.type==="drive-bridge-ready"||msg.type==="DRIVE_BRIDGE_READY";if(isReady&&googleOrigin&&driveBridgeWindow&&!driveBridgeWindow.closed){driveBridgeChannel=event.source;driveBridgeReady=true;return;}if(!driveBridgeChannel||event.source!==driveBridgeChannel||!msg.requestId)return;var req=driveRequests[msg.requestId];if(!req)return;delete driveRequests[msg.requestId];clearTimeout(req.timer);var ok=msg.ok!==undefined?msg.ok:(msg.success!==undefined?msg.success:!msg.error),result=msg.result!==undefined?msg.result:(msg.data!==undefined?msg.data:msg);ok?req.resolve(result):req.reject(new Error(msg.error||msg.message||"Google Drive 요청 실패"));});
   function waitDriveBridgeReady(){return new Promise(function(resolve,reject){var started=Date.now(),timer=setInterval(function(){if(!driveBridgeWindow||driveBridgeWindow.closed){clearInterval(timer);driveBridgeReady=false;reject(new Error("Drive 인증 창이 닫혔습니다"));return;}if(driveBridgeReady){clearInterval(timer);resolve();return;}if(Date.now()-started>10000){clearInterval(timer);reject(new Error("Drive 인증 응답 시간이 초과됐습니다. ykenc.com 로그인 상태를 확인하세요"));}},100);});}
-  function driveCall(action,payload){return new Promise(function(resolve,reject){if(!driveBridgeReady||!driveBridgeChannel||!driveBridgeWindow||driveBridgeWindow.closed){reject(new Error("Google Drive 연결 페이지가 아직 준비되지 않았습니다"));return;}var id="survey-"+Date.now()+"-"+Math.random().toString(36).slice(2),timer=setTimeout(function(){delete driveRequests[id];reject(new Error("Google Drive "+action+" 응답 시간이 초과됐습니다"));},10000);driveRequests[id]={resolve:resolve,reject:reject,timer:timer};driveBridgeChannel.postMessage({type:"drive-bridge-request",ykSurveyBridge:true,requestId:id,action:action,payload:payload||{}},"*");});}
-  async function ensureDriveBridge(){openDriveBridgePopup();await waitDriveBridgeReady();return driveCall("ping",{});}
+  function hasDirectDrive(){return typeof google!=="undefined"&&google.script&&google.script.run;}
+  function directDriveCall(action,payload){return new Promise(function(resolve,reject){var runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(function(error){reject(new Error(error&&error.message||String(error)));});if(action==="saveSite")runner.saveSite(payload||{});else if(action==="saveDrawing")runner.saveDrawing(payload||{});else if(action==="listSites")runner.listSites();else if(action==="loadSite")runner.loadSite(payload||{});else resolve({status:"ready"});});}
+  function driveCall(action,payload){if(hasDirectDrive())return directDriveCall(action,payload);return new Promise(function(resolve,reject){if(!driveBridgeReady||!driveBridgeChannel||!driveBridgeWindow||driveBridgeWindow.closed){reject(new Error("Google Drive 연결 페이지가 아직 준비되지 않았습니다"));return;}var id="survey-"+Date.now()+"-"+Math.random().toString(36).slice(2),timer=setTimeout(function(){delete driveRequests[id];reject(new Error("Google Drive "+action+" 응답 시간이 초과됐습니다"));},10000);driveRequests[id]={resolve:resolve,reject:reject,timer:timer};driveBridgeChannel.postMessage({type:"drive-bridge-request",ykSurveyBridge:true,requestId:id,action:action,payload:payload||{}},"*");});}
+  async function ensureDriveBridge(){if(hasDirectDrive())return {status:"ready"};openDriveBridgePopup();await waitDriveBridgeReady();return driveCall("ping",{});}
   function chooseDriveConflict(files){return new Promise(function(resolve){$("driveconflictfiles").textContent=(files||[]).join("\n");var dialog=$("driveconflict"),done=false;function finish(value){if(done)return;done=true;dialog.close();resolve(value);}$("driveoverwrite").onclick=function(){finish("overwrite");};$("driveversion").onclick=function(){finish("version");};$("drivecancel").onclick=function(){finish("cancel");};dialog.oncancel=function(e){e.preventDefault();finish("cancel");};dialog.showModal();});}
   function driveDuplicate(result){return !!(result&&(result.needsDecision||result.duplicate||result.exists||result.conflict||result.status==="duplicate"||result.status==="exists"||result.code==="DUPLICATE"));}
   async function saveToDriveWithDecision(action,payload){payload.duplicateMode="ask";var first=await driveCall(action,payload);if(!driveDuplicate(first))return first;var choice=await chooseDriveConflict(first.conflicts||first.files||first.fileNames||[]);if(choice==="cancel")return {cancelled:true};payload.duplicateMode=choice;return driveCall(action,payload);}
@@ -2528,9 +2534,10 @@
   $("save").addEventListener("click", async function () {
     state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal();
     if (!state.site) { toast("기초입력에서 현장주소를 적용해주세요"); $("setupaddress").focus(); return; }
+    if (!window.confirm("Google Drive에 이 현장을 저장하시겠습니까?")) return;
     try {
       syncGlobalInputs();persist();
-      try{await ensureDriveBridge();var planCanvas=await buildSitePlanCanvas(),driveSaved=await saveToDriveWithDecision("saveSite",{siteName:state.site,siteData:state,planPngDataUrl:planCanvas.toDataURL("image/png")});await saveLocalSurvey();toast(driveSaved&&driveSaved.cancelled?"Google Drive 저장은 취소했습니다 — 이 브라우저에는 저장했습니다":"현장 저장 완료 — Google Drive의 "+state.site+"/현장평면도 폴더에 저장했습니다");return;}catch(driveError){await saveLocalSurvey();toast("Google Drive 저장에 실패하였습니다. 기기 내 로컬 저장소로 저장합니다. "+(driveError.message||driveError));return;}
+      try{await ensureDriveBridge();var planCanvas=await buildSitePlanCanvas(),driveSaved=await saveToDriveWithDecision("saveSite",{siteName:state.site,siteData:state,planPngDataUrl:planCanvas.toDataURL("image/png")});if(driveSaved&&driveSaved.cancelled){toast("Google Drive 저장을 취소했습니다");return;}if(driveBridgeWindow&&!driveBridgeWindow.closed)driveBridgeWindow.close();toast("현장 저장 완료 — Google Drive의 "+state.site+"/현장평면도 폴더에 저장했습니다");return;}catch(driveError){if(window.confirm("Google Drive 저장에 실패했습니다. 기기에 저장할까요?\n\n"+(driveError.message||driveError))){await saveLocalSurvey();toast("기기에 저장했습니다");}else toast("저장을 취소했습니다");return;}
     } catch (e) { toast("저장하지 못했습니다: " + e.message); }
   });
 
