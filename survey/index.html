@@ -2447,7 +2447,7 @@
   }
 
   $("savedrawing").addEventListener("click", async function () {
-    var button=this; button.disabled=true;try{openDriveBridgePopup();}catch(e){}
+    var button=this; button.disabled=true;if(!hasDirectDrive())try{openDriveBridgePopup();}catch(e){}
     try { var result=await saveDrawingPNG(); toast("실측도면 출력본 "+result.count+"페이지 저장 완료 — "+(result.driveSaved?"Google Drive 실측도면 폴더와 기기 다운로드 폴더를 확인하세요":(result.driveCancelled?"Drive 저장은 취소했고 기기 다운로드는 완료했습니다":(result.driveError?"Google Drive 저장에 실패하였습니다. 기기 파일 다운로드로 저장합니다. "+result.driveError:"기기 다운로드 폴더를 확인하세요")))); }
     catch(e) { toast(e.message || "실측도면 출력본을 저장하지 못했습니다"); }
     finally { button.disabled=false; }
@@ -2575,7 +2575,7 @@
     persist();
   }
   async function showSavedSurveys() {
-    try{openDriveBridgePopup();}catch(e){}
+    if(!hasDirectDrive())try{openDriveBridgePopup();}catch(e){}
     var host = $("savedlist"); host.innerHTML = '<div class="empty">불러오는 중…</div>';
     $("savedialog").showModal();
     try {
