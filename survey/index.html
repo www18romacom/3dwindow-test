@@ -74,7 +74,7 @@
     .floorplan-card > h2 { padding-inline: 10px; }
     .floorplan-card .btnrow { padding-inline: 4px; }
     #drop { min-height: 220px; }
-    .marker { width: 20px; height: 20px; margin: -10px 0 0 -10px;
+    .marker { width: 20px; height: 20px; min-height: 0; margin: -10px 0 0 -10px;
       border-width: 1.5px; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
     .marker.sel { transform: scale(1.15); box-shadow: 0 0 0 2px var(--accent); }
     .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff; }
@@ -82,7 +82,7 @@
     .body { padding: 10px; }
     input[type="text"], input[type="number"], select, textarea, button { min-height: 44px; }
     .part-top { min-height: 48px; }
-    .part-top .x { min-width: 40px; }
+    .part-top .x { min-width: 44px; }
   }
   @media (min-width: 1001px) {
     .floorplan-card { position: sticky; top: 12px; }
@@ -131,14 +131,15 @@
   .plan-tools { margin-top: 12px; }
   .plan-tools .tool-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .plan-tools .tool-group:first-child { margin-top: 0; }
+  .plan-tools .tool-group-danger { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); }
   .plan-tools .danger-tool { color: #b52d26; border-color: #d8aaa5; background: #fff7f6; }
   .plan-tools .danger-tool:hover { border-color: #b52d26; }
   .compact-label { display: none; }
   @media (max-width: 600px) {
     .plan-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 5px; margin-top: 7px; }
+      gap: 6px; margin-top: 7px; }
     .plan-tools .tool-group { display: contents; }
-    .plan-tools button { min-width: 0; min-height: 34px; padding: 5px 2px;
+    .plan-tools button { min-width: 0; min-height: 44px; padding: 5px 2px;
       border-radius: 6px; font-size: 11.5px; line-height: 1.15; white-space: nowrap; }
     .plan-tools #calibrate { grid-column: span 2; }
     .plan-tools #scalehint { grid-column: 1 / -1; min-width: 0; margin: -1px 2px 0 !important;
@@ -146,6 +147,9 @@
       white-space: nowrap; }
     .full-label { display: none; }
     .plan-tools .compact-label { display: inline; }
+    .plan-tools .tool-group-danger { display: block; grid-column: 1 / -1; margin-top: 14px;
+      padding-top: 12px; border-top: 1px dashed var(--line); }
+    .plan-tools .tool-group-danger button { width: 100%; min-height: 44px; }
   }
 
   /* ---- 평면도 ---- */
@@ -167,6 +171,10 @@
     border: 2px solid var(--accent-solid); background: var(--panel); color: var(--accent-solid);
     box-shadow: 0 2px 6px rgba(0,0,0,.28); touch-action: none; user-select: none; padding: 0;
     z-index: 4;
+  }
+  .marker::before {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    width: 44px; height: 44px; transform: translate(-50%, -50%);
   }
   .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
   .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
@@ -280,7 +288,8 @@
     width: 24px; height: 18px; padding: 0; font-size: 9px; line-height: 1;
     border-radius: 4px; display: grid; place-items: center;
   }
-  .x { flex: none; border: none; background: none; color: var(--ink-3); font-size: 17px; padding: 2px 6px; }
+  .x { flex: none; border: none; background: none; color: var(--ink-3); font-size: 17px; padding: 2px 6px;
+    min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
   .x:hover { color: var(--accent-solid); }
 
   .op-sum {
@@ -372,6 +381,24 @@
   }
   #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
   @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+  @media (max-width: 600px) {
+    #toast { top: 14px; bottom: auto; transform: translateX(-50%) translateY(-12px); }
+    #toast.on { transform: translateX(-50%) translateY(0); }
+  }
+  #undobar {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(12px);
+    background: var(--ink); color: var(--bg); padding: 8px 8px 8px 18px; border-radius: 999px;
+    font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+    z-index: 51; max-width: 92vw; display: flex; align-items: center; gap: 10px;
+  }
+  #undobar.on { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  #undobar button { background: transparent; color: var(--accent-solid, #ffb199); border: none;
+    font-weight: 700; padding: 8px 12px; min-height: 44px; border-radius: 999px; }
+  @media (max-width: 600px) {
+    #undobar { top: 14px; bottom: auto; transform: translateX(-50%) translateY(-12px); }
+    #undobar.on { transform: translateX(-50%) translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) { #undobar { transition: none; } }
 </style>
 </head>
 <body>
@@ -421,7 +448,6 @@
         <div class="tool-group">
           <button type="button" id="addnum" title="창호 번호 추가" aria-label="창호 번호 추가"><span class="full-label">+ 번호 추가</span><span class="compact-label">+ 번호</span></button>
           <button type="button" id="addentry" title="현관문 위치 지정" aria-label="현관문 위치 지정"><span class="full-label">+ 현관문 지정</span><span class="compact-label">+ 현관문</span></button>
-          <button type="button" id="clearpins" class="danger-tool" title="창호 번호 전체 삭제" aria-label="창호 번호 전체 삭제"><span class="full-label">번호 전체 삭제</span><span class="compact-label">번호 삭제</span></button>
           <button type="button" id="repick" title="현장 평면도 이미지 교체" aria-label="현장 평면도 이미지 교체"><span class="full-label">현장 평면도 교체</span><span class="compact-label">평면도 교체</span></button>
         </div>
         <div class="tool-group">
@@ -436,6 +462,9 @@
           <button type="button" id="walladd" title="누락된 벽 추가" aria-label="누락된 벽 추가"><span class="full-label">+ 누락 벽 추가</span><span class="compact-label">+ 벽 추가</span></button>
           <button type="button" id="wallremove" title="잘못 인식된 벽 제외" aria-label="잘못 인식된 벽 제외"><span class="full-label">잘못된 벽 제외</span><span class="compact-label">벽 제외</span></button>
           <button type="button" id="wallreset" class="danger-tool" title="벽 보정 내용 초기화" aria-label="벽 보정 내용 초기화"><span class="full-label">벽 보정 초기화</span><span class="compact-label">벽 초기화</span></button>
+        </div>
+        <div class="tool-group tool-group-danger">
+          <button type="button" id="clearpins" class="danger-tool" title="창호 번호 전체 삭제" aria-label="창호 번호 전체 삭제"><span class="full-label">번호 전체 삭제</span><span class="compact-label">번호 전체 삭제</span></button>
         </div>
       </div>
     </div>
@@ -497,6 +526,10 @@
 <dialog id="driveconflict"><div class="dialog-head"><b>Google Drive에 같은 파일이 있습니다</b></div><div class="dialog-body"><div id="driveconflictfiles" class="cap2"></div><p>저장 방법을 선택해주세요.</p><div class="btnrow"><button type="button" class="primary" id="driveoverwrite">덮어쓰기</button><button type="button" id="driveversion">새 버전으로 저장</button><button type="button" id="drivecancel">취소</button></div></div></dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="undobar" role="status" aria-live="assertive" hidden>
+  <span id="undobar-msg"></span>
+  <button type="button" id="undobar-btn">실행취소</button>
+</div>
 <datalist id="frame-options">
   <option value="B/F115"><option value="B/F140"><option value="B/F235"><option value="B/F250"><option value="B/FWA">
 </datalist>
@@ -934,7 +967,19 @@
     var t = $("toast");
     t.textContent = msg; t.classList.add("on");
     clearTimeout(toast._t);
-    toast._t = setTimeout(function () { t.classList.remove("on"); }, 2100);
+    toast._t = setTimeout(function () { t.classList.remove("on"); }, 3200);
+  }
+  function showUndo(msg, onUndo) {
+    var bar = $("undobar"), btn = $("undobar-btn");
+    $("undobar-msg").textContent = msg;
+    bar.hidden = false; bar.classList.add("on");
+    clearTimeout(showUndo._t);
+    function hide() { bar.classList.remove("on"); setTimeout(function () { bar.hidden = true; }, 200); }
+    function onClick() { hide(); clearTimeout(showUndo._t); onUndo(); btn.removeEventListener("click", onClick); }
+    btn.removeEventListener("click", showUndo._prevClick || function () {});
+    btn.addEventListener("click", onClick);
+    showUndo._prevClick = onClick;
+    showUndo._t = setTimeout(hide, 5000);
   }
 
   /* ---------------- 평면도 ---------------- */
@@ -1135,7 +1180,12 @@
   $("clearpins").addEventListener("click", function () {
     if (!state.pins.length) return;
     if (!confirm("번호 " + state.pins.length + "개를 모두 지울까요? 입력한 값도 함께 사라집니다.")) return;
-    state.pins = []; sel = null; render();
+    var backup = state.pins, backupSel = sel;
+    state.pins = []; sel = null; persist(); render(); refreshDone();
+    showUndo("번호 " + backup.length + "개를 지웠습니다", function () {
+      state.pins = backup; sel = backupSel; persist(); render(); refreshDone();
+      toast("복구했습니다");
+    });
   });
 
   /* ---------------- 개소 순서 바꾸기(드래그) / 개별 삭제 ---------------- */
@@ -1276,6 +1326,7 @@
     i.type = "number"; i.value = val; i.placeholder = ph;
     i.className = "dim" + (cls ? " " + cls : "");
     i.min = "0"; i.step = "1"; i.inputMode = "numeric";
+    i.addEventListener("focus", function () { this.select(); });
     i.addEventListener("input", function () { onInput(this.value); persist(); refreshDone(); });
     i.addEventListener("change", function () {
       // 숫자 입력을 마친 뒤 평면도와 3D 미리보기도 새 값으로 다시 그린다.
