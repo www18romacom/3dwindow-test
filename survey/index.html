@@ -500,6 +500,9 @@
 <datalist id="frame-options">
   <option value="B/F115"><option value="B/F140"><option value="B/F235"><option value="B/F250"><option value="B/FWA">
 </datalist>
+<datalist id="addon-frame-options">
+  <option value="B/F115"><option value="B/F140"><option value="B/F235"><option value="B/F250"><option value="B/FWA"><option value="40×105">
+</datalist>
 
 <script type="importmap">
 { "imports": {
@@ -687,7 +690,7 @@
   function dispY(fy) { return state.flipV ? (1 - fy) : fy; }
   var realX = dispX, realY = dispY;   // 뒤집기는 대칭이라 정방향/역방향 공식이 같다
 
-  function newSash(type) { return { kind: "sash", sashType: type || "normal", w: "0", h: "0", panels: "2짝", primary: "right", smallW:"0", smallH:"0", addon:null }; }
+  function newSash(type) { return { kind: "sash", sashType: type || "normal", w: "0", h: "0", panels: "2짝", primary: "right", smallW:"0", addon:null }; }
   function normalizeAddon(v,frame){if(!v||typeof v!=="object")return null;return {w:v.w===undefined||v.w===null?"0":String(v.w),h:v.h===undefined||v.h===null?"0":String(v.h),sashType:v.sashType||"normal",frame:typeof v.frame==="string"?v.frame:(frame||"")};}
   function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0], count: 1, stackDirection: "outside-in", layers: [{ spec: MULLION_SPECS[0], count: 1 }] }; }
   function newTurn() { return { kind: "turn", w: "0", h: "0", swing: "push", handle: "right" }; }
@@ -731,7 +734,7 @@
       if(t.kind==="mullion") return "통바 "+mullionLayerRows(t).map(function(v){return v.spec+" "+v.count+"개";}).join(" / ");
       if(t.kind==="entry") return "현관문 900x2100";
       var st=t.kind==="turn"?"turn":(t.sashType||"normal"), names={normal:"창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},addon=normalizeAddon(t.addon,p.frame);
-      return (names[st]||"창")+" "+(t.w||0)+"x"+(t.h||0)+(st==="normal"?" - "+(t.panels||"2짝"):st==="unbalanced"?" - 소형창 "+(t.smallW||0)+"x"+(t.smallH||0):"")+(addon?" - 덧창 "+addon.w+"x"+addon.h:"");
+      return (names[st]||"창")+" "+(t.w||0)+"x"+(t.h||0)+(st==="normal"?" - "+(t.panels||"2짝"):st==="unbalanced"?" - 소형창 폭 "+(t.smallW||0):"")+(addon?" - 덧창 "+addon.w+"x"+addon.h:"");
     }).join(" + ");
   }
   function syncComposition(p) { p.composition=compositionSummary(p); var i=state.pins.indexOf(p),el=document.querySelector('textarea[data-composition-pin="'+i+'"]');if(el)el.value=p.composition; }
@@ -750,14 +753,14 @@
   function requiresFrame(p) {
     return !!(p && p.parts && p.parts.some(function(t){ return t.kind === "sash" || t.kind === "turn"; }));
   }
-  function frameDepthMm(v) { var m=String(v||"").match(/(115|140|235|250)/);return m?Number(m[1]):(/FWA/i.test(v||"")?230:null); }
+  function frameDepthMm(v) { var s=String(v||""),special=s.match(/40\s*[xX×]\s*105/),m=s.match(/(115|140|235|250)/);return special?105:(m?Number(m[1]):(/FWA/i.test(s)?230:null)); }
   function visiblePinLabel(p, index) {
     if (isEntryPin(p)) return "현관";
     var number = 0;
     for (var i = 0; i <= index; i++) if (!isEntryPin(state.pins[i])) number++;
     return String(number);
   }
-  function markerSizeForPin() { return (window.matchMedia("(max-width:600px)").matches ? 18 : 24) * planZoom; }
+  function markerSizeForPin() { return window.matchMedia("(max-width:600px)").matches ? 18 : 24; }
   function edgeFallbackAngle(x, y) {
     var toLR = Math.min(x, 1 - x);   // 좌/우 가장자리까지 거리 — 가까우면 세로벽(세로 막대)
     var toTB = Math.min(y, 1 - y);   // 상/하 가장자리까지 거리 — 가까우면 가로벽(가로 막대)
@@ -984,7 +987,7 @@
     e.target.value = "";
   });
   var drop = $("drop");
-  installPanScroller(drop,function(e){return planZoom>1&&e.pointerType==="touch";});
+  installPanScroller(drop,function(){return planZoom>1;});
   installPlanPinch(drop);
   installPanScroller($("drawingpreview").querySelector(".preview-zoom-wrap"),function(){return previewZoom>1;});
   ["dragenter", "dragover"].forEach(function (ev) {
@@ -1041,6 +1044,7 @@
     var fx=point.x,fy=point.y;
     if (pickMode) {
       if (pickMode.type === "entry") {
+        state.pins = state.pins.filter(function(pin){return !isEntryPin(pin);});
         var entryPin = newPin(fx, fy); entryPin.name = "현관"; entryPin.drawInDrawing = false; entryPin.parts = [newEntry()];
         state.pins.push(entryPin); pickMode = null; persist(); openCard(state.pins.length - 1, false);
         toast("현관 위치를 지정했습니다"); return;
@@ -1503,6 +1507,7 @@
     frameInput.type = "text"; frameInput.value = p.frame || ""; frameInput.placeholder = "예: B/F115";
     frameInput.setAttribute("list", "frame-options");
     frameInput.addEventListener("input", function () { p.frame = this.value; persist(); refreshDone(); });
+    frameInput.addEventListener("focus", function () { this.select(); });
     fr.appendChild(labeled("프레임 두께", frameInput));
     body.appendChild(fr);
     }
@@ -1638,13 +1643,12 @@
       }
       if ((t.sashType||"normal") === "unbalanced") {
         g.appendChild(labeled("소형창 폭 (mm)",numInput(t.smallW||"0","800",function(v){t.smallW=v;syncComposition(p);persist();refreshDone();})));
-        g.appendChild(labeled("소형창 높이 (mm)",numInput(t.smallH||"0","800",function(v){t.smallH=v;syncComposition(p);persist();refreshDone();})));
       }
       if ((t.sashType||"normal") === "turn") { var turnInfo=document.createElement("div");turnInfo.className="cap2";turnInfo.textContent="미는 문 · 오른쪽 손잡이 · 15° 열림";g.appendChild(turnInfo); }
       d.appendChild(g);
       t.addon=normalizeAddon(t.addon,p.frame);
       if(!t.addon){var addAddon=document.createElement("button");addAddon.type="button";addAddon.className="tiny";addAddon.textContent="+ 덧창 추가";addAddon.addEventListener("click",function(){t.addon={w:t.w||"0",h:t.h||"0",sashType:"normal",frame:p.frame||""};persist();render();});d.appendChild(addAddon);}
-      else {var addon=document.createElement("div");addon.className="addon-box";var addonHead=document.createElement("div");addonHead.className="addon-head";var addonTitle=document.createElement("b");addonTitle.textContent="안쪽 덧창";var addonRemove=document.createElement("button");addonRemove.type="button";addonRemove.className="x";addonRemove.textContent="×";addonRemove.title="덧창 삭제";addonRemove.addEventListener("click",function(){t.addon=null;persist();render();});addonHead.appendChild(addonTitle);addonHead.appendChild(addonRemove);addon.appendChild(addonHead);var addonGrid=document.createElement("div");addonGrid.className="grid2";addonGrid.appendChild(labeled("덧창 종류",sel1([["normal","일반 창"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"]],t.addon.sashType,function(v){t.addon.sashType=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 폭 (mm)",numInput(t.addon.w,"4170",function(v){t.addon.w=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 높이 (mm)",numInput(t.addon.h,"2250",function(v){t.addon.h=v;persist();refreshDone();})));var addonFrame=document.createElement("input");addonFrame.type="text";addonFrame.setAttribute("list","frame-options");addonFrame.value=t.addon.frame||"";addonFrame.placeholder="예: B/F140";addonFrame.addEventListener("input",function(){t.addon.frame=this.value;persist();refreshDone();});addonGrid.appendChild(labeled("덧창 프레임",addonFrame));addon.appendChild(addonGrid);d.appendChild(addon);}
+      else {var addon=document.createElement("div");addon.className="addon-box";var addonHead=document.createElement("div");addonHead.className="addon-head";var addonTitle=document.createElement("b");addonTitle.textContent="안쪽 덧창";var addonRemove=document.createElement("button");addonRemove.type="button";addonRemove.className="x";addonRemove.textContent="×";addonRemove.title="덧창 삭제";addonRemove.addEventListener("click",function(){t.addon=null;persist();render();});addonHead.appendChild(addonTitle);addonHead.appendChild(addonRemove);addon.appendChild(addonHead);var addonGrid=document.createElement("div");addonGrid.className="grid2";addonGrid.appendChild(labeled("덧창 종류",sel1([["normal","일반 창"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"]],t.addon.sashType,function(v){t.addon.sashType=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 폭 (mm)",numInput(t.addon.w,"4170",function(v){t.addon.w=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 높이 (mm)",numInput(t.addon.h,"2250",function(v){t.addon.h=v;persist();refreshDone();})));var addonFrame=document.createElement("input");addonFrame.type="text";addonFrame.setAttribute("list","addon-frame-options");addonFrame.value=t.addon.frame||"";addonFrame.placeholder="예: B/F140 또는 40×105";addonFrame.addEventListener("input",function(){t.addon.frame=this.value;persist();refreshDone();});addonFrame.addEventListener("focus",function(){this.select();});addonGrid.appendChild(labeled("덧창 프레임",addonFrame));addon.appendChild(addonGrid);d.appendChild(addon);}
     } else if (t.kind === "turn") {
       var g2 = document.createElement("div");
       g2.className = "grid2";
@@ -1822,8 +1826,8 @@
         var iw = w - 2 * T_OUTER, ih = h - 2 * T_OUTER;
         function sashPanel(px,py,pw,ph,noff,mat){if(pw<=2*T_PANEL||ph<=2*T_PANEL)return;ring(px,py,pw,ph,T_PANEL,D_PANEL,noff,mat||"frame");boxes.push({mat:"glass",pos:[px+pw/2,py+ph/2,noff],size:[pw-2*T_PANEL,ph-2*T_PANEL,GLASS_T]});}
         if((t.sashType||"normal")==="unbalanced"){
-          var smallW=Math.max(2*T_PANEL+10,Math.min(iw-2*T_PANEL-10,Number(t.smallW)||iw*.3)),smallH=Math.max(2*T_PANEL+10,Math.min(ih,Number(t.smallH)||ih*.5));
-          sashPanel(x+T_OUTER,sashY+T_OUTER+ih-smallH,smallW,smallH,-RAIL_OFF,"frame");
+          var smallW=Math.max(2*T_PANEL+10,Math.min(iw-2*T_PANEL-10,Number(t.smallW)||iw*.3)),smallH=ih;
+          sashPanel(x+T_OUTER,sashY+T_OUTER,smallW,smallH,-RAIL_OFF,"frame");
           sashPanel(x+T_OUTER+smallW,sashY+T_OUTER,iw-smallW,ih,RAIL_OFF,"frame");
         }else{
           var n = (t.panels === "fix" || t.panels === "고정") ? 1 : (parseInt(t.panels, 10) || 2),ratios = n === 3 ? [1, 2, 1] : new Array(n).fill(1),ratioTotal = ratios.reduce(function (a, b) { return a + b; }, 0), panelX = 0,prim = (PRIMARY_MAP[n] && PRIMARY_MAP[n][t.primary]) || [];
@@ -2279,7 +2283,7 @@
       var typeNames={normal:"일반 창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
       var kind = t.kind === "turn" ? "터닝도어" : (typeNames[t.sashType||"normal"] || "일반 창");
       var extra = t.kind === "sash" && (t.sashType||"normal") === "normal" ? " · " + escapeHTML(t.panels || "") : "";
-      var small=(t.sashType||"")==="unbalanced"?" · 소형창 "+escapeHTML(t.smallW||"-")+"×"+escapeHTML(t.smallH||"-"):"",addon=normalizeAddon(t.addon,p.frame),addonText=addon?" · 덧창 "+escapeHTML(addon.w)+"×"+escapeHTML(addon.h):"";
+      var small=(t.sashType||"")==="unbalanced"?" · 소형창 폭 "+escapeHTML(t.smallW||"-"):"",addon=normalizeAddon(t.addon,p.frame),addonText=addon?" · 덧창 "+escapeHTML(addon.w)+"×"+escapeHTML(addon.h):"";
       return kind + " " + escapeHTML(t.w || "-") + "×" + escapeHTML(t.h || "-") + extra + small + addonText;
     }).join("<br>");
   }
@@ -2322,7 +2326,7 @@
       if (t.kind === "mullion") return "통바 " + mullionLayerRows(t).map(function(v){return v.spec+" "+v.count+"개";}).join(" / ");
       if (t.kind === "entry") return "현관문 900×2100";
       var names={normal:"일반 창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},addon=normalizeAddon(t.addon,p.frame);
-      return (t.kind === "turn" ? "터닝도어 " : (names[t.sashType||"normal"]||"일반 창")+" ") + (t.w || "-") + "×" + (t.h || "-") + (t.kind === "sash"&&(t.sashType||"normal")==="normal" ? " · " + (t.panels || "") : (t.sashType||"")==="unbalanced"?" · 소형창 "+(t.smallW||"-")+"×"+(t.smallH||"-"):"")+(addon?" · 덧창 "+addon.w+"×"+addon.h:"");
+      return (t.kind === "turn" ? "터닝도어 " : (names[t.sashType||"normal"]||"일반 창")+" ") + (t.w || "-") + "×" + (t.h || "-") + (t.kind === "sash"&&(t.sashType||"normal")==="normal" ? " · " + (t.panels || "") : (t.sashType||"")==="unbalanced"?" · 소형창 폭 "+(t.smallW||"-"):"")+(addon?" · 덧창 "+addon.w+"×"+addon.h:"");
     }).join(" / ");
   }
   function wrapCanvasText(ctx, text, maxWidth) {
@@ -2371,14 +2375,14 @@
     if(img){ c.save(); c.translate(state.flipH?planX+planW:planX,state.flipV?py+planH:py); c.scale(state.flipH?-1:1,state.flipV?-1:1); c.drawImage(img,0,0,planW,planH); c.restore();
       state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW,y=py+dispY(p.y)*planH,entry=isEntryPin(p);drawPlanStructureCanvas(c,p,x,y,planW,planH,img);c.beginPath();c.arc(x,y,18,0,Math.PI*2);c.fillStyle=entry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=entry?"#287a68":"#6d571d";c.lineWidth=2;c.stroke();c.fillStyle=entry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font=entry?'bold 11px "Gulim"':'bold 20px "Gulim"';c.fillText(visiblePinLabel(p,i),x,y);}); }
     else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Gulim"'; c.fillText("평면도 없음",W/2,py+planH/2); }
-    function partSize(t){
+    function partSize(t,p){
       if(t.kind==="mullion"){var layers=mullionLayers(t),rows=mullionLayerRows(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;}));return {w:mw,h:100,kind:t.kind,layers:layers,rows:rows,stackDirection:t.stackDirection,fixedW:mw<=40?12:28,label:"통바"};}
       var pw=parseFloat(t.w)|| (t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
       var names={normal:"일반 창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},stype=t.kind==="turn"?"turn":(t.sashType||"normal"),addon=normalizeAddon(t.addon,p.frame);
-      return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,smallW:Number(t.smallW)||0,smallH:Number(t.smallH)||0,addon:addon,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
+      return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,smallW:Number(t.smallW)||0,addon:addon,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
     }
     function drawPanel(p,i,x,y,panelH){
-      var footerData=panelFooterData(p),headH=48,footH=0,topViewH=190+Math.max(0,footerData.details.length-1)*20,drawTop=y+headH,drawH=panelH-headH-topViewH,sizes=drawingPartsGrouped(p).map(partSize),layout=[];
+      var footerData=panelFooterData(p),headH=48,footH=0,topViewH=190+Math.max(0,footerData.details.length-1)*20,drawTop=y+headH,drawH=panelH-headH-topViewH,sizes=drawingPartsGrouped(p).map(function(t){return partSize(t,p);}),layout=[];
       c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.stroke();
       c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Gulim"';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
       c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim"';c.fillText("정면도 (실내에서 봄)",x+14,drawTop+8);
@@ -2389,7 +2393,7 @@
         var sw=s.kind==="mullion"?s.fixedW:Math.max(10,s.w*scale),sh=Math.max(10,s.h*scale),sy=base-sh;layout.push({s:s,x:dx,w:sw});if(s.kind==="mullion"){c.fillStyle="#ccecf2";c.fillRect(dx,sy,sw,sh);}c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.lineWidth=2;c.strokeRect(dx,sy,sw,sh);
         if(s.kind==="turn"||s.kind==="entry"||s.sashType==="turn"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.stroke();}
         if(s.kind==="sash"&&s.sashType==="normal"&&s.panels>1){var panelRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),panelTotal=panelRatios.reduce(function(a,b){return a+b;},0),panelAt=0;panelRatios.slice(0,-1).forEach(function(r){panelAt+=r;c.beginPath();c.moveTo(dx+sw*panelAt/panelTotal,sy);c.lineTo(dx+sw*panelAt/panelTotal,base);c.stroke();});}
-        if(s.kind==="sash"&&s.sashType==="unbalanced"){var smallW=Math.max(1,Math.min(s.w-1,s.smallW||s.w*.3)),smallH=Math.max(1,Math.min(s.h,s.smallH||s.h*.5)),smallX=dx+sw*smallW/s.w,smallY=sy+sh*smallH/s.h;c.beginPath();c.moveTo(smallX,sy);c.lineTo(smallX,base);c.moveTo(dx,smallY);c.lineTo(smallX,smallY);c.stroke();c.fillStyle="#333";c.textAlign="center";c.textBaseline="top";c.font='13px "Gulim"';c.fillText("소형창 "+Math.round(smallW)+"×"+Math.round(smallH),dx+(smallX-dx)/2,smallY+4);}
+        if(s.kind==="sash"&&s.sashType==="unbalanced"){var smallW=Math.max(1,Math.min(s.w-1,s.smallW||s.w*.3)),smallX=dx+sw*smallW/s.w;c.beginPath();c.moveTo(smallX,sy);c.lineTo(smallX,base);c.stroke();c.fillStyle="#333";c.textAlign="center";c.textBaseline="top";c.font='13px "Gulim"';c.fillText("소형창 폭 "+Math.round(smallW),dx+(smallX-dx)/2,sy+4);}
         if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0],markRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),markTotal=markRatios.reduce(function(a,b){return a+b;},0);c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Gulim"';primaryPanels.forEach(function(pi){var before=markRatios.slice(0,pi).reduce(function(a,b){return a+b;},0);c.fillText("#",dx+sw*(before+markRatios[pi]/2)/markTotal,sy+sh/2);});}
         if(s.kind!=="mullion"){if(s.addon){var inset=Math.min(10,sw*.06,sh*.06);c.save();c.setLineDash([7,5]);c.strokeStyle="#2f8577";c.lineWidth=2;c.strokeRect(dx+inset,sy+inset,Math.max(2,sw-inset*2),Math.max(2,sh-inset*2));c.restore();c.fillStyle="#2f8577";c.textAlign="center";c.textBaseline="bottom";c.font='13px "Gulim"';c.fillText("덧창 "+s.addon.w+"×"+s.addon.h,dx+sw/2,base-5);}c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font='16px "Gulim"';c.fillText(s.label,dx+sw/2,sy-7);}dx+=sw;
       });
@@ -2448,7 +2452,7 @@
             var addon=normalizeAddon(t.addon,p.frame);
             return { kind: "sash", sashType: t.sashType || "normal", width: num(t.w), height: num(t.h),
                      panels: panelsOut(t.panels), primary: t.primary,
-                     smallWindow:(t.sashType||"")==="unbalanced"?{width:num(t.smallW),height:num(t.smallH)}:null,
+                     smallWindow:(t.sashType||"")==="unbalanced"?{width:num(t.smallW)}:null,
                      addon:addon?{width:num(addon.w),height:num(addon.h),sashType:addon.sashType,frame:addon.frame}:null };
           }),
           plan: { x: Math.round(p.x * 10000) / 10000, y: Math.round(p.y * 10000) / 10000,
@@ -2573,7 +2577,7 @@
         if (t.kind === "mullion") normalizeMullionPart(t);
         if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
         if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if(typeof t.drawInDrawing!=="boolean")t.drawInDrawing=false; }
-        if (t.kind === "sash") { if(!t.sashType)t.sashType=t.panels==="고정"?"fix":"normal";t.smallW=t.smallW===undefined?"0":String(t.smallW);t.smallH=t.smallH===undefined?"0":String(t.smallH);t.addon=normalizeAddon(t.addon,p.frame); }
+        if (t.kind === "sash") { if(!t.sashType)t.sashType=t.panels==="고정"?"fix":"normal";t.smallW=t.smallW===undefined?"0":String(t.smallW);delete t.smallH;t.addon=normalizeAddon(t.addon,p.frame); }
       });
       if (/현관/.test(p.name || "") && Array.isArray(p.parts)) p.parts = p.parts.map(function (t) {
         return t.kind === "turn" ? newEntry() : t;
@@ -2654,14 +2658,13 @@
                        panels: t.panels === "fix" ? "고정" : (t.panels ? t.panels + "짝" : "2짝"),
                        primary: t.primary || "right",
                        smallW:t.smallWindow&&t.smallWindow.width!==null&&t.smallWindow.width!==undefined?String(t.smallWindow.width):"0",
-                       smallH:t.smallWindow&&t.smallWindow.height!==null&&t.smallWindow.height!==undefined?String(t.smallWindow.height):"0",
                        addon:t.addon?normalizeAddon({w:t.addon.width,h:t.addon.height,sashType:t.addon.sashType,frame:t.addon.frame},m.frame||""):null };
             });
           } else if (m.width !== undefined || m.height !== undefined) {
             parts = [{ kind: "sash", sashType:"normal",
                        w: m.width === null || m.width === undefined ? "" : String(m.width),
                        h: m.height === null || m.height === undefined ? "" : String(m.height),
-                       panels: "2짝", primary: "right", smallW:"0", smallH:"0", addon:null }];
+                       panels: "2짝", primary: "right", smallW:"0", addon:null }];
           } else {
             parts = [];
           }
