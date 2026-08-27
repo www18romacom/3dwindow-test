@@ -229,7 +229,7 @@
   .span-bar {
     position: absolute; transform: translate(-50%, -50%);
     background: transparent; opacity: .82; border-radius: 0;
-    pointer-events: none; z-index: 3; min-width: 10px; min-height: 8px;
+    pointer-events: none; z-index: 3;
   }
   .span-bar svg { display:block; width:100%; height:100%; overflow:visible; }
   .span-bar.sel { opacity: .8; }
@@ -1508,7 +1508,8 @@
     frameInput.type = "text"; frameInput.value = p.frame || ""; frameInput.placeholder = "예: B/F115";
     frameInput.setAttribute("list", "frame-options");
     frameInput.addEventListener("input", function () { p.frame = this.value; persist(); refreshDone(); });
-    frameInput.addEventListener("focus", function () { this.select(); });
+    frameInput.addEventListener("focus", function () { this.dataset.prev = this.value; this.value = ""; });
+    frameInput.addEventListener("blur", function () { if (this.value.trim() === "" && this.dataset.prev) this.value = this.dataset.prev; });
     fr.appendChild(labeled("프레임 두께", frameInput));
     body.appendChild(fr);
     }
@@ -1649,7 +1650,7 @@
       d.appendChild(g);
       t.addon=normalizeAddon(t.addon,p.frame);
       if(!t.addon){var addAddon=document.createElement("button");addAddon.type="button";addAddon.className="tiny";addAddon.textContent="+ 덧창 추가";addAddon.addEventListener("click",function(){t.addon={w:t.w||"0",h:t.h||"0",sashType:"normal",frame:p.frame||""};persist();render();});d.appendChild(addAddon);}
-      else {var addon=document.createElement("div");addon.className="addon-box";var addonHead=document.createElement("div");addonHead.className="addon-head";var addonTitle=document.createElement("b");addonTitle.textContent="안쪽 덧창";var addonRemove=document.createElement("button");addonRemove.type="button";addonRemove.className="x";addonRemove.textContent="×";addonRemove.title="덧창 삭제";addonRemove.addEventListener("click",function(){t.addon=null;persist();render();});addonHead.appendChild(addonTitle);addonHead.appendChild(addonRemove);addon.appendChild(addonHead);var addonGrid=document.createElement("div");addonGrid.className="grid2";addonGrid.appendChild(labeled("덧창 종류",sel1([["normal","일반 창"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"]],t.addon.sashType,function(v){t.addon.sashType=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 폭 (mm)",numInput(t.addon.w,"4170",function(v){t.addon.w=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 높이 (mm)",numInput(t.addon.h,"2250",function(v){t.addon.h=v;persist();refreshDone();})));var addonFrame=document.createElement("input");addonFrame.type="text";addonFrame.setAttribute("list","addon-frame-options");addonFrame.value=t.addon.frame||"";addonFrame.placeholder="예: B/F140 또는 40×105";addonFrame.addEventListener("input",function(){t.addon.frame=this.value;persist();refreshDone();});addonFrame.addEventListener("focus",function(){this.select();});addonGrid.appendChild(labeled("덧창 프레임",addonFrame));addon.appendChild(addonGrid);d.appendChild(addon);}
+      else {var addon=document.createElement("div");addon.className="addon-box";var addonHead=document.createElement("div");addonHead.className="addon-head";var addonTitle=document.createElement("b");addonTitle.textContent="안쪽 덧창";var addonRemove=document.createElement("button");addonRemove.type="button";addonRemove.className="x";addonRemove.textContent="×";addonRemove.title="덧창 삭제";addonRemove.addEventListener("click",function(){t.addon=null;persist();render();});addonHead.appendChild(addonTitle);addonHead.appendChild(addonRemove);addon.appendChild(addonHead);var addonGrid=document.createElement("div");addonGrid.className="grid2";addonGrid.appendChild(labeled("덧창 종류",sel1([["normal","일반 창"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"],["mullion","통바 프레임"]],t.addon.sashType,function(v){t.addon.sashType=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 폭 (mm)",numInput(t.addon.w,"4170",function(v){t.addon.w=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 높이 (mm)",numInput(t.addon.h,"2250",function(v){t.addon.h=v;persist();refreshDone();})));var addonFrame=document.createElement("input");addonFrame.type="text";addonFrame.setAttribute("list","addon-frame-options");addonFrame.value=t.addon.frame||"";addonFrame.placeholder="예: B/F140 또는 40×105";addonFrame.addEventListener("input",function(){t.addon.frame=this.value;persist();refreshDone();});addonFrame.addEventListener("focus",function(){this.dataset.prev=this.value;this.value="";});addonFrame.addEventListener("blur",function(){if(this.value.trim()===""&&this.dataset.prev)this.value=this.dataset.prev;});addonGrid.appendChild(labeled("덧창 프레임",addonFrame));addon.appendChild(addonGrid);d.appendChild(addon);}
     } else if (t.kind === "turn") {
       var g2 = document.createElement("div");
       g2.className = "grid2";
