@@ -610,10 +610,12 @@
     requestAnimationFrame(function(){viewport.scrollLeft=pageState.left;viewport.scrollTop=pageState.top;});
   }
   function installPanScroller(el,enabled) {
-    var active=false,activeId=null,startX=0,startY=0,startLeft=0,startTop=0;
-    el.addEventListener("pointerdown",function(e){if(active||!enabled(e)||e.target.closest(".marker,.span-bar,button"))return;active=true;activeId=e.pointerId;panMoved=false;startX=e.clientX;startY=e.clientY;startLeft=el.scrollLeft;startTop=el.scrollTop;el.classList.add("panning");el.setPointerCapture(e.pointerId);});
-    el.addEventListener("pointermove",function(e){if(!active||e.pointerId!==activeId||pinching)return;var dx=e.clientX-startX,dy=e.clientY-startY;if(Math.abs(dx)+Math.abs(dy)>14)panMoved=true;if(panMoved){e.preventDefault();el.scrollLeft=startLeft-dx;el.scrollTop=startTop-dy;}});
-    function end(e){if(!active||e.pointerId!==activeId)return;active=false;activeId=null;el.classList.remove("panning");try{el.releasePointerCapture(e.pointerId);}catch(_){ }setTimeout(function(){panMoved=false;},0);}
+    var tracking=false,engaged=false,activeId=null,startX=0,startY=0,startLeft=0,startTop=0;
+    el.addEventListener("pointerdown",function(e){if(tracking||!enabled(e)||e.target.closest(".marker,.span-bar,button"))return;tracking=true;engaged=false;activeId=e.pointerId;panMoved=false;startX=e.clientX;startY=e.clientY;startLeft=el.scrollLeft;startTop=el.scrollTop;});
+    el.addEventListener("pointermove",function(e){if(!tracking||e.pointerId!==activeId||pinching)return;var dx=e.clientX-startX,dy=e.clientY-startY;
+      if(!engaged){if(Math.abs(dx)+Math.abs(dy)<=14)return;engaged=true;panMoved=true;el.classList.add("panning");try{el.setPointerCapture(activeId);}catch(_){ }}
+      e.preventDefault();el.scrollLeft=startLeft-dx;el.scrollTop=startTop-dy;});
+    function end(e){if(!tracking||e.pointerId!==activeId)return;tracking=false;activeId=null;if(engaged){el.classList.remove("panning");try{el.releasePointerCapture(e.pointerId);}catch(_){ }}engaged=false;setTimeout(function(){panMoved=false;},0);}
     el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
   }
   function installPlanPinch(el) {
