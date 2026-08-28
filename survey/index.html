@@ -223,6 +223,9 @@
     border:1px solid var(--line); border-radius:7px; color:var(--ink-2); cursor:grab;
     touch-action:none; user-select:none; font-weight:700; }
   .part-dragging .part-drag-handle { cursor:grabbing; color:var(--accent-solid); border-color:var(--accent-solid); }
+  .part-dragging { opacity:.68; box-shadow:0 8px 20px rgba(20,20,25,.18); }
+  .part-drop-before { box-shadow:inset 0 4px 0 var(--accent-solid); }
+  .part-drop-after { box-shadow:inset 0 -4px 0 var(--accent-solid); }
   @media (max-width: 600px) {
     .site-fields { grid-template-columns:1fr; }
     .site-fields .wide { grid-column:auto; }
@@ -514,7 +517,7 @@
   <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div></div>
 </dialog>
 
-<dialog id="drawingpreview"><div class="dialog-head"><b>실측도면 미리보기</b><div class="page-tools"><button type="button" id="previewprev" aria-label="이전 페이지">‹</button><span id="previewpage">1 / 1페이지</span><button type="button" id="previewnext" aria-label="다음 페이지">›</button></div><span class="sp"></span><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><div id="drawingpreviewcontent"><img id="drawingpreviewimage" draggable="false" alt="실측도면 출력본 미리보기" style="display:block;width:100%;height:auto"></div></div></dialog>
+<dialog id="drawingpreview"><div class="dialog-head"><b>실측도면 미리보기</b><div class="page-tools"><button type="button" id="previewprev" aria-label="이전 페이지">‹</button><span id="previewpage">1 / 1페이지</span><button type="button" id="previewnext" aria-label="다음 페이지">›</button></div><span class="sp"></span><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomreset" aria-label="미리보기 100%">100%</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><div id="drawingpreviewcontent"><img id="drawingpreviewimage" draggable="false" alt="실측도면 출력본 미리보기" style="display:block;width:100%;height:auto"></div></div></dialog>
 
 <dialog id="savedialog">
   <div class="dialog-head"><b>저장된 현장</b><button type="button" class="x" id="closesaved">×</button></div>
@@ -584,14 +587,21 @@
   var activeProject3D = null;
   var planPixels = null;     // 업로드한 원본 평면도의 굵은 벽선 방향 판별용
   var planZoom = 1, previewZoom = 1, panMoved = false, pinching = false, previewPages=[], previewPageIndex=0, previewPageStates=[], previewHasSitePlan=false;
-  var DRIVE_BRIDGE_URL="https://script.google.com/a/macros/ykenc.com/s/AKfycbz8QFsPx_YJe9mtxToAzjO0xD7rq34b6AEJQapUpAxtapFAoQXR4T4aCa1chneAeupghg/exec",driveBridgeWindow=null,driveBridgeChannel=null,driveBridgeReady=false,driveRequests={};
-  function openDriveBridgePopup(){window.name="ykSurveyDriveClient";if(driveBridgeWindow&&!driveBridgeWindow.closed){driveBridgeWindow.focus();return driveBridgeWindow;}driveBridgeReady=false;driveBridgeChannel=null;driveBridgeWindow=window.open(DRIVE_BRIDGE_URL,"ykSurveyDriveBridge","popup=yes,width=520,height=420,resizable=yes,scrollbars=yes");if(!driveBridgeWindow)throw new Error("Drive 인증 팝업이 차단됐습니다. 팝업을 허용해주세요");return driveBridgeWindow;}
-  window.addEventListener("message",function(event){var msg=event.data||{},googleOrigin=/^https:\/\/([a-z0-9-]+\.)?(script\.google\.com|googleusercontent\.com)$/.test(event.origin),isReady=msg==="Drive bridge ready"||msg.ready||msg.action==="ready"||msg.message==="Drive bridge ready"||msg.type==="drive-bridge-ready"||msg.type==="DRIVE_BRIDGE_READY";if(isReady&&googleOrigin&&driveBridgeWindow&&!driveBridgeWindow.closed){driveBridgeChannel=event.source;driveBridgeReady=true;return;}if(!driveBridgeChannel||event.source!==driveBridgeChannel||!msg.requestId)return;var req=driveRequests[msg.requestId];if(!req)return;delete driveRequests[msg.requestId];clearTimeout(req.timer);var ok=msg.ok!==undefined?msg.ok:(msg.success!==undefined?msg.success:!msg.error),result=msg.result!==undefined?msg.result:(msg.data!==undefined?msg.data:msg);ok?req.resolve(result):req.reject(new Error(msg.error||msg.message||"Google Drive 요청 실패"));});
-  function waitDriveBridgeReady(){return new Promise(function(resolve,reject){var started=Date.now(),timer=setInterval(function(){if(!driveBridgeWindow||driveBridgeWindow.closed){clearInterval(timer);driveBridgeReady=false;reject(new Error("Drive 인증 창이 닫혔습니다"));return;}if(driveBridgeReady){clearInterval(timer);resolve();return;}if(Date.now()-started>10000){clearInterval(timer);reject(new Error("Drive 인증 응답 시간이 초과됐습니다. ykenc.com 로그인 상태를 확인하세요"));}},100);});}
+  var DRIVE_BRIDGE_URL="https://script.google.com/a/macros/ykenc.com/s/AKfycbz8QFsPx_YJe9mtxToAzjO0xD7rq34b6AEJQapUpAxtapFAoQXR4T4aCa1chneAeupghg/exec",driveBridgeWindow=null,driveBridgeFrame=null,driveBridgeChannel=null,driveBridgeReady=false,driveRequests={};
+  function openDriveBridgePopup(){window.name="ykSurveyDriveClient";if(driveBridgeWindow&&!driveBridgeWindow.closed)return driveBridgeWindow;driveBridgeReady=false;driveBridgeChannel=null;driveBridgeWindow=window.open(DRIVE_BRIDGE_URL,"ykSurveyDriveBridge","popup=yes,width=520,height=420,resizable=yes,scrollbars=yes");if(!driveBridgeWindow)throw new Error("Drive 인증 팝업이 차단됐습니다. 팝업을 허용해주세요");return driveBridgeWindow;}
+  function openDriveBridgeFrame(){if(driveBridgeFrame&&driveBridgeFrame.contentWindow)return driveBridgeFrame;driveBridgeReady=false;driveBridgeChannel=null;driveBridgeFrame=document.createElement("iframe");driveBridgeFrame.src=DRIVE_BRIDGE_URL;driveBridgeFrame.title="Google Drive 연결";driveBridgeFrame.hidden=true;driveBridgeFrame.setAttribute("aria-hidden","true");document.body.appendChild(driveBridgeFrame);return driveBridgeFrame;}
+  function bridgeAvailable(){return !!(driveBridgeChannel&&(driveBridgeReady||driveBridgeFrame||(driveBridgeWindow&&!driveBridgeWindow.closed)));}
+  window.addEventListener("message",function(event){var msg=event.data||{},googleOrigin=/^https:\/\/([a-z0-9-]+\.)?(script\.google\.com|googleusercontent\.com)$/.test(event.origin),isReady=msg==="Drive bridge ready"||msg.ready||msg.action==="ready"||msg.message==="Drive bridge ready"||msg.type==="drive-bridge-ready"||msg.type==="DRIVE_BRIDGE_READY";if(isReady&&googleOrigin){driveBridgeChannel=event.source;driveBridgeReady=true;return;}if(!driveBridgeChannel||event.source!==driveBridgeChannel||!msg.requestId)return;var req=driveRequests[msg.requestId];if(!req)return;delete driveRequests[msg.requestId];clearTimeout(req.timer);var ok=msg.ok!==undefined?msg.ok:(msg.success!==undefined?msg.success:!msg.error),result=msg.result!==undefined?msg.result:(msg.data!==undefined?msg.data:msg);ok?req.resolve(result):req.reject(new Error(msg.error||msg.message||"Google Drive 요청 실패"));});
+  function waitDriveBridgeReady(){return new Promise(function(resolve,reject){var started=Date.now(),timer=setInterval(function(){if(driveBridgeReady&&driveBridgeChannel){clearInterval(timer);resolve();return;}if(Date.now()-started>10000){clearInterval(timer);reject(new Error("Drive 인증 응답 시간이 초과됐습니다. ys.jin@ykenc.com 로그인 상태를 확인하세요"));}},100);});}
   function hasDirectDrive(){return typeof google!=="undefined"&&google.script&&google.script.run;}
   function directDriveCall(action,payload){return new Promise(function(resolve,reject){var runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(function(error){reject(new Error(error&&error.message||String(error)));});if(action==="saveSite")runner.saveSite(payload||{});else if(action==="saveDrawing")runner.saveDrawing(payload||{});else if(action==="listSites")runner.listSites();else if(action==="loadSite")runner.loadSite(payload||{});else resolve({status:"ready"});});}
-  function driveCall(action,payload){if(hasDirectDrive())return directDriveCall(action,payload);return new Promise(function(resolve,reject){if(!driveBridgeReady||!driveBridgeChannel||!driveBridgeWindow||driveBridgeWindow.closed){reject(new Error("Google Drive 연결 페이지가 아직 준비되지 않았습니다"));return;}var id="survey-"+Date.now()+"-"+Math.random().toString(36).slice(2),timer=setTimeout(function(){delete driveRequests[id];reject(new Error("Google Drive "+action+" 응답 시간이 초과됐습니다"));},10000);driveRequests[id]={resolve:resolve,reject:reject,timer:timer};driveBridgeChannel.postMessage({type:"drive-bridge-request",ykSurveyBridge:true,requestId:id,action:action,payload:payload||{}},"*");});}
-  async function ensureDriveBridge(){if(hasDirectDrive())return {status:"ready"};openDriveBridgePopup();await waitDriveBridgeReady();return driveCall("ping",{});}
+  if(hasDirectDrive()&&window.parent!==window){
+    var BRIDGE_CLIENT_ORIGIN="https://www18romacom.github.io";
+    window.parent.postMessage({ykSurveyBridge:true,ready:true,status:"ready",message:"Drive bridge ready"},BRIDGE_CLIENT_ORIGIN);
+    window.addEventListener("message",function(event){var msg=event.data||{};if(event.origin!==BRIDGE_CLIENT_ORIGIN||!msg.ykSurveyBridge||!msg.requestId)return;directDriveCall(msg.action,msg.payload||{}).then(function(result){event.source.postMessage({ykSurveyBridge:true,requestId:msg.requestId,ok:true,success:true,result:result,data:result},event.origin);}).catch(function(error){event.source.postMessage({ykSurveyBridge:true,requestId:msg.requestId,ok:false,success:false,error:error.message||String(error)},event.origin);});});
+  }
+  function driveCall(action,payload){if(hasDirectDrive())return directDriveCall(action,payload);return new Promise(function(resolve,reject){if(!driveBridgeReady||!driveBridgeChannel){reject(new Error("Google Drive 연결 페이지가 아직 준비되지 않았습니다"));return;}var id="survey-"+Date.now()+"-"+Math.random().toString(36).slice(2),timer=setTimeout(function(){delete driveRequests[id];reject(new Error("Google Drive "+action+" 응답 시간이 초과됐습니다"));},10000);driveRequests[id]={resolve:resolve,reject:reject,timer:timer};driveBridgeChannel.postMessage({type:"drive-bridge-request",ykSurveyBridge:true,requestId:id,action:action,payload:payload||{}},"*");});}
+  async function ensureDriveBridge(hiddenPreferred){if(hasDirectDrive())return {status:"ready"};if(!bridgeAvailable()){if(hiddenPreferred)openDriveBridgeFrame();else openDriveBridgePopup();}await waitDriveBridgeReady();return driveCall("ping",{});}
   function chooseDriveConflict(files){return new Promise(function(resolve){$("driveconflictfiles").textContent=(files||[]).join("\n");var dialog=$("driveconflict"),done=false;function finish(value){if(done)return;done=true;dialog.close();resolve(value);}$("driveoverwrite").onclick=function(){finish("overwrite");};$("driveversion").onclick=function(){finish("version");};$("drivecancel").onclick=function(){finish("cancel");};dialog.oncancel=function(e){e.preventDefault();finish("cancel");};dialog.showModal();});}
   function driveDuplicate(result){return !!(result&&(result.needsDecision||result.duplicate||result.exists||result.conflict||result.status==="duplicate"||result.status==="exists"||result.code==="DUPLICATE"));}
   async function saveToDriveWithDecision(action,payload){payload.duplicateMode="ask";var first=await driveCall(action,payload);if(!driveDuplicate(first))return first;var choice=await chooseDriveConflict(first.conflicts||first.files||first.fileNames||[]);if(choice==="cancel")return {cancelled:true};payload.duplicateMode=choice;return driveCall(action,payload);}
@@ -600,6 +610,7 @@
     $("stage").style.width = Math.round(planZoom * 100) + "%";
     $("stage").style.maxWidth = "none";
     render();
+    requestAnimationFrame(function(){state.pins.forEach(function(_,i){refreshSpanBar(i);});});
   }
   function applyPreviewZoom() { var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap"),left=viewport.scrollLeft,top=viewport.scrollTop;$("drawingpreviewcontent").style.width=Math.round(previewZoom*100)+"%";viewport.scrollLeft=left;viewport.scrollTop=top; }
   function showPreviewPage(index,saveCurrent) {
@@ -625,7 +636,7 @@
     var points=new Map(),startDistance=0,startZoom=1,startScrollLeft=0,startScrollTop=0,centerX=0,centerY=0;
     function distance(){var a=Array.from(points.values());return a.length<2?0:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);}
     el.addEventListener("pointerdown",function(e){if(e.pointerType!=="touch")return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(points.size===2){var a=Array.from(points.values()),r=el.getBoundingClientRect();pinching=true;panMoved=true;startDistance=distance();startZoom=planZoom;startScrollLeft=el.scrollLeft;startScrollTop=el.scrollTop;centerX=(a[0].x+a[1].x)/2-r.left;centerY=(a[0].y+a[1].y)/2-r.top;}});
-    el.addEventListener("pointermove",function(e){if(!points.has(e.pointerId))return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(!pinching||points.size<2)return;e.preventDefault();var next=Math.max(.5,Math.min(3,startZoom*distance()/Math.max(1,startDistance))),ratio=next/startZoom;planZoom=Math.round(next*100)/100;$("stage").style.width=Math.round(planZoom*100)+"%";render();el.scrollLeft=(startScrollLeft+centerX)*ratio-centerX;el.scrollTop=(startScrollTop+centerY)*ratio-centerY;});
+    el.addEventListener("pointermove",function(e){if(!points.has(e.pointerId))return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(!pinching||points.size<2)return;e.preventDefault();var next=Math.max(.5,Math.min(3,startZoom*distance()/Math.max(1,startDistance))),ratio=next/startZoom;planZoom=Math.round(next*100)/100;applyPlanZoom();el.scrollLeft=(startScrollLeft+centerX)*ratio-centerX;el.scrollTop=(startScrollTop+centerY)*ratio-centerY;});
     function end(e){points.delete(e.pointerId);if(points.size<2&&pinching){pinching=false;setTimeout(function(){panMoved=false;},0);}}
     el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
   }
@@ -959,7 +970,10 @@
             if (t.kind === "mullion") normalizeMullionPart(t);
             if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
             if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if (typeof t.drawInDrawing !== "boolean") t.drawInDrawing = false; }
-            if (t.kind === "sash" && !t.sashType) t.sashType = t.panels === "고정" ? "fix" : "normal";
+            if (t.kind === "sash") {
+              if (!t.sashType) t.sashType = t.panels === "고정" ? "fix" : "normal";
+              if (t.sashType === "unbalanced") t.primary = "small";
+            }
           });
           if (/현관/.test(p.name || "")) p.parts = p.parts.map(function (t) {
             return t.kind === "turn" ? newEntry() : t;
@@ -1602,17 +1616,14 @@
       return card;
     }
 
-    if (!isEntryPin(p) && requiresFrame(p)) {
-    var fr = document.createElement("div");
-    fr.className = "frame-row";
+    function makeFrameField() {
     var frameInput = document.createElement("input");
     frameInput.type = "text"; frameInput.value = p.frame || ""; frameInput.placeholder = "예: B/F115";
     frameInput.setAttribute("list", "frame-options");
-    frameInput.addEventListener("input", function () { p.frame = this.value; persist(); refreshDone(); });
+    frameInput.addEventListener("input", function () { p.frame = this.value; persist(); refreshSpanBar(i); refreshDone(); });
     frameInput.addEventListener("focus", function () { this.dataset.prev = this.value; this.value = ""; });
-    frameInput.addEventListener("blur", function () { if (this.value.trim() === "" && this.dataset.prev) this.value = this.dataset.prev; });
-    fr.appendChild(labeled("프레임 두께", frameInput));
-    body.appendChild(fr);
+    frameInput.addEventListener("blur", function () { if (this.value.trim() === "" && this.dataset.prev) { this.value = this.dataset.prev; p.frame = this.value; refreshSpanBar(i); } });
+    return labeled("프레임 두께", frameInput);
     }
 
     var wrap = document.createElement("div");
@@ -1622,7 +1633,7 @@
     cap.textContent = "구성 — 실내에서 볼 때 왼쪽부터. 카드의 빈 곳을 길게 눌러 순서를 바꿀 수 있습니다.";
     wrap.appendChild(cap);
 
-    p.parts.forEach(function (t, k) { wrap.appendChild(buildPart(p, t, k, i)); });
+    p.parts.forEach(function (t, k) { wrap.appendChild(buildPart(p, t, k, i, makeFrameField)); });
 
     var prow = document.createElement("div");
     prow.className = "btnrow";
@@ -1683,15 +1694,16 @@
   var PART_TAGS = { mullion: "통바", turn: "터닝도어", entry: "현관문", sash: "창" };
   function installPartDrag(el,p,t,k,pinIndex){
     var timer=null,dragging=false,dragTarget=k,pointerId=null;
+    function clearDropFeedback(){Array.from(el.parentNode.querySelectorAll(".part")).forEach(function(card){card.classList.remove("part-drop-before","part-drop-after");});}
     function blocked(target){return !!target.closest("input,select,button,textarea,label,a")&&!target.closest(".part-drag-handle");}
     function begin(e){dragging=true;pointerId=e.pointerId;dragTarget=p.parts.indexOf(t);el.classList.add("part-dragging");el.setPointerCapture(e.pointerId);}
     el.addEventListener("pointerdown",function(e){if(blocked(e.target))return;if(e.target.closest(".part-drag-handle")){e.preventDefault();begin(e);}else timer=setTimeout(function(){begin(e);},380);});
-    el.addEventListener("pointermove",function(e){if(!dragging)return;e.preventDefault();var cards=Array.from(el.parentNode.querySelectorAll(".part")),target=cards.findIndex(function(card){var r=card.getBoundingClientRect();return e.clientY<r.top+r.height/2;});dragTarget=target<0?cards.length-1:target;});
-    function end(){if(timer)clearTimeout(timer);timer=null;if(dragging){var current=p.parts.indexOf(t),target=Math.max(0,Math.min(p.parts.length-1,dragTarget));if(target!==current){var moved=p.parts.splice(current,1)[0];p.parts.splice(target,0,moved);syncComposition(p);persist();sel=pinIndex;}dragging=false;el.classList.remove("part-dragging");render();}pointerId=null;}
+    el.addEventListener("pointermove",function(e){if(!dragging)return;e.preventDefault();var cards=Array.from(el.parentNode.querySelectorAll(".part")),target=cards.findIndex(function(card){var r=card.getBoundingClientRect();return e.clientY<r.top+r.height/2;});dragTarget=target<0?cards.length-1:target;clearDropFeedback();var targetCard=cards[Math.max(0,Math.min(cards.length-1,dragTarget))];if(targetCard&&targetCard!==el)targetCard.classList.add(dragTarget>=cards.indexOf(el)?"part-drop-after":"part-drop-before");});
+    function end(){if(timer)clearTimeout(timer);timer=null;clearDropFeedback();if(dragging){var current=p.parts.indexOf(t),target=Math.max(0,Math.min(p.parts.length-1,dragTarget));if(target!==current){var moved=p.parts.splice(current,1)[0];p.parts.splice(target,0,moved);syncComposition(p);persist();sel=pinIndex;}dragging=false;el.classList.remove("part-dragging");render();}pointerId=null;}
     el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
   }
 
-  function buildPart(p, t, k, pinIndex) {
+  function buildPart(p, t, k, pinIndex, makeFrameField) {
     var d = document.createElement("div");
     d.className = "part " + t.kind;
     installPartDrag(d,p,t,k,pinIndex);
@@ -1735,8 +1747,9 @@
     if (t.kind === "sash") {
       var g = document.createElement("div");
       g.className = "grid2";
-      var typeSel=sel1([["normal","일반 창"],["unbalanced","언발란스 창"],["turn","터닝도어"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"]],t.sashType||"normal",function(v){t.sashType=v;if(v==="unbalanced"){t.panels="2짝";t.primary="right";}else if(v!=="normal"){t.panels="고정";t.primary="none";}else if(t.panels==="고정")t.panels="2짝";syncComposition(p);persist();render();});
+      var typeSel=sel1([["normal","일반 창"],["unbalanced","언발란스 창"],["turn","터닝도어"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"]],t.sashType||"normal",function(v){t.sashType=v;if(v==="unbalanced"){t.panels="2짝";t.primary="small";}else if(v!=="normal"){t.panels="고정";t.primary="none";}else if(t.panels==="고정")t.panels="2짝";syncComposition(p);persist();render();});
       g.appendChild(labeled("창 종류",typeSel));
+      if(k===p.parts.findIndex(function(part){return part.kind==="sash"||part.kind==="turn";}))g.appendChild(makeFrameField());
       g.appendChild(labeled("폭 (mm)", numInput(t.w, "4170", function (v) { t.w = v; syncComposition(p); persist(); refreshSpanBar(pinIndex); })));
       g.appendChild(labeled("높이 (mm)", numInput(t.h, "2250", function (v) { t.h = v; syncComposition(p); persist(); })));
       if ((t.sashType||"normal") === "normal") {
@@ -1745,6 +1758,7 @@
         g.appendChild(labeled("주 사용문", pr));
       }
       if ((t.sashType||"normal") === "unbalanced") {
+        t.primary="small";
         g.appendChild(labeled("소형창 폭 (mm)",numInput(t.smallW||"0","800",function(v){t.smallW=v;syncComposition(p);persist();refreshDone();})));
       }
       if ((t.sashType||"normal") === "turn") { var turnInfo=document.createElement("div");turnInfo.className="cap2";turnInfo.textContent="미는 문 · 오른쪽 손잡이 · 15° 열림";g.appendChild(turnInfo); }
@@ -1755,6 +1769,7 @@
     } else if (t.kind === "turn") {
       var g2 = document.createElement("div");
       g2.className = "grid2";
+      if(k===p.parts.findIndex(function(part){return part.kind==="sash"||part.kind==="turn";}))g2.appendChild(makeFrameField());
       g2.appendChild(labeled("폭 (mm)", numInput(t.w, "900", function (v) { t.w = v; persist(); refreshSpanBar(pinIndex); })));
       g2.appendChild(labeled("높이 (mm)", numInput(t.h, "2100", function (v) { t.h = v; })));
       t.swing = "push"; t.handle = "right";
@@ -1798,9 +1813,11 @@
     });host.appendChild(svg);
   }
   function planOverlayPixels(p,planW,planH,img){
-    var layout=planStructure(p),horiz=(p.angle||0)===0,shown=horiz?planW:planH,natural=horiz?(img&&img.naturalWidth):(img&&img.naturalHeight),px=0,depthPx=0,denominator=state.scale?(horiz?state.scale.mmPerFracX:state.scale.mmPerFracY):0;
-    if(state.scale&&state.scale.mmPerPixel&&natural){px=layout.width/state.scale.mmPerPixel*(shown/natural);depthPx=layout.depth/state.scale.mmPerPixel*(shown/natural);}else if(denominator){px=layout.width/denominator*shown;depthPx=layout.depth/denominator*shown;}
-    if(!px)px=Math.max(54,Math.min(150,layout.width/24));if(!depthPx)depthPx=Math.max(8,Math.min(34,layout.depth/10));return {layout:layout,width:px,depth:depthPx};
+    var layout=planStructure(p),horiz=(p.angle||0)===0,shown=horiz?planW:planH,natural=horiz?(img&&img.naturalWidth):(img&&img.naturalHeight),pxPerMm=0,denominator=state.scale?(horiz?state.scale.mmPerFracX:state.scale.mmPerFracY):0;
+    if(state.scale&&state.scale.mmPerPixel&&natural)pxPerMm=(shown/natural)/state.scale.mmPerPixel;
+    else if(denominator)pxPerMm=shown/denominator;
+    else pxPerMm=Math.min(150/layout.width,34/layout.depth);
+    return {layout:layout,width:layout.width*pxPerMm,depth:layout.depth*pxPerMm};
   }
   function drawPlanStructureCanvas(ctx,p,cx,cy,planW,planH,img){
     var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth,interiorAxis=-outsideSignForPin(p);ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.scale(1,interiorAxis);ctx.translate(-view.width/2,0);
@@ -1932,6 +1949,8 @@
           var smallW=Math.max(2*T_PANEL+10,Math.min(iw-2*T_PANEL-10,Number(t.smallW)||iw*.3)),smallH=ih;
           sashPanel(x+T_OUTER,sashY+T_OUTER,smallW,smallH,-RAIL_OFF,"frame");
           sashPanel(x+T_OUTER+smallW,sashY+T_OUTER,iw-smallW,ih,RAIL_OFF,"frame");
+          var markerSize=Math.min(smallW,ih)*.34,markerT=markerSize*.12,markerOff=markerSize*.18,markerCx=x+T_OUTER+smallW/2,markerCy=sashY+T_OUTER+ih/2,markerCz=-RAIL_OFF+D_PANEL/2+15;
+          [-markerOff,markerOff].forEach(function(dd){boxes.push({mat:"marker",pos:[markerCx+dd,markerCy,markerCz],size:[markerT,markerSize,12]});boxes.push({mat:"marker",pos:[markerCx,markerCy+dd,markerCz],size:[markerSize,markerT,12]});});
         }else{
           var n = (t.panels === "fix" || t.panels === "고정") ? 1 : (parseInt(t.panels, 10) || 2),ratios = n === 3 ? [1, 2, 1] : new Array(n).fill(1),ratioTotal = ratios.reduce(function (a, b) { return a + b; }, 0), panelX = 0,prim = (PRIMARY_MAP[n] && PRIMARY_MAP[n][t.primary]) || [];
           for (var k = 0; k < n; k++) {var noff=(k%2===0)?-RAIL_OFF:RAIL_OFF,pw=iw*ratios[k]/ratioTotal,px=x+T_OUTER+panelX;panelX+=pw;sashPanel(px,sashY+T_OUTER,pw,ih,noff,"frame");if(prim.indexOf(k)>=0){var s=Math.min(pw,ih)*.34,tt=s*.12,off=s*.18,cx=px+pw/2,cy=sashY+T_OUTER+ih/2,cz=noff+D_PANEL/2+15;[-off,off].forEach(function(dd){boxes.push({mat:"marker",pos:[cx+dd,cy,cz],size:[tt,s,12]});boxes.push({mat:"marker",pos:[cx,cy+dd,cz],size:[s,tt,12]});});}}
@@ -2484,7 +2503,7 @@
         var sw=s.kind==="mullion"?s.fixedW:Math.max(10,s.w*scale),sh=Math.max(10,s.h*scale),sy=base-sh;layout.push({s:s,x:dx,w:sw});if(s.kind==="mullion"){c.fillStyle="#ccecf2";c.fillRect(dx,sy,sw,sh);}c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.lineWidth=2;c.strokeRect(dx,sy,sw,sh);
         if(s.kind==="turn"||s.kind==="entry"||s.sashType==="turn"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.stroke();}
         if(s.kind==="sash"&&s.sashType==="normal"&&s.panels>1){var panelRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),panelTotal=panelRatios.reduce(function(a,b){return a+b;},0),panelAt=0;panelRatios.slice(0,-1).forEach(function(r){panelAt+=r;c.beginPath();c.moveTo(dx+sw*panelAt/panelTotal,sy);c.lineTo(dx+sw*panelAt/panelTotal,base);c.stroke();});}
-        if(s.kind==="sash"&&s.sashType==="unbalanced"){var smallW=Math.max(1,Math.min(s.w-1,s.smallW||s.w*.3)),smallX=dx+sw*smallW/s.w;c.beginPath();c.moveTo(smallX,sy);c.lineTo(smallX,base);c.stroke();c.fillStyle="#333";c.textAlign="center";c.textBaseline="top";c.font='13px "Gulim", sans-serif';c.fillText("소형창 폭 "+Math.round(smallW),dx+(smallX-dx)/2,sy+4);}
+        if(s.kind==="sash"&&s.sashType==="unbalanced"){var smallW=Math.max(1,Math.min(s.w-1,s.smallW||s.w*.3)),smallX=dx+sw*smallW/s.w;c.beginPath();c.moveTo(smallX,sy);c.lineTo(smallX,base);c.stroke();c.fillStyle="#333";c.textAlign="center";c.textBaseline="top";c.font='13px "Gulim", sans-serif';c.fillText("소형창 폭 "+Math.round(smallW),dx+(smallX-dx)/2,sy+4);c.textBaseline="middle";c.font='bold 25px "Gulim", sans-serif';c.fillText("#",dx+(smallX-dx)/2,sy+sh/2);}
         if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0],markRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),markTotal=markRatios.reduce(function(a,b){return a+b;},0);c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Gulim"';primaryPanels.forEach(function(pi){var before=markRatios.slice(0,pi).reduce(function(a,b){return a+b;},0);c.fillText("#",dx+sw*(before+markRatios[pi]/2)/markTotal,sy+sh/2);});}
         if(s.kind!=="mullion"){if(s.addon){var inset=Math.min(10,sw*.06,sh*.06);c.save();c.setLineDash([7,5]);c.strokeStyle="#2f8577";c.lineWidth=2;c.strokeRect(dx+inset,sy+inset,Math.max(2,sw-inset*2),Math.max(2,sh-inset*2));c.restore();c.fillStyle="#2f8577";c.textAlign="center";c.textBaseline="bottom";c.font='13px "Gulim"';c.fillText("덧창 "+s.addon.w+"×"+s.addon.h,dx+sw/2,base-5);}c.fillStyle=s.dimsMissing?"#c0392b":"#111";c.textAlign="center";c.textBaseline="bottom";c.font=(s.dimsMissing?"bold ":"")+'16px "Gulim", sans-serif';c.fillText(s.label,dx+sw/2,sy-7);}dx+=sw;
       });
@@ -2530,7 +2549,7 @@
       var sitePlanBlob=await new Promise(function(resolve){sitePlanCanvas.toBlob(resolve,"image/png");});
       if(sitePlanBlob){await new Promise(function(r){setTimeout(r,400);});downloadFile(sitePlanBlob,base+"_현장도면.png");sitePlanSaved=true;}
     }catch(e){ /* 현장 평면도가 없으면 현장도면 파일은 생략 */ }
-    var driveSaved=false,driveError="",driveCancelled=false;try{await ensureDriveBridge();var saved=await saveToDriveWithDecision("saveDrawing",{siteName:state.site||generatedSiteName(),pages:pages.map(function(canvas){return canvas.toDataURL("image/png");})});driveCancelled=!!(saved&&saved.cancelled);driveSaved=!driveCancelled;}catch(e){driveError=e.message||String(e);}return {count:pages.length,driveSaved:driveSaved,driveError:driveError,driveCancelled:driveCancelled,sitePlanSaved:sitePlanSaved};
+    var driveSaved=false,driveError="",driveCancelled=false;try{await ensureDriveBridge(true);var saved=await saveToDriveWithDecision("saveDrawing",{siteName:state.site||generatedSiteName(),pages:pages.map(function(canvas){return canvas.toDataURL("image/png");})});driveCancelled=!!(saved&&saved.cancelled);driveSaved=!driveCancelled;}catch(e){driveError=e.message||String(e);}return {count:pages.length,driveSaved:driveSaved,driveError:driveError,driveCancelled:driveCancelled,sitePlanSaved:sitePlanSaved};
   }
 
   function buildJSON() {
@@ -2568,7 +2587,7 @@
   }
 
   $("savedrawing").addEventListener("click", async function () {
-    var button=this; button.disabled=true;if(!hasDirectDrive())try{openDriveBridgePopup();}catch(e){}
+    var button=this; button.disabled=true;
     try { var result=await saveDrawingPNG(); toast("실측도면"+(result.sitePlanSaved?"·현장도면 2개 파일":"")+" 저장 완료 — "+(result.driveSaved?"Google Drive 실측도면 폴더와 기기 다운로드 폴더를 확인하세요":(result.driveCancelled?"Drive 저장은 취소했고 기기 다운로드는 완료했습니다":(result.driveError?"Google Drive 저장에 실패하였습니다. 기기 파일 다운로드로 저장합니다. "+result.driveError:"기기 다운로드 폴더를 확인하세요")))); }
     catch(e) { toast(e.message || "실측도면 출력본을 저장하지 못했습니다"); }
     finally { button.disabled=false; }
@@ -2586,6 +2605,7 @@
     finally{button.disabled=false;}
   });
   $("previewzoomout").addEventListener("click",function(){previewZoom=Math.max(.5,Math.round((previewZoom-.25)*100)/100);applyPreviewZoom();});
+  $("previewzoomreset").addEventListener("click",function(){previewZoom=1;applyPreviewZoom();var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap");viewport.scrollLeft=0;viewport.scrollTop=0;});
   $("previewzoomin").addEventListener("click",function(){previewZoom=Math.min(4,Math.round((previewZoom+.25)*100)/100);applyPreviewZoom();});
   $("previewprev").addEventListener("click",function(){showPreviewPage(previewPageIndex-1,true);});
   $("previewnext").addEventListener("click",function(){showPreviewPage(previewPageIndex+1,true);});
@@ -2661,14 +2681,13 @@
   $("save").addEventListener("click", async function () {
     state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal();
     if (!state.site) { toast("기초입력에서 현장주소를 적용해주세요"); $("setupaddress").focus(); return; }
-    if (!hasDirectDrive()) { try { openDriveBridgePopup(); } catch (e) {} }
     if (!window.confirm("Google Drive에 이 현장을 저장하시겠습니까?")) {
       if (driveBridgeWindow && !driveBridgeWindow.closed) driveBridgeWindow.close();
       return;
     }
     try {
       syncGlobalInputs();persist();
-      try{await ensureDriveBridge();var planCanvas=await buildSitePlanCanvas(),driveSaved=await saveToDriveWithDecision("saveSite",{siteName:state.site,siteData:state,planPngDataUrl:planCanvas.toDataURL("image/png")});if(driveSaved&&driveSaved.cancelled){toast("Google Drive 저장을 취소했습니다");return;}if(driveBridgeWindow&&!driveBridgeWindow.closed)driveBridgeWindow.close();toast("현장 저장 완료 — Google Drive의 "+state.site+"/현장평면도 폴더에 저장했습니다");return;}catch(driveError){try{await saveLocalSurvey();toast("Google Drive 저장에 실패해 기기에 저장했습니다. "+(driveError.message||driveError));}catch(localError){toast("저장하지 못했습니다: "+(localError.message||localError));}return;}
+      try{await ensureDriveBridge(true);var planCanvas=await buildSitePlanCanvas(),driveSaved=await saveToDriveWithDecision("saveSite",{siteName:state.site,siteData:state,planPngDataUrl:planCanvas.toDataURL("image/png")});if(driveSaved&&driveSaved.cancelled){toast("Google Drive 저장을 취소했습니다");return;}if(driveBridgeWindow&&!driveBridgeWindow.closed)driveBridgeWindow.close();toast("현장 저장 완료 — Google Drive의 "+state.site+"/현장평면도 폴더에 저장했습니다");return;}catch(driveError){try{await saveLocalSurvey();toast("Google Drive 저장에 실패해 기기에 저장했습니다. "+(driveError.message||driveError));}catch(localError){toast("저장하지 못했습니다: "+(localError.message||localError));}return;}
     } catch (e) { toast("저장하지 못했습니다: " + e.message); }
   });
 
@@ -2692,7 +2711,7 @@
         if (t.kind === "mullion") normalizeMullionPart(t);
         if (t.kind === "turn") { t.swing = "push"; t.handle = "right"; }
         if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if(typeof t.drawInDrawing!=="boolean")t.drawInDrawing=false; }
-        if (t.kind === "sash") { if(!t.sashType)t.sashType=t.panels==="고정"?"fix":"normal";t.smallW=t.smallW===undefined?"0":String(t.smallW);delete t.smallH;t.addon=normalizeAddon(t.addon,p.frame); }
+        if (t.kind === "sash") { if(!t.sashType)t.sashType=t.panels==="고정"?"fix":"normal";t.smallW=t.smallW===undefined?"0":String(t.smallW);if(t.sashType==="unbalanced")t.primary="small";delete t.smallH;t.addon=normalizeAddon(t.addon,p.frame); }
       });
       if (/현관/.test(p.name || "") && Array.isArray(p.parts)) p.parts = p.parts.map(function (t) {
         return t.kind === "turn" ? newEntry() : t;
@@ -2706,7 +2725,6 @@
     persist();
   }
   async function showSavedSurveys() {
-    if(!hasDirectDrive())try{openDriveBridgePopup();}catch(e){}
     var host = $("savedlist"); host.innerHTML = '<div class="empty">불러오는 중…</div>';
     $("savedialog").showModal();
     try {
@@ -2726,7 +2744,7 @@
         });
         div.appendChild(site); div.appendChild(date); div.appendChild(open); host.appendChild(div);
       });
-      var driveTitle=document.createElement("div");driveTitle.className="cap2";driveTitle.style.marginTop="14px";driveTitle.textContent="Google Drive";host.appendChild(driveTitle);try{await ensureDriveBridge();var listed=await driveCall("listSites",{}),driveRows=Array.isArray(listed)?listed:(listed&&Array.isArray(listed.sites)?listed.sites:[]);if(!driveRows.length){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive에 저장된 현장이 없습니다.</div>');}driveRows.forEach(function(row){var rowName=row.siteName||row.name||"현장",div=document.createElement("div");div.className="saved-row";var site=document.createElement("b");site.textContent=rowName;var date=document.createElement("span");date.className="saved-date";date.textContent=row.modifiedTime||row.updatedAt?String(row.modifiedTime||row.updatedAt).slice(0,10):"Drive";var open=document.createElement("button");open.type="button";open.textContent="열기";open.addEventListener("click",async function(){open.disabled=true;try{var loaded=await driveCall("loadSite",{siteId:row.siteId||row.id,siteName:rowName}),saved=loaded&&loaded.siteData!==undefined?loaded.siteData:(loaded&&loaded.data!==undefined?loaded.data:loaded);if(typeof saved==="string")saved=JSON.parse(saved);if(!saved||typeof saved!=="object")throw new Error("현장 데이터 형식이 올바르지 않습니다");applySavedState(saved);$("savedialog").close();toast(rowName+" 현장을 Google Drive에서 불러왔습니다");}catch(e){toast("Drive 현장을 읽지 못했습니다: "+e.message);}finally{open.disabled=false;}});div.appendChild(site);div.appendChild(date);div.appendChild(open);host.appendChild(div);});}catch(e){host.insertAdjacentHTML("beforeend",'<div class="empty">Drive 연결 실패 — 이 브라우저의 저장 목록은 계속 사용할 수 있습니다.</div>');}
+      var driveTitle=document.createElement("div");driveTitle.className="cap2";driveTitle.style.marginTop="14px";driveTitle.textContent="Google Drive";host.appendChild(driveTitle);try{await ensureDriveBridge(true);var listed=await driveCall("listSites",{}),driveRows=Array.isArray(listed)?listed:(listed&&Array.isArray(listed.sites)?listed.sites:[]);if(!driveRows.length){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive에 저장된 현장이 없습니다.</div>');}driveRows.forEach(function(row){var rowName=row.siteName||row.name||"현장",div=document.createElement("div");div.className="saved-row";var site=document.createElement("b");site.textContent=rowName;var date=document.createElement("span");date.className="saved-date";date.textContent=row.modifiedTime||row.updatedAt?String(row.modifiedTime||row.updatedAt).slice(0,10):"Drive";var open=document.createElement("button");open.type="button";open.textContent="열기";open.addEventListener("click",async function(){open.disabled=true;try{var loaded=await driveCall("loadSite",{siteId:row.siteId||row.id,siteName:rowName}),saved=loaded&&loaded.siteData!==undefined?loaded.siteData:(loaded&&loaded.data!==undefined?loaded.data:loaded);if(typeof saved==="string")saved=JSON.parse(saved);if(!saved||typeof saved!=="object")throw new Error("현장 데이터 형식이 올바르지 않습니다");applySavedState(saved);$("savedialog").close();toast(rowName+" 현장을 Google Drive에서 불러왔습니다");}catch(e){toast("Drive 현장을 읽지 못했습니다: "+e.message);}finally{open.disabled=false;}});div.appendChild(site);div.appendChild(date);div.appendChild(open);host.appendChild(div);});}catch(e){host.insertAdjacentHTML("beforeend",'<div class="empty">Drive 연결 실패 — ys.jin@ykenc.com 로그인 상태를 확인하세요.</div>');}
     } catch (e) { host.innerHTML = '<div class="empty">저장 목록을 불러오지 못했습니다.</div>'; }
   }
   $("load").addEventListener("click", showSavedSurveys);
