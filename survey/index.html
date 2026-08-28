@@ -583,7 +583,7 @@
   var activeMini3D = null;   // 현재 열린 카드의 3D 프리뷰 정리 함수 보관(WebGL 컨텍스트 누수 방지)
   var activeProject3D = null;
   var planPixels = null;     // 업로드한 원본 평면도의 굵은 벽선 방향 판별용
-  var planZoom = 1, previewZoom = 1, panMoved = false, pinching = false, previewPages=[], previewPageIndex=0, previewPageStates=[];
+  var planZoom = 1, previewZoom = 1, panMoved = false, pinching = false, previewPages=[], previewPageIndex=0, previewPageStates=[], previewHasSitePlan=false;
   var DRIVE_BRIDGE_URL="https://script.google.com/a/macros/ykenc.com/s/AKfycbz8QFsPx_YJe9mtxToAzjO0xD7rq34b6AEJQapUpAxtapFAoQXR4T4aCa1chneAeupghg/exec",driveBridgeWindow=null,driveBridgeChannel=null,driveBridgeReady=false,driveRequests={};
   function openDriveBridgePopup(){window.name="ykSurveyDriveClient";if(driveBridgeWindow&&!driveBridgeWindow.closed){driveBridgeWindow.focus();return driveBridgeWindow;}driveBridgeReady=false;driveBridgeChannel=null;driveBridgeWindow=window.open(DRIVE_BRIDGE_URL,"ykSurveyDriveBridge","popup=yes,width=520,height=420,resizable=yes,scrollbars=yes");if(!driveBridgeWindow)throw new Error("Drive 인증 팝업이 차단됐습니다. 팝업을 허용해주세요");return driveBridgeWindow;}
   window.addEventListener("message",function(event){var msg=event.data||{},googleOrigin=/^https:\/\/([a-z0-9-]+\.)?(script\.google\.com|googleusercontent\.com)$/.test(event.origin),isReady=msg==="Drive bridge ready"||msg.ready||msg.action==="ready"||msg.message==="Drive bridge ready"||msg.type==="drive-bridge-ready"||msg.type==="DRIVE_BRIDGE_READY";if(isReady&&googleOrigin&&driveBridgeWindow&&!driveBridgeWindow.closed){driveBridgeChannel=event.source;driveBridgeReady=true;return;}if(!driveBridgeChannel||event.source!==driveBridgeChannel||!msg.requestId)return;var req=driveRequests[msg.requestId];if(!req)return;delete driveRequests[msg.requestId];clearTimeout(req.timer);var ok=msg.ok!==undefined?msg.ok:(msg.success!==undefined?msg.success:!msg.error),result=msg.result!==undefined?msg.result:(msg.data!==undefined?msg.data:msg);ok?req.resolve(result):req.reject(new Error(msg.error||msg.message||"Google Drive 요청 실패"));});
@@ -606,7 +606,10 @@
     var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap");if(!previewPages.length)return;
     if(saveCurrent&&previewPageStates[previewPageIndex])previewPageStates[previewPageIndex]={zoom:previewZoom,left:viewport.scrollLeft,top:viewport.scrollTop};
     previewPageIndex=Math.max(0,Math.min(previewPages.length-1,index));var pageState=previewPageStates[previewPageIndex]||{zoom:1,left:0,top:0};previewZoom=pageState.zoom;
-    $("drawingpreviewimage").src=previewPages[previewPageIndex];applyPreviewZoom();$("previewpage").textContent=(previewPageIndex+1)+" / "+previewPages.length+"페이지";$("previewprev").disabled=previewPageIndex===0;$("previewnext").disabled=previewPageIndex===previewPages.length-1;
+    $("drawingpreviewimage").src=previewPages[previewPageIndex];applyPreviewZoom();
+    var drawingCount=previewHasSitePlan?previewPages.length-1:previewPages.length,drawingIndex=previewHasSitePlan?previewPageIndex:previewPageIndex+1;
+    $("previewpage").textContent=(previewHasSitePlan&&previewPageIndex===0)?"현장도면":(drawingCount>1?"실측도면 "+drawingIndex+"/"+drawingCount:"실측도면");
+    $("previewprev").disabled=previewPageIndex===0;$("previewnext").disabled=previewPageIndex===previewPages.length-1;
     requestAnimationFrame(function(){viewport.scrollLeft=pageState.left;viewport.scrollTop=pageState.top;});
   }
   function installPanScroller(el,enabled) {
@@ -880,19 +883,28 @@
     return { coordinate:center,minCoordinate:minCoordinate,maxCoordinate:maxCoordinate,
              score: best.score, distance: Math.abs(best.off) };
   }
-  function analyzePlacement(x, y) {
-    if (!planPixels) return { x: x, y: y, angle: edgeFallbackAngle(x, y), mode: "free", wallLock: null };
+  // 근처 벽선을 찾아 스냅 좌표·각도·잠금 정보를 계산한다(벽이 없으면 null).
+  // 자동 배치(analyzePlacement)의 초기 위치 추정과, 수동 "벽에 고정" 버튼이 함께 사용한다.
+  function computeWallLock(x, y) {
+    if (!planPixels) return null;
     var cx = x * planPixels.w, cy = y * planPixels.h;
     var vertical = nearestWallLine(cx, cy, true), horizontal = nearestWallLine(cx, cy, false);
-    if (vertical || horizontal) {
-      var useVertical = vertical && (!horizontal || vertical.score >= horizontal.score);
-      if (useVertical) {
-        var wallX=x<.5?vertical.minCoordinate:vertical.maxCoordinate,sx = Math.min(1, Math.max(0, wallX / planPixels.w));
-        return { x: sx, y: y, angle: 90, mode: "wall", wallLock: { angle: 90, coordinate: sx } };
-      }
-      var wallY=y<.5?horizontal.minCoordinate:horizontal.maxCoordinate,sy = Math.min(1, Math.max(0, wallY / planPixels.h));
-      return { x: x, y: sy, angle: 0, mode: "wall", wallLock: { angle: 0, coordinate: sy } };
+    if (!vertical && !horizontal) return null;
+    var useVertical = vertical && (!horizontal || vertical.score >= horizontal.score);
+    if (useVertical) {
+      var wallX=x<.5?vertical.minCoordinate:vertical.maxCoordinate,sx = Math.min(1, Math.max(0, wallX / planPixels.w));
+      return { x: sx, y: y, angle: 90, wallLock: { angle: 90, coordinate: sx } };
     }
+    var wallY=y<.5?horizontal.minCoordinate:horizontal.maxCoordinate,sy = Math.min(1, Math.max(0, wallY / planPixels.h));
+    return { x: x, y: sy, angle: 0, wallLock: { angle: 0, coordinate: sy } };
+  }
+  function analyzePlacement(x, y) {
+    if (!planPixels) return { x: x, y: y, angle: edgeFallbackAngle(x, y), mode: "free", wallLock: null };
+    // 벽이 감지되면 위치·각도는 그 벽 기준으로 스냅하되, 드래그 잠금(mode:"wall")은 걸지
+    // 않는다 — 오탐(치수선·해칭 등)이 잦아 기본은 자유 이동, 잠금은 사용자가 카드의
+    // "벽에 고정" 버튼으로 직접 선택한다.
+    var lock = computeWallLock(x, y);
+    if (lock) return { x: lock.x, y: lock.y, angle: lock.angle, mode: "free", wallLock: null };
     return { x: x, y: y, angle: guessAngle(x, y), mode: "free", wallLock: null };
   }
   function applyPlacement(p) {
@@ -1535,12 +1547,12 @@
     var body = document.createElement("div");
     body.className = "op-body";
 
+    var lockRow = document.createElement("div");
+    lockRow.className = "cap2";
+    lockRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;";
     if (p.placementMode === "wall" && p.wallLock) {
-      var lockRow = document.createElement("div");
-      lockRow.className = "cap2";
-      lockRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;";
       var lockLabel = document.createElement("span");
-      lockLabel.textContent = "벽을 따라서만 이동 가능(자동 인식)";
+      lockLabel.textContent = "벽을 따라서만 이동 가능";
       var freeBtn = document.createElement("button");
       freeBtn.type = "button"; freeBtn.className = "tiny";
       freeBtn.textContent = "자유 이동으로 전환";
@@ -1551,6 +1563,22 @@
         toast("이제 자유롭게 이동할 수 있습니다");
       });
       lockRow.appendChild(lockLabel); lockRow.appendChild(freeBtn);
+      body.appendChild(lockRow);
+    } else {
+      var lockLabel2 = document.createElement("span");
+      lockLabel2.textContent = "자유롭게 이동 가능";
+      var lockBtn = document.createElement("button");
+      lockBtn.type = "button"; lockBtn.className = "tiny";
+      lockBtn.textContent = "벽에 고정";
+      lockBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var lock = computeWallLock(p.x, p.y);
+        if (!lock) { toast("근처에 벽으로 인식되는 선이 없습니다"); return; }
+        p.placementMode = "wall"; p.wallLock = lock.wallLock; p.x = lock.x; p.y = lock.y; p.angle = lock.angle;
+        persist(); render();
+        toast("벽에 고정했습니다");
+      });
+      lockRow.appendChild(lockLabel2); lockRow.appendChild(lockBtn);
       body.appendChild(lockRow);
     }
 
@@ -2392,10 +2420,6 @@
       '<table><thead><tr><th>번호</th><th>위치</th><th>치수·구성</th><th>프레임 두께</th><th>참고사항</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">입력된 창호가 없습니다.</td></tr>') +
       '</tbody></table>' + (autoPrint ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script>' : '') + '</body></html>';
   }
-  function drawingFileName() {
-    return (state.site || generatedSiteName() || "현장").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").replace(/[. ]+$/g, "").slice(0, 140) + "_실측도면.png";
-  }
-
   function plainParts(p) {
     return p.parts.map(function(t){
       if (t.kind === "mullion") return "통바 " + mullionLayerRows(t).map(function(v){return v.spec+" "+v.count+"개";}).join(" / ");
@@ -2423,18 +2447,13 @@
   }
   async function buildDrawingCanvas() {
     state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); syncGlobalInputs(); persist();
-    var img = await loadPlanImage(), W = 1600, pad = 60, planW = W - pad * 2, planH = 180;
-    if (img) {
-      var planScale = Math.min((W - pad * 2) / img.naturalWidth, 1000 / img.naturalHeight);
-      planW = Math.max(1, Math.round(img.naturalWidth * planScale));
-      planH = Math.max(1, Math.round(img.naturalHeight * planScale));
-    }
+    var W = 1600, pad = 60;
     var measure = document.createElement("canvas").getContext("2d");
     measure.font = '25px "Gulim", sans-serif';
     var siteLines = wrapCanvasText(measure, normalizedSetup(state.siteSetup).address || "현장주소 미입력", W - pad * 2);
     var globalSummary=[liftingText(),state.overallNotes?"전체 특이사항: "+state.overallNotes:""].filter(Boolean).join(" · ");
     measure.font='22px "Gulim", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
-    var py = 128 + siteLines.length * 34 + globalLines.length*30, panelGap=24, panelW=(W-pad*2-panelGap)/2;
+    var ty = 68 + siteLines.length * 46 + globalLines.length*30 + 20, panelGap=24, panelW=(W-pad*2-panelGap)/2;
     var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
     function panelFooterData(p){measure.font='17px "Gulim", sans-serif';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28)};}
     function footerHeight(data){return 0;}
@@ -2442,19 +2461,16 @@
     var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
     if(!rowHeights.length)rowHeights=[100];
     var panelsHeight=rowHeights.reduce(function(n,v){return n+v;},0)+Math.max(0,rowHeights.length-1)*panelGap;
-    var H=py+planH+35+panelsHeight+60;
+    var H=ty+panelsHeight+60;
     var canvas=document.createElement("canvas"); canvas.width=W; canvas.height=H; var c=canvas.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.fillStyle="#111";
     c.textAlign="center";c.font='bold 40px "Gulim", sans-serif'; siteLines.forEach(function(line, i){ c.fillText(line, W/2, 58 + i * 46); });
-    c.textAlign="left";c.font='22px "Gulim", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);}); c.font='25px "Gulim", sans-serif';
-    var planX=Math.round((W-planW)/2); c.strokeStyle="#bbb"; c.strokeRect(planX,py,planW,planH);
-    if(img){ c.save(); c.translate(state.flipH?planX+planW:planX,state.flipV?py+planH:py); c.scale(state.flipH?-1:1,state.flipV?-1:1); c.drawImage(img,0,0,planW,planH); c.restore();
-      state.pins.forEach(function(p,i){var x=planX+dispX(p.x)*planW,y=py+dispY(p.y)*planH,entry=isEntryPin(p);drawPlanStructureCanvas(c,p,x,y,planW,planH,img);c.beginPath();c.arc(x,y,18,0,Math.PI*2);c.fillStyle=entry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=entry?"#287a68":"#6d571d";c.lineWidth=2;c.stroke();c.fillStyle=entry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font=entry?'bold 11px "Gulim", sans-serif':'bold 20px "Gulim", sans-serif';c.fillText(visiblePinLabel(p,i),x,y);}); }
-    else { c.fillStyle="#777"; c.textAlign="center"; c.font='26px "Gulim", sans-serif'; c.fillText("평면도 없음",W/2,py+planH/2); }
+    c.textAlign="left";c.font='22px "Gulim", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);});
     function partSize(t,p){
       if(t.kind==="mullion"){var layers=mullionLayers(t),rows=mullionLayerRows(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;}));return {w:mw,h:100,kind:t.kind,layers:layers,rows:rows,stackDirection:t.stackDirection,fixedW:mw<=40?12:28,label:"통바"};}
+      var dimsMissing=t.kind!=="entry"&&(!parseFloat(t.w)||!parseFloat(t.h));
       var pw=parseFloat(t.w)|| (t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
       var names={normal:"일반 창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},stype=t.kind==="turn"?"turn":(t.sashType||"normal"),addon=normalizeAddon(t.addon,p.frame);
-      return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,smallW:Number(t.smallW)||0,addon:addon,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+Math.round(pw)+"×"+Math.round(ph),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
+      return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,smallW:Number(t.smallW)||0,addon:addon,dimsMissing:dimsMissing,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+(dimsMissing?"치수 미입력":Math.round(pw)+"×"+Math.round(ph)),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
     }
     function drawPanel(p,i,x,y,panelH){
       var footerData=panelFooterData(p),headH=48,footH=0,topViewH=190+Math.max(0,footerData.details.length-1)*20,drawTop=y+headH,drawH=panelH-headH-topViewH,sizes=drawingPartsGrouped(p).map(function(t){return partSize(t,p);}),layout=[];
@@ -2470,7 +2486,7 @@
         if(s.kind==="sash"&&s.sashType==="normal"&&s.panels>1){var panelRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),panelTotal=panelRatios.reduce(function(a,b){return a+b;},0),panelAt=0;panelRatios.slice(0,-1).forEach(function(r){panelAt+=r;c.beginPath();c.moveTo(dx+sw*panelAt/panelTotal,sy);c.lineTo(dx+sw*panelAt/panelTotal,base);c.stroke();});}
         if(s.kind==="sash"&&s.sashType==="unbalanced"){var smallW=Math.max(1,Math.min(s.w-1,s.smallW||s.w*.3)),smallX=dx+sw*smallW/s.w;c.beginPath();c.moveTo(smallX,sy);c.lineTo(smallX,base);c.stroke();c.fillStyle="#333";c.textAlign="center";c.textBaseline="top";c.font='13px "Gulim", sans-serif';c.fillText("소형창 폭 "+Math.round(smallW),dx+(smallX-dx)/2,sy+4);}
         if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0],markRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),markTotal=markRatios.reduce(function(a,b){return a+b;},0);c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Gulim"';primaryPanels.forEach(function(pi){var before=markRatios.slice(0,pi).reduce(function(a,b){return a+b;},0);c.fillText("#",dx+sw*(before+markRatios[pi]/2)/markTotal,sy+sh/2);});}
-        if(s.kind!=="mullion"){if(s.addon){var inset=Math.min(10,sw*.06,sh*.06);c.save();c.setLineDash([7,5]);c.strokeStyle="#2f8577";c.lineWidth=2;c.strokeRect(dx+inset,sy+inset,Math.max(2,sw-inset*2),Math.max(2,sh-inset*2));c.restore();c.fillStyle="#2f8577";c.textAlign="center";c.textBaseline="bottom";c.font='13px "Gulim"';c.fillText("덧창 "+s.addon.w+"×"+s.addon.h,dx+sw/2,base-5);}c.fillStyle="#111";c.textAlign="center";c.textBaseline="bottom";c.font='16px "Gulim"';c.fillText(s.label,dx+sw/2,sy-7);}dx+=sw;
+        if(s.kind!=="mullion"){if(s.addon){var inset=Math.min(10,sw*.06,sh*.06);c.save();c.setLineDash([7,5]);c.strokeStyle="#2f8577";c.lineWidth=2;c.strokeRect(dx+inset,sy+inset,Math.max(2,sw-inset*2),Math.max(2,sh-inset*2));c.restore();c.fillStyle="#2f8577";c.textAlign="center";c.textBaseline="bottom";c.font='13px "Gulim"';c.fillText("덧창 "+s.addon.w+"×"+s.addon.h,dx+sw/2,base-5);}c.fillStyle=s.dimsMissing?"#c0392b":"#111";c.textAlign="center";c.textBaseline="bottom";c.font=(s.dimsMissing?"bold ":"")+'16px "Gulim", sans-serif';c.fillText(s.label,dx+sw/2,sy-7);}dx+=sw;
       });
       var topY=y+headH+drawH, frameDepth=frameDepthMm(p.frame),drawDepth=frameDepth||115;
       c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim", sans-serif';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
@@ -2482,9 +2498,9 @@
       c.textAlign="left";c.textBaseline="top";c.font='17px "Gulim", sans-serif';
       var footerY=topY+158;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});
     }
-    var ty=py+planH+35;c.textBaseline="top";
+    c.textBaseline="top";
     if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim", sans-serif';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
-    canvas._drawingLayout={ty:ty,rowHeights:rowHeights,panelGap:panelGap,headerH:py};return canvas;
+    canvas._drawingLayout={ty:ty,rowHeights:rowHeights,panelGap:panelGap,headerH:ty};return canvas;
   }
   async function buildDrawingPages() {
     var full=await buildDrawingCanvas(),layout=full._drawingLayout,pageH=2260,cardScale=.72,pages=[],rowStarts=[],rowY=layout.ty;
@@ -2492,11 +2508,11 @@
     function newPage(first){var page=document.createElement("canvas");page.width=full.width;page.height=pageH;var ctx=page.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,page.width,page.height);var headerH=first?layout.ty:layout.headerH;ctx.drawImage(full,0,0,full.width,headerH,0,0,full.width,headerH);return {canvas:page,ctx:ctx,y:headerH,hasRow:false};}
     var current=newPage(true);pages.push(current.canvas);
     layout.rowHeights.forEach(function(rowH,index){var scaledH=rowH*cardScale;if(current.y+scaledH>pageH-36&&current.hasRow){current=newPage(false);pages.push(current.canvas);}else if(current.y+scaledH>pageH-36&&!current.hasRow&&current.y>layout.headerH){current=newPage(false);pages.push(current.canvas);}var targetW=full.width*cardScale,targetX=(full.width-targetW)/2;current.ctx.drawImage(full,0,rowStarts[index],full.width,rowH,targetX,current.y,targetW,scaledH);current.y+=scaledH+12;current.hasRow=true;});
-    pages.forEach(function(page,index){var ctx=page.getContext("2d");ctx.fillStyle="#333";ctx.textAlign="right";ctx.textBaseline="top";ctx.font='18px "Gulim", sans-serif';ctx.fillText((index+1)+" / "+pages.length+"페이지",page.width-28,18);});
+    pages.forEach(function(page,index){var ctx=page.getContext("2d");ctx.fillStyle="#333";ctx.textAlign="right";ctx.textBaseline="top";ctx.font='18px "Gulim", sans-serif';ctx.fillText(pages.length>1?"실측도면 "+(index+1)+"/"+pages.length:"실측도면",page.width-28,18);});
     return pages;
   }
   async function saveDrawingPNG() {
-    var pages=await buildDrawingPages(),base=drawingFileName().replace(/\.png$/i,"");
+    var pages=await buildDrawingPages(),base=safeSiteFileBase();
     var downloadCanvas=pages[0];
     if(pages.length>1){
       var gap=24,mergedW=Math.max.apply(null,pages.map(function(p){return p.width;})),mergedH=pages.reduce(function(sum,p){return sum+p.height;},0)+gap*(pages.length-1);
@@ -2506,8 +2522,15 @@
     }
     var downloadBlob=await new Promise(function(resolve){downloadCanvas.toBlob(resolve,"image/png");});
     if(!downloadBlob)throw new Error("PNG 변환에 실패했습니다");
-    var a=document.createElement("a"),url=URL.createObjectURL(downloadBlob);a.href=url;a.download=base+".png";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1500);
-    var driveSaved=false,driveError="",driveCancelled=false;try{await ensureDriveBridge();var saved=await saveToDriveWithDecision("saveDrawing",{siteName:state.site||generatedSiteName(),pages:pages.map(function(canvas){return canvas.toDataURL("image/png");})});driveCancelled=!!(saved&&saved.cancelled);driveSaved=!driveCancelled;}catch(e){driveError=e.message||String(e);}return {count:pages.length,driveSaved:driveSaved,driveError:driveError,driveCancelled:driveCancelled};
+    function downloadFile(blob,name){var a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1500);}
+    downloadFile(downloadBlob,base+"_실측도면.png");
+    var sitePlanSaved=false;
+    try{
+      var sitePlanCanvas=await buildSitePlanCanvas();
+      var sitePlanBlob=await new Promise(function(resolve){sitePlanCanvas.toBlob(resolve,"image/png");});
+      if(sitePlanBlob){await new Promise(function(r){setTimeout(r,400);});downloadFile(sitePlanBlob,base+"_현장도면.png");sitePlanSaved=true;}
+    }catch(e){ /* 현장 평면도가 없으면 현장도면 파일은 생략 */ }
+    var driveSaved=false,driveError="",driveCancelled=false;try{await ensureDriveBridge();var saved=await saveToDriveWithDecision("saveDrawing",{siteName:state.site||generatedSiteName(),pages:pages.map(function(canvas){return canvas.toDataURL("image/png");})});driveCancelled=!!(saved&&saved.cancelled);driveSaved=!driveCancelled;}catch(e){driveError=e.message||String(e);}return {count:pages.length,driveSaved:driveSaved,driveError:driveError,driveCancelled:driveCancelled,sitePlanSaved:sitePlanSaved};
   }
 
   function buildJSON() {
@@ -2546,13 +2569,19 @@
 
   $("savedrawing").addEventListener("click", async function () {
     var button=this; button.disabled=true;if(!hasDirectDrive())try{openDriveBridgePopup();}catch(e){}
-    try { var result=await saveDrawingPNG(); toast("실측도면 출력본 "+result.count+"페이지 저장 완료 — "+(result.driveSaved?"Google Drive 실측도면 폴더와 기기 다운로드 폴더를 확인하세요":(result.driveCancelled?"Drive 저장은 취소했고 기기 다운로드는 완료했습니다":(result.driveError?"Google Drive 저장에 실패하였습니다. 기기 파일 다운로드로 저장합니다. "+result.driveError:"기기 다운로드 폴더를 확인하세요")))); }
+    try { var result=await saveDrawingPNG(); toast("실측도면"+(result.sitePlanSaved?"·현장도면 2개 파일":"")+" 저장 완료 — "+(result.driveSaved?"Google Drive 실측도면 폴더와 기기 다운로드 폴더를 확인하세요":(result.driveCancelled?"Drive 저장은 취소했고 기기 다운로드는 완료했습니다":(result.driveError?"Google Drive 저장에 실패하였습니다. 기기 파일 다운로드로 저장합니다. "+result.driveError:"기기 다운로드 폴더를 확인하세요")))); }
     catch(e) { toast(e.message || "실측도면 출력본을 저장하지 못했습니다"); }
     finally { button.disabled=false; }
   });
   $("previewdrawing").addEventListener("click", async function(){
     var button=this;button.disabled=true;
-    try{var pages=await buildDrawingPages();previewPages=pages.map(function(canvas){return canvas.toDataURL("image/png");});previewPageStates=previewPages.map(function(){return {zoom:1,left:0,top:0};});previewPageIndex=0;showPreviewPage(0,false);showDialogSafe($("drawingpreview"));}
+    try{
+      var pages=await buildDrawingPages();
+      previewPages=pages.map(function(canvas){return canvas.toDataURL("image/png");});
+      previewHasSitePlan=false;
+      try{var sitePlanCanvas=await buildSitePlanCanvas();previewPages.unshift(sitePlanCanvas.toDataURL("image/png"));previewHasSitePlan=true;}catch(e){ /* 현장 평면도가 없으면 실측도면만 미리보기 */ }
+      previewPageStates=previewPages.map(function(){return {zoom:1,left:0,top:0};});previewPageIndex=0;showPreviewPage(0,false);showDialogSafe($("drawingpreview"));
+    }
     catch(e){toast(e.message||"실측도면 미리보기를 만들지 못했습니다");}
     finally{button.disabled=false;}
   });
@@ -2561,7 +2590,7 @@
   $("previewprev").addEventListener("click",function(){showPreviewPage(previewPageIndex-1,true);});
   $("previewnext").addEventListener("click",function(){showPreviewPage(previewPageIndex+1,true);});
   (function(){var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap"),startX=null,startY=null;viewport.addEventListener("pointerdown",function(e){if(previewZoom>1)return;startX=e.clientX;startY=e.clientY;});viewport.addEventListener("pointerup",function(e){if(startX===null||previewZoom>1)return;var dx=e.clientX-startX,dy=e.clientY-startY;startX=startY=null;if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy))showPreviewPage(previewPageIndex+(dx<0?1:-1),true);});viewport.addEventListener("pointercancel",function(){startX=startY=null;});})();
-  $("closepreview").addEventListener("click",function(){$("drawingpreview").close();previewPages=[];previewPageStates=[];});
+  $("closepreview").addEventListener("click",function(){$("drawingpreview").close();previewPages=[];previewPageStates=[];previewHasSitePlan=false;});
   $("printdrawing").addEventListener("click", function () {
     var w = window.open("", "_blank");
     if (!w) { toast("인쇄 창이 차단되었습니다"); return; }
