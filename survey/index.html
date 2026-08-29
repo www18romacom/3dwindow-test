@@ -595,7 +595,10 @@
   function waitDriveBridgeReady(){return new Promise(function(resolve,reject){var started=Date.now(),timer=setInterval(function(){if(driveBridgeReady&&driveBridgeChannel){clearInterval(timer);resolve();return;}if(Date.now()-started>10000){clearInterval(timer);reject(new Error("Drive 인증 응답 시간이 초과됐습니다. ys.jin@ykenc.com 로그인 상태를 확인하세요"));}},100);});}
   function hasDirectDrive(){return typeof google!=="undefined"&&google.script&&google.script.run;}
   function directDriveCall(action,payload){return new Promise(function(resolve,reject){var runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(function(error){reject(new Error(error&&error.message||String(error)));});if(action==="saveSite")runner.saveSite(payload||{});else if(action==="saveDrawing")runner.saveDrawing(payload||{});else if(action==="listSites")runner.listSites();else if(action==="loadSite")runner.loadSite(payload||{});else resolve({status:"ready"});});}
-  var bridgeParentTarget=window.opener||(window.parent!==window?window.parent:null);
+  // Apps Script는 커스텀 HTML을 항상 한 겹 더 안쪽 iframe(googleusercontent.com)에 넣어
+  // 실행한다 — 팝업으로 열어도 마찬가지라, 진짜 오프너는 window.opener가 아니라 맨 바깥
+  // 창(window.top)의 opener다. iframe으로 열었을 때는 window.top이 곧 우리 앱 창이다.
+  var bridgeParentTarget=(window.top&&window.top.opener)||(window.top!==window.self?window.top:null);
   if(hasDirectDrive()&&bridgeParentTarget){
     var BRIDGE_CLIENT_ORIGIN="https://www18romacom.github.io";
     bridgeParentTarget.postMessage({ykSurveyBridge:true,ready:true,status:"ready",message:"Drive bridge ready"},BRIDGE_CLIENT_ORIGIN);
