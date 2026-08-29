@@ -314,6 +314,11 @@
   .survey-detail-grid .field { margin:0; font-size:11.5px; }
   .survey-detail-grid input { min-width:0; padding:8px 9px; }
   @media(max-width:600px){.survey-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+  .chk { display:flex; align-items:center; gap:7px; cursor:pointer; padding:7px 0; font-size:13px; }
+  .chk input[type="checkbox"] { width:19px; height:19px; margin:0; flex:none; }
+  .survey-detail-grid .chk { padding:8px 0; }
+  input.memo-missing { border-color:#c0392b; }
+  input.memo-missing::placeholder { color:#c0392b; }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
   .grid2 .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
@@ -1154,6 +1159,27 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(function () { t.classList.remove("on"); }, 3200);
   }
+  function copyTextToClipboard(text, btn) {
+    function done(ok) {
+      if (btn) { var old = btn.dataset.label || btn.textContent; btn.dataset.label = old; btn.textContent = ok ? "복사됨" : "복사 실패"; setTimeout(function () { btn.textContent = old; }, 1500); }
+      toast(ok ? "링크를 복사했습니다" : "복사에 실패했습니다 — 길게 눌러 직접 복사해주세요");
+    }
+    function fallbackCopy() {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        done(ok);
+      } catch (e) { done(false); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  }
   function showUndo(msg, onUndo) {
     var bar = $("undobar"), btn = $("undobar-btn");
     $("undobar-msg").textContent = msg;
@@ -1511,6 +1537,17 @@
     s.addEventListener("change", function () { onChange(this.value, this); });
     return s;
   }
+  function checkField(checked, labelText, onChange, cls) {
+    var wrap = document.createElement("label");
+    wrap.className = "chk" + (cls ? " " + cls : "");
+    var cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = !!checked;
+    cb.addEventListener("change", function () { onChange(this.checked, this); });
+    var txt = document.createElement("span");
+    txt.textContent = labelText;
+    wrap.appendChild(cb); wrap.appendChild(txt);
+    return wrap;
+  }
   function numInput(val, ph, onInput, cls) {
     var i = document.createElement("input");
     i.type = "number"; i.value = val; i.placeholder = ph;
@@ -1770,8 +1807,8 @@
 
     // 내창/외창 — 자동 판별이 안 되니 직접 선택. 터닝도어/현관문은 이 선택과 무관하게
     // 항상 초록 번호로 표시되므로 따로 고를 필요 없음.
-    body.appendChild(labeled("내/외창", sel1([["false", "내창"], ["true", "외창"]], String(!!p.outer), function (v) {
-      p.outer = v === "true"; persist(); render();
+    body.appendChild(labeled("내/외창", checkField(!!p.outer, "외창(체크 해제 시 내창)", function (checked) {
+      p.outer = checked; persist(); render();
     })));
 
     // 아직 구성이 없으면(새로 추가된 번호) 창/통바 중 무엇으로 시작할지 먼저 고른다
@@ -1829,14 +1866,22 @@
       p.details = normalizedDetails(p.details);
       var detailGrid = document.createElement("div"); detailGrid.className = "survey-detail-grid";
       [["molding","몰딩"],["brick","벽돌"]].forEach(function(item){
-        var box=document.createElement("div"), mode=document.createElement("select"), custom=document.createElement("input");
-        mode.innerHTML='<option value="none">없음</option><option value="input">입력</option>'; mode.value=p.details[item[0]]?"input":"none";
-        custom.type="text"; custom.value=p.details[item[0]]||""; custom.placeholder="내용 입력"; custom.hidden=mode.value!=="input";
-        mode.addEventListener("change",function(){custom.hidden=this.value!=="input";if(this.value==="none"){p.details[item[0]]="";custom.value="";}persist();});
-        custom.addEventListener("input",function(){p.details[item[0]]=this.value;persist();}); box.appendChild(mode);box.appendChild(custom);detailGrid.appendChild(labeled(item[1],box));
+        var box=document.createElement("div"), custom=document.createElement("input");
+        var hasVal=!!(p.details[item[0]]&&p.details[item[0]].trim());
+        custom.type="text"; custom.value=p.details[item[0]]||""; custom.placeholder="내용 입력(필수)"; custom.hidden=!hasVal;
+        function markMissing(){custom.classList.toggle("memo-missing",!custom.hidden&&!custom.value.trim());}
+        var cb=checkField(hasVal,"있음",function(checked){
+          if(!checked){p.details[item[0]]="";custom.value="";custom.hidden=true;}
+          else{custom.hidden=false;custom.focus();}
+          persist();markMissing();
+        });
+        custom.addEventListener("input",function(){p.details[item[0]]=this.value;persist();markMissing();});
+        markMissing();
+        box.appendChild(cb);box.appendChild(custom);detailGrid.appendChild(labeled(item[1],box));
       });
       [["filling","사춤"],["tile","타일"],["drainHole","물구멍"],["screen","방충망"]].forEach(function(item){
-        var yn=sel1([["false","없음"],["true","있음"]],String(!!p.details[item[0]]),function(v){p.details[item[0]]=v==="true";persist();});detailGrid.appendChild(labeled(item[1],yn));
+        var cb=checkField(!!p.details[item[0]],"있음",function(checked){p.details[item[0]]=checked;persist();});
+        detailGrid.appendChild(labeled(item[1],cb));
       });
       body.appendChild(detailGrid);
     }
@@ -2929,7 +2974,8 @@
     try {
       var glb = await activeProject3D.exportGLB();
       var url = await driveShare3DModel(glb, state.site || generatedSiteName());
-      $("share3dresult").innerHTML = '공유 링크(오늘 자정 이후 삭제 예정): <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a>';
+      $("share3dresult").innerHTML = '공유 링크(오늘 자정 이후 삭제 예정): <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a> <button type="button" class="tiny" id="copy3dlink">복사</button>';
+      $("copy3dlink").addEventListener("click", function () { copyTextToClipboard(url, this); });
       toast("공유 링크를 만들었습니다");
     } catch (e) {
       $("share3dresult").textContent = "공유 링크 생성 실패: " + (e.message || e);
