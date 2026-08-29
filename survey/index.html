@@ -650,6 +650,7 @@
     if (!out.vendorName) out.vendorName = "와이케이";
     return out;
   }
+  function siteTitleText() { return (normalizedSetup(state.siteSetup).address || "현장주소 미입력") + " -(주)와이케이이엔씨-"; }
   function compactDate(v) { return String(v || todayLocal()).replace(/-/g, "").slice(2); }
   function generatedSiteName() {
     var s = normalizedSetup(state.siteSetup), vendor = s.vendor === "custom" ? s.vendorCustom : s.vendor;
@@ -2460,7 +2461,7 @@
       '</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:"Gulim",sans-serif;color:#111;margin:0;font-size:11px}' +
       'h1{font-size:20px;margin:0 0 6px;text-align:center}.meta{display:flex;gap:28px;border:1px solid #111;padding:7px 10px;margin-bottom:8px}.plan-wrap{position:relative;width:100%;margin:0 auto 9px;overflow:hidden;page-break-inside:avoid}.plan{display:block;width:100%;height:100%;object-fit:contain}.plan-marker{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#ffd66b;border:1.5px solid #6d571d;color:#17130a;font-weight:700;font-size:10px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.28)}.plan-marker.entry{background:#287a68;border-color:#287a68;color:#fff;font-size:6px;letter-spacing:-.08em}.no-plan{text-align:center;padding:30px;border:1px solid #aaa}' +
       'table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:5px;vertical-align:top;word-break:break-word}th{background:#eee}.no-cell{width:8%;text-align:center;font-weight:bold}th:nth-child(2){width:17%}th:nth-child(3){width:28%}th:nth-child(4){width:16%}.notes{white-space:normal}@media print{.no-print{display:none}}</style></head><body>' +
-      '<h1>' + escapeHTML(normalizedSetup(state.siteSetup).address || "현장주소 미입력") + '</h1>' +
+      '<h1>' + escapeHTML(siteTitleText()) + '</h1>' +
       ((liftingText()||state.overallNotes)?'<div class="meta">'+escapeHTML([liftingText(),state.overallNotes?'전체 특이사항: '+state.overallNotes:''].filter(Boolean).join(' · ')).replace(/\n/g,'<br>')+'</div>':'') + plan +
       '<table><thead><tr><th>번호</th><th>위치</th><th>치수·구성</th><th>프레임 두께</th><th>참고사항</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">입력된 창호가 없습니다.</td></tr>') +
       '</tbody></table>' + (autoPrint ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script>' : '') + '</body></html>';
@@ -2495,7 +2496,7 @@
     measure.font=legendFont+'px "Gulim", sans-serif';
     var legendW=legendItems.length?Math.max(160,Math.max.apply(null,legendItems.map(function(t){return measure.measureText(t).width;}))+40):0;
     var legendH=Math.max(1,legendItems.length*lineH);
-    var titleText=normalizedSetup(state.siteSetup).address||"현장주소 미입력",titleFont=Math.max(24,Math.round(w/28));
+    var titleText=siteTitleText(),titleFont=Math.max(24,Math.round(w/28));
     measure.font='bold '+titleFont+'px "Gulim", sans-serif';
     var gap=legendItems.length?Math.round(w*.05):0,pad=Math.round(w*.05),titleH=titleFont+pad;
     var contentW=w+gap+legendW,blockH=Math.max(h,legendH);
@@ -2517,15 +2518,18 @@
     var W = 2260, pad = 60;
     var measure = document.createElement("canvas").getContext("2d");
     measure.font = '25px "Gulim", sans-serif';
-    var siteLines = wrapCanvasText(measure, normalizedSetup(state.siteSetup).address || "현장주소 미입력", W - pad * 2);
+    var siteLines = wrapCanvasText(measure, siteTitleText(), W - pad * 2);
     var globalSummary=[liftingText(),state.overallNotes?"전체 특이사항: "+state.overallNotes:""].filter(Boolean).join(" · ");
     measure.font='22px "Gulim", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
-    var ty = 68 + siteLines.length * 46 + globalLines.length*30 + 20, panelGap=24, panelW=(W-pad*2-panelGap)/2;
     var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
+    // 열 수는 창 개수에 맞춰 최대한 정사각형에 가깝게 배치하되, 라벨이 겹치지
+    // 않도록 4열을 넘지 않는다(4열 미만 폭에서는 라벨 겹침 위험이 커짐).
+    var cols=candidates.length?Math.min(4,Math.ceil(Math.sqrt(candidates.length))):1;
+    var ty = 68 + siteLines.length * 46 + globalLines.length*30 + 20, panelGap=24, panelW=(W-pad*2-(cols-1)*panelGap)/cols;
     function panelFooterData(p){measure.font='17px "Gulim", sans-serif';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28)};}
     function footerHeight(data){return 0;}
     function panelHeightFor(p){var data=panelFooterData(p);return 570+Math.max(0,data.details.length-1)*20+mullionStackExtra(p);}
-    var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
+    var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=cols){var rowMax=0;for(var ci=ri;ci<Math.min(ri+cols,candidates.length);ci++)rowMax=Math.max(rowMax,panelHeightFor(candidates[ci].p));rowHeights.push(rowMax);}
     if(!rowHeights.length)rowHeights=[100];
     var panelsHeight=rowHeights.reduce(function(n,v){return n+v;},0)+Math.max(0,rowHeights.length-1)*panelGap;
     var H=ty+panelsHeight+60;
@@ -2603,7 +2607,7 @@
       var footerY=topY+158+stackExtra;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});
     }
     c.textBaseline="top";
-    if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim", sans-serif';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
+    if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim", sans-serif';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var col=j%cols,row=Math.floor(j/cols);drawPanel(x.p,x.i,pad+col*(panelW+panelGap),rowY,rowHeights[row]);if(col===cols-1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
     canvas._drawingLayout={ty:ty,rowHeights:rowHeights,panelGap:panelGap,headerH:ty};return canvas;
   }
   async function buildDrawingPages() {
