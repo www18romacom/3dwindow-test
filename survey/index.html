@@ -592,7 +592,7 @@
   // 직접 fetch()로 호출한다(Apps Script 브릿지 팝업/iframe 방식 완전히 대체).
   var GOOGLE_CLIENT_ID="737327898192-or5i1ofmvef50hga9mrj58v8cjvaopjp.apps.googleusercontent.com",
       DRIVE_ROOT_FOLDER_ID="11QxmRfYpim3rhtDSI1mFTsmTLeLKpyBu",
-      DRIVE_SCOPE="https://www.googleapis.com/auth/drive.file",
+      DRIVE_SCOPE="https://www.googleapis.com/auth/drive",
       driveAccessToken=null,driveTokenClient=null;
   function ensureDriveToken(forceConsent){
     return new Promise(function(resolve,reject){
