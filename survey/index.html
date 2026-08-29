@@ -720,6 +720,11 @@
   function applyPlanZoom() {
     $("stage").style.width = Math.round(planZoom * 100) + "%";
     $("stage").style.maxWidth = "none";
+    // 100% 이하일 때는 세로 스크롤을 브라우저 기본 동작에 맡기고(모바일에서 위로 쓸어
+    // 올리면 페이지가 스크롤되게), 확대했을 때만 커스텀 팬/핀치가 전 방향을 담당하도록
+    // touch-action을 전환한다. CSS의 touch-action:none 고정값 때문에 100%에서도
+    // 스와이프가 아예 먹통이 되던 문제.
+    $("drop").style.touchAction = planZoom > 1 ? "none" : "pan-y";
     render();
     requestAnimationFrame(function(){state.pins.forEach(function(_,i){refreshSpanBar(i);});});
   }
@@ -1138,6 +1143,7 @@
     $("planviewtools").hidden = false;
     $("ph").hidden = true;
     $("drop").classList.add("hasimg");
+    $("drop").style.touchAction = planZoom > 1 ? "none" : "pan-y";
     applyFlip();
     persist();
   }
@@ -1150,9 +1156,13 @@
       var ctx = c.getContext("2d", { willReadFrequently: true });
       ctx.drawImage(this, 0, 0, c.width, c.height);
       planPixels = { w: c.width, h: c.height, data: ctx.getImageData(0, 0, c.width, c.height).data };
-      state.pins.forEach(applyPlacement);
+      // 이미 배치·저장된 핀(placementMode가 있는 핀)은 다시 분석하지 않는다 — 여기서
+      // 매번 다시 돌리면 저장 당시와 다른 벽 분석 결과로 좌표가 밀려버리는 문제가 있었다.
+      // placementMode가 없는(과거 형식 등) 핀만 최초 1회 분석한다.
+      var unplaced = state.pins.filter(function (p) { return !p.placementMode; });
+      unplaced.forEach(applyPlacement);
       persist(); render();
-      if (state.pins.length) toast("기존 번호 " + state.pins.length + "곳의 방향을 자동 적용했습니다");
+      if (unplaced.length) toast("기존 번호 " + unplaced.length + "곳의 방향을 자동 적용했습니다");
     } catch (e) { planPixels = null; }
   });
   function readFile(f) {
@@ -2552,31 +2562,6 @@
     [["drainHole","물구멍"],["screen","방충망"]].forEach(function(item){if(!d[item[0]])values.push(item[1]+" 없음");});
     return values.join(" · ");
   }
-  function buildDrawingHTML(autoPrint) {
-    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); syncGlobalInputs(); persist();
-    var rows = state.pins.map(function (p, i) {
-      return '<tr><td class="no-cell">' + escapeHTML(visiblePinLabel(p, i)) + '</td>' +
-        '<td>' + escapeHTML(p.name || (isEntryPin(p) ? "현관" : "")) + '</td>' +
-        '<td>' + drawingParts(p) + '</td><td>' + escapeHTML(requiresFrame(p) ? (p.frame || "") : "해당없음") + '</td>' +
-        '<td class="notes">' + escapeHTML(isEntryPin(p) ? "" : detailText(p)).replace(/\n/g, "<br>") + '</td></tr>';
-    }).join("");
-    var planMarkers = state.pins.map(function (p, i) {
-      var entry = isEntryPin(p), label = visiblePinLabel(p, i);
-      return '<span class="plan-marker' + (entry ? ' entry' : '') + '" style="left:' +
-        (dispX(p.x) * 100) + '%;top:' + (dispY(p.y) * 100) + '%">' + escapeHTML(label) + '</span>';
-    }).join("");
-    var planRatio = planPixels && planPixels.w && planPixels.h ? (planPixels.w + " / " + planPixels.h) : "4 / 3";
-    var plan = state.planData ? '<div class="plan-wrap" style="aspect-ratio:' + planRatio + '"><img class="plan" src="' +
-      state.planData + '" alt="평면도">' + planMarkers + '</div>' : '<div class="no-plan">평면도 없음</div>';
-    return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>' + escapeHTML(state.site || "실측도면") +
-      '</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:"Gulim",sans-serif;color:#111;margin:0;font-size:11px}' +
-      'h1{font-size:20px;margin:0 0 6px;text-align:center}.meta{display:flex;gap:28px;border:1px solid #111;padding:7px 10px;margin-bottom:8px}.plan-wrap{position:relative;width:100%;margin:0 auto 9px;overflow:hidden;page-break-inside:avoid}.plan{display:block;width:100%;height:100%;object-fit:contain}.plan-marker{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#ffd66b;border:1.5px solid #6d571d;color:#17130a;font-weight:700;font-size:10px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.28)}.plan-marker.entry{background:#287a68;border-color:#287a68;color:#fff;font-size:6px;letter-spacing:-.08em}.no-plan{text-align:center;padding:30px;border:1px solid #aaa}' +
-      'table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:5px;vertical-align:top;word-break:break-word}th{background:#eee}.no-cell{width:8%;text-align:center;font-weight:bold}th:nth-child(2){width:17%}th:nth-child(3){width:28%}th:nth-child(4){width:16%}.notes{white-space:normal}@media print{.no-print{display:none}}</style></head><body>' +
-      '<h1>' + escapeHTML(siteTitleText()) + '</h1>' +
-      ((liftingText()||state.overallNotes)?'<div class="meta">'+escapeHTML([liftingText(),state.overallNotes?'전체 특이사항: '+state.overallNotes:''].filter(Boolean).join(' · ')).replace(/\n/g,'<br>')+'</div>':'') + plan +
-      '<table><thead><tr><th>번호</th><th>위치</th><th>치수·구성</th><th>프레임 두께</th><th>참고사항</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">입력된 창호가 없습니다.</td></tr>') +
-      '</tbody></table>' + (autoPrint ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script>' : '') + '</body></html>';
-  }
   function plainParts(p) {
     return p.parts.map(function(t){
       if (t.kind === "mullion") return "통바 " + mullionLayerRows(t).map(function(v){return v.spec+" "+v.count+"개";}).join(" / ");
@@ -2817,10 +2802,22 @@
   $("previewnext").addEventListener("click",function(){showPreviewPage(previewPageIndex+1,true);});
   (function(){var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap"),startX=null,startY=null;viewport.addEventListener("pointerdown",function(e){if(previewZoom>1)return;startX=e.clientX;startY=e.clientY;});viewport.addEventListener("pointerup",function(e){if(startX===null||previewZoom>1)return;var dx=e.clientX-startX,dy=e.clientY-startY;startX=startY=null;if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy))showPreviewPage(previewPageIndex+(dx<0?1:-1),true);});viewport.addEventListener("pointercancel",function(){startX=startY=null;});})();
   $("closepreview").addEventListener("click",function(){$("drawingpreview").close();previewPages=[];previewPageStates=[];previewHasSitePlan=false;});
-  $("printdrawing").addEventListener("click", function () {
+  $("printdrawing").addEventListener("click", async function () {
+    // 미리보기와 동일한 내용(현장도면+실측도면 페이지)을 그대로 인쇄한다 —
+    // 예전 표 형태 출력(buildDrawingHTML)은 미리보기와 내용이 달라 혼란을 줬다.
     var w = window.open("", "_blank");
     if (!w) { toast("인쇄 창이 차단되었습니다"); return; }
-    w.document.open(); w.document.write(buildDrawingHTML(true)); w.document.close();
+    try {
+      var imgs = [];
+      try { var siteCanvas = await buildSitePlanCanvas(); imgs.push(siteCanvas.toDataURL("image/png")); } catch (e) { /* 현장 평면도 없으면 생략 */ }
+      var drawingPages = await buildDrawingPages();
+      drawingPages.forEach(function (c) { imgs.push(c.toDataURL("image/png")); });
+      var html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>' + escapeHTML(state.site || "실측도면") +
+        '</title><style>*{box-sizing:border-box}body{margin:0}.page{width:100%;page-break-after:always}.page:last-child{page-break-after:auto}.page img{width:100%;display:block}</style></head><body>' +
+        imgs.map(function (src) { return '<div class="page"><img src="' + src + '"></div>'; }).join('') +
+        '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script></body></html>';
+      w.document.open(); w.document.write(html); w.document.close();
+    } catch (e) { w.close(); toast("인쇄용 화면을 만들지 못했습니다: " + (e.message || e)); }
   });
 
   // 로컬 개발 화면은 관리자 테스트로 열고, 웹 배포 시에는 홈페이지 로그인 코드가
