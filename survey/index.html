@@ -625,17 +625,17 @@
   function driveQueryEscape(s){return String(s).replace(/\\/g,"\\\\").replace(/'/g,"\\'");}
   async function driveFindChild(name,parentId,mimeTypeFilter){
     var q="'"+parentId+"' in parents and name='"+driveQueryEscape(name)+"' and trashed=false"+(mimeTypeFilter?" and "+mimeTypeFilter:"");
-    var url="https://www.googleapis.com/drive/v3/files?q="+encodeURIComponent(q)+"&fields="+encodeURIComponent("files(id,name,modifiedTime)")+"&spaces=drive";
+    var url="https://www.googleapis.com/drive/v3/files?q="+encodeURIComponent(q)+"&fields="+encodeURIComponent("files(id,name,modifiedTime)")+"&spaces=drive&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives";
     var data=await driveApiJson(url);return (data.files||[])[0]||null;
   }
   function driveFindFolder(name,parentId){return driveFindChild(name,parentId,"mimeType='application/vnd.google-apps.folder'");}
   async function driveCreateFolder(name,parentId){
-    return driveApiJson("https://www.googleapis.com/drive/v3/files?fields=id,name",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,mimeType:"application/vnd.google-apps.folder",parents:[parentId]})});
+    return driveApiJson("https://www.googleapis.com/drive/v3/files?fields=id,name&supportsAllDrives=true",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,mimeType:"application/vnd.google-apps.folder",parents:[parentId]})});
   }
   async function driveFindOrCreateFolder(name,parentId){var found=await driveFindFolder(name,parentId);if(found)return found;return driveCreateFolder(name,parentId);}
   async function driveListFolders(parentId){
     var q="'"+parentId+"' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false";
-    var url="https://www.googleapis.com/drive/v3/files?q="+encodeURIComponent(q)+"&fields="+encodeURIComponent("files(id,name,modifiedTime)")+"&orderBy=modifiedTime desc&spaces=drive";
+    var url="https://www.googleapis.com/drive/v3/files?q="+encodeURIComponent(q)+"&fields="+encodeURIComponent("files(id,name,modifiedTime)")+"&orderBy=modifiedTime desc&spaces=drive&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives";
     var data=await driveApiJson(url);return data.files||[];
   }
   function driveMultipartBody(metadata,mimeType,base64Data){
@@ -648,11 +648,11 @@
   async function driveUploadFile(name,mimeType,base64Data,parentId,existingFileId){
     var metadata=existingFileId?{name:name}:{name:name,parents:[parentId]};
     var mp=driveMultipartBody(metadata,mimeType,base64Data);
-    var url=existingFileId?("https://www.googleapis.com/upload/drive/v3/files/"+existingFileId+"?uploadType=multipart&fields=id,name"):"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name";
+    var url=existingFileId?("https://www.googleapis.com/upload/drive/v3/files/"+existingFileId+"?uploadType=multipart&fields=id,name&supportsAllDrives=true"):"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name&supportsAllDrives=true";
     return driveApiJson(url,{method:existingFileId?"PATCH":"POST",headers:{"Content-Type":"multipart/related; boundary="+mp.boundary},body:mp.body});
   }
   async function driveDownloadText(fileId){
-    var res=await driveApiFetch("https://www.googleapis.com/drive/v3/files/"+fileId+"?alt=media");
+    var res=await driveApiFetch("https://www.googleapis.com/drive/v3/files/"+fileId+"?alt=media&supportsAllDrives=true");
     if(!res.ok)throw new Error("Drive 파일을 읽지 못했습니다("+res.status+")");
     return res.text();
   }
