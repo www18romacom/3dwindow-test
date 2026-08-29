@@ -1,0 +1,2938 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>창호 실측 입력</title>
+<style>
+  :root {
+    --bg: #eceae6;
+    --panel: #ffffff;
+    --panel-2: #f6f4f1;
+    --ink: #23232a;
+    --ink-2: #5d5d67;
+    --ink-3: #8d8d97;
+    --line: #d9d5cf;
+    --accent: #d8442420;
+    --accent-solid: #d84424;
+    --accent-ink: #ffffff;
+    --mullion: #52565c;
+    --mullion-soft: #52565c1f;
+    --turn: #2f8577;
+    --turn-soft: #2f85771f;
+    --ok: #2f7d5a;
+    --shadow: 0 1px 2px rgba(35,35,42,.06), 0 8px 24px rgba(35,35,42,.06);
+    --r: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1a1e; --panel: #232329; --panel-2: #2b2b32;
+      --ink: #eceaea; --ink-2: #a8a8b2; --ink-3: #7c7c86; --line: #3a3a43;
+      --accent: #ff6a4520; --accent-solid: #ff6a45; --accent-ink: #1a1a1e;
+      --mullion: #9a9fa8; --mullion-soft: #9a9fa826;
+      --turn: #5fb8a8; --turn-soft: #5fb8a826; --ok: #62c398;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1a1a1e; --panel: #232329; --panel-2: #2b2b32;
+    --ink: #eceaea; --ink-2: #a8a8b2; --ink-3: #7c7c86; --line: #3a3a43;
+    --accent: #ff6a4520; --accent-solid: #ff6a45; --accent-ink: #1a1a1e;
+    --mullion: #9a9fa8; --mullion-soft: #9a9fa826;
+    --turn: #5fb8a8; --turn-soft: #5fb8a826; --ok: #62c398;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.55 "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 18px 22px 0; }
+  header h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
+  header p { margin: 0; color: var(--ink-3); font-size: 13px; }
+
+  .wrap {
+    display: grid; gap: 16px; padding: 16px 22px 40px;
+    grid-template-columns: minmax(0, 1fr) minmax(430px, 480px);
+    grid-template-areas: "basic plan" "survey plan";
+    align-items: start;
+  }
+  .wrap > .card:first-child { grid-area: basic; }
+  .wrap > .floorplan-card { grid-area: plan; }
+  .wrap > .card:last-child { grid-area: survey; }
+  @media (max-width: 1000px) { .wrap { grid-template-columns: minmax(0,1fr); grid-template-areas:"basic" "plan" "survey"; } }
+  @media (max-width: 600px) {
+    header { padding: 12px 8px 0; }
+    header p { display:none; }
+    .wrap { gap: 10px; padding: 10px 6px 28px; }
+    .floorplan-card .body { padding: 4px; }
+    .floorplan-card > h2 { padding-inline: 10px; }
+    .floorplan-card .btnrow { padding-inline: 4px; }
+    #drop { min-height: 220px; }
+    .marker { width: 20px; height: 20px; min-height: 0; margin: -10px 0 0 -10px;
+      border-width: 1.5px; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+    .marker.sel { transform: scale(1.15); box-shadow: 0 0 0 2px var(--accent); }
+    .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff; }
+    .card { border-radius: 9px; }
+    .body { padding: 10px; }
+    input[type="text"], input[type="number"], select, textarea, button { min-height: 44px; }
+    .part-top { min-height: 48px; }
+    .part-top .x { min-width: 44px; }
+  }
+  @media (min-width: 1001px) {
+    .floorplan-card { position: sticky; top: 12px; }
+    .wrap > .card:last-child { max-height: calc(100vh - 28px); overflow: auto; }
+  }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden;
+  }
+  .card > h2 {
+    margin: 0; padding: 12px 16px; font-size: 13px; font-weight: 700;
+    letter-spacing: .04em; color: var(--ink-2); text-transform: uppercase;
+    border-bottom: 1px solid var(--line); background: var(--panel-2);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .card > h2 .hint { font-weight: 400; text-transform: none; letter-spacing: 0;
+                     color: var(--ink-3); font-size: 12px; margin-left: auto; }
+  #scalehint { color: var(--ink-3); font-size: 12.5px; align-self: center; }
+  .body { padding: 16px; }
+
+  label.field { display: block; margin-bottom: 6px; font-size: 12.5px; color: var(--ink-2); }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%; padding: 8px 10px; font: inherit; color: var(--ink);
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  }
+  select { cursor: pointer; }
+  input:focus-visible, select:focus-visible, button:focus-visible, .marker:focus-visible {
+    outline: 2px solid var(--accent-solid); outline-offset: 2px;
+  }
+  input.dim { text-align: right; font-variant-numeric: tabular-nums; }
+  textarea { min-height: 76px; resize: vertical; }
+
+  button {
+    font: inherit; padding: 8px 13px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+  }
+  button:hover { border-color: var(--ink-3); }
+  button:disabled { opacity: .35; cursor: default; }
+  button:disabled:hover { border-color: var(--line); }
+  button.primary { background: var(--accent-solid); border-color: var(--accent-solid);
+                   color: var(--accent-ink); font-weight: 700; }
+  button.primary:hover { filter: brightness(1.06); }
+  button.tiny { padding: 5px 10px; font-size: 13px; }
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .plan-tools { margin-top: 12px; }
+  .plan-tools .tool-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .plan-tools .tool-group:first-child { margin-top: 0; }
+  .plan-tools .tool-group-danger { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .plan-tools .danger-tool { color: #b52d26; border-color: #d8aaa5; background: #fff7f6; }
+  .plan-tools .danger-tool:hover { border-color: #b52d26; }
+  .compact-label { display: none; }
+  @media (max-width: 600px) {
+    .plan-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px; margin-top: 7px; }
+    .plan-tools .tool-group { display: contents; }
+    .plan-tools button { min-width: 0; min-height: 44px; padding: 5px 2px;
+      border-radius: 6px; font-size: 11.5px; line-height: 1.15; white-space: nowrap; }
+    .plan-tools #calibrate { grid-column: span 2; }
+    .plan-tools #scalehint { grid-column: 1 / -1; min-width: 0; margin: -1px 2px 0 !important;
+      font-size: 10.5px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; }
+    .full-label { display: none; }
+    .plan-tools .compact-label { display: inline; }
+    .plan-tools .tool-group-danger { display: block; grid-column: 1 / -1; margin-top: 14px;
+      padding-top: 12px; border-top: 1px dashed var(--line); }
+    .plan-tools .tool-group-danger button { width: 100%; min-height: 44px; }
+  }
+
+  /* ---- 평면도 ---- */
+  #drop {
+    position: relative; border: 2px dashed var(--line); border-radius: 10px;
+    background: var(--panel-2); min-height: 300px; display: grid; place-items: center;
+    text-align: center; color: var(--ink-3); padding: 30px 20px;
+  }
+  #drop.hasimg { border-style: solid; padding: 0; background: none; display: block; overflow:auto; max-height:75vh; touch-action:none; cursor:default; }
+  #drop.hasimg.panning, .preview-zoom-wrap.panning { cursor:grabbing; }
+  #drop.drag { border-color: var(--accent-solid); background: var(--accent); }
+  #stage { position: relative; line-height: 0; overflow: hidden; border-radius: 8px; margin:0 auto; }
+  #plan { width: 100%; display: block; user-select:none; -webkit-user-select:none; -webkit-user-drag:none; }
+
+  .marker {
+    position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+    border-radius: 50%; display: grid; place-items: center;
+    font: 700 14px/1 system-ui, sans-serif; cursor: grab;
+    border: 2px solid var(--accent-solid); background: var(--panel); color: var(--accent-solid);
+    box-shadow: 0 2px 6px rgba(0,0,0,.28); touch-action: none; user-select: none; padding: 0;
+    z-index: 4;
+  }
+  .marker::before {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    width: 44px; height: 44px; transform: translate(-50%, -50%);
+  }
+  .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
+  .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
+  .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff; }
+  .zoom-tools { display:flex; gap:6px; align-items:center; }
+  .page-tools { display:flex; gap:6px; align-items:center; margin-left:12px; }
+  .page-tools button { min-width:38px; font-weight:700; }
+  #previewpage { min-width:72px; text-align:center; font-size:13px; }
+  .dialog-head > .sp { flex:1; }
+  .zoom-tools button { min-width:42px; font-weight:700; }
+  .plan-view-tools { display:flex; justify-content:flex-end; gap:6px; margin:0 0 7px; }
+  .plan-view-tools button { min-width:44px; font-weight:700; }
+  @media (pointer:coarse) {
+    #drop.hasimg { cursor:grab; scrollbar-width:none; }
+    #drop.hasimg::-webkit-scrollbar { display:none; }
+  }
+  #drawingpreview { width:min(94vw,1100px); max-width:94vw; }
+  .preview-zoom-wrap { overflow:auto; width:100%; max-height:75vh; background:var(--panel-2); touch-action:none; cursor:grab; }
+  #drawingpreviewcontent { transform-origin:0 0; }
+  @media (max-width:600px) {
+    #drawingpreview .dialog-head { flex-wrap:wrap; }
+    #drawingpreview .page-tools { order:3; width:100%; justify-content:center; margin:4px 0 0; }
+  }
+  .survey-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .survey-actions button { min-width: 0; }
+  .survey-actions #generate3d { grid-column: auto; color: #fff; background: #3f4850; border-color: #3f4850; font-weight: 700; }
+  .survey-actions #generate3d:hover { filter: brightness(1.12); }
+  .site-setup { margin-bottom: 16px; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+  .site-setup-head { display:flex; align-items:center; gap:8px; }
+  .site-setup-head b { flex:1; }
+  .site-setup textarea { margin-top:10px; min-height:86px; background:var(--panel); }
+  .site-fields { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:10px; }
+  .site-fields .wide { grid-column:1 / -1; }
+  .site-preview { margin-top:10px; padding:9px 10px; border-radius:8px; background:var(--panel); color:var(--ink-2); font-size:12.5px; word-break:break-word; }
+  .site-setup-actions { display:flex; gap:8px; margin-top:10px; }
+  .site-setup-actions button { flex:1; }
+  .site-setup.collapsed > :not(.site-setup-head) { display:none; }
+  .mullion-layer-list { display:grid; gap:7px; margin-top:9px; }
+  .mullion-layer-row { display:grid; grid-template-columns:minmax(120px,1fr) 86px 38px; gap:7px; align-items:end; }
+  .mullion-layer-row label { margin:0; }
+  .mullion-layer-row .x { min-width:38px; padding:7px; }
+  .addon-box { margin-top:10px; padding:10px; border:1px solid #7aaea5; border-radius:8px; background:var(--turn-soft); }
+  .addon-box .addon-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .addon-box .addon-head b { flex:1; }
+  .part-drag-handle { display:inline-grid; place-items:center; min-width:34px; min-height:34px;
+    border:1px solid var(--line); border-radius:7px; color:var(--ink-2); cursor:grab;
+    touch-action:none; user-select:none; font-weight:700; }
+  .part-dragging .part-drag-handle { cursor:grabbing; color:var(--accent-solid); border-color:var(--accent-solid); }
+  .part-dragging { opacity:.68; box-shadow:0 8px 20px rgba(20,20,25,.18); }
+  .part-drop-before { box-shadow:inset 0 4px 0 var(--accent-solid); }
+  .part-drop-after { box-shadow:inset 0 -4px 0 var(--accent-solid); }
+  @media (max-width: 600px) {
+    .site-fields { grid-template-columns:1fr; }
+    .site-fields .wide { grid-column:auto; }
+    .survey-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .survey-actions #generate3d { grid-column: 1 / -1; }
+  }
+  .wall-edit { position: absolute; height: 4px; transform-origin: 0 50%; pointer-events: none;
+    z-index: 3; border-radius: 2px; opacity: .9; }
+  .wall-edit.add { background: #2185d0; }
+  .wall-edit.remove { height: 0; border-top: 3px dashed #e03d32; border-radius: 0; }
+
+  /* ---- 실제 비율 폭 표시 막대(축척 설정 후) — 각진 직사각형(둥근 모서리 아님) ---- */
+  .span-bar {
+    position: absolute; transform: translate(-50%, -50%);
+    background: transparent; opacity: .82; border-radius: 0;
+    pointer-events: none; z-index: 3;
+  }
+  .span-bar svg { display:block; width:100%; height:100%; overflow:visible; }
+  .span-bar.sel { opacity: .8; }
+  .pick-dot {
+    position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+    border: 3px solid #fff; border-radius: 50%; background: var(--accent-solid);
+    box-shadow: 0 1px 5px rgba(0,0,0,.4); z-index: 8; pointer-events: none;
+  }
+
+  /* ---- 개소 카드 (아코디언, VS Code 트리 스타일) ---- */
+  .op {
+    border: 1px solid var(--line); border-radius: 10px;
+    margin-bottom: 6px; background: var(--panel-2); overflow: hidden;
+  }
+  .op.open { border-color: var(--accent-solid); box-shadow: 0 0 0 3px var(--accent); }
+  .op.dragging-row { opacity: .9; box-shadow: 0 8px 22px rgba(20,20,25,.22); position: relative; z-index: 6; }
+  .op-head { padding: 8px 10px; cursor: pointer; }
+  .op-head-row { display: flex; align-items: center; gap: 6px; }
+
+  .drag-handle {
+    flex: none; width: 30px; height: 30px; padding: 0; display: grid; place-items: center;
+    font-size: 17px; line-height: 1; color: var(--ink-3); cursor: grab; touch-action: none;
+    background: none; border: none; border-radius: 8px;
+  }
+  .drag-handle:hover { background: var(--line); color: var(--ink); }
+  .drag-handle:active { cursor: grabbing; }
+
+  .chev-ico {
+    flex: none; width: 22px; height: 22px; display: grid; place-items: center;
+    color: var(--ink-3); font-size: 15px; transition: transform .15s;
+  }
+  .op.open .chev-ico { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .chev-ico { transition: none; } }
+
+  .no {
+    flex: none; display: grid; place-items: center; width: 24px; height: 24px;
+    border-radius: 50%; border: 2px solid var(--accent-solid); color: var(--accent-solid);
+    font: 700 12px/1 system-ui, sans-serif; background: var(--panel);
+  }
+  .no.done { background: var(--accent-solid); color: var(--accent-ink); }
+  .no.entry-no { background: #287a68; border-color: #287a68; color: #fff;
+    font-size: 8px; letter-spacing: -.08em; }
+
+  .nm { flex: 1; min-width: 0; }
+
+  .reorder { display: flex; flex-direction: column; gap: 2px; flex: none; }
+  .reorder button {
+    width: 24px; height: 18px; padding: 0; font-size: 9px; line-height: 1;
+    border-radius: 4px; display: grid; place-items: center;
+  }
+  .x { flex: none; border: none; background: none; color: var(--ink-3); font-size: 17px; padding: 2px 6px;
+    min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  .x:hover { color: var(--accent-solid); }
+
+  .op-sum {
+    margin: 4px 0 0 58px; font-size: 12px; color: var(--ink-3);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .op.open .op-sum { display: none; }
+
+  .op-body { display: none; padding: 0 12px 12px; }
+  .op.open .op-body { display: block; }
+
+  .frame-row { margin-top: 10px; display: grid; gap: 10px; }
+  .frame-row .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
+  .survey-detail-grid { margin-top: 10px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+  .survey-detail-grid .field { margin:0; font-size:11.5px; }
+  .survey-detail-grid input { min-width:0; padding:8px 9px; }
+  @media(max-width:600px){.survey-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
+  .grid2 .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
+
+  .parts { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+  .parts > .cap { font-size: 11.5px; color: var(--ink-3); margin-bottom: 8px; }
+
+  .part {
+    border: 1.5px solid var(--line); border-radius: 9px; padding: 8px 9px;
+    margin-bottom: 10px; background: var(--panel);
+    box-shadow: 0 1px 2px rgba(20,20,25,.05);
+  }
+  .part.part-dragging { opacity:.72; box-shadow:0 8px 20px rgba(20,20,25,.2); touch-action:none; }
+  .part.mullion { border-color: var(--mullion); background: var(--mullion-soft); }
+  .part.turn { border-color: var(--turn); background: var(--turn-soft); }
+  .part-top { display: flex; align-items: center; gap: 7px; }
+  .part-top .pno { flex: none; width: 16px; color: var(--ink-3); font-size: 11.5px;
+                    font-variant-numeric: tabular-nums; }
+  .part-top .tag { flex: none; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .part.mullion .tag { background: var(--mullion); color: #fff; }
+  .part.turn .tag { background: var(--turn); color: #fff; }
+  .part.sash .tag { background: var(--accent-solid); color: var(--accent-ink); }
+  .part-top .sp { margin-left: auto; }
+  .part-top select.spec { max-width: 140px; }
+
+  .part.sash .grid2, .part.turn .grid2 { grid-template-columns: 1fr 1fr; }
+
+  .startchoice { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .startchoice button { flex: 1; min-width: 120px; padding: 12px; font-weight: 700; }
+  .startchoice .cap2 { width: 100%; font-size: 12.5px; color: var(--ink-3); margin-bottom: 2px; }
+
+  /* ---- 개소별 3D 미리보기 ---- */
+  .mini3d-wrap { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+  .mini3d-wrap > .cap { font-size: 11.5px; color: var(--ink-3); margin-bottom: 7px; }
+  .mini3d { position: relative; border: 1px solid var(--line); border-radius: 8px;
+            background: var(--panel); overflow: hidden; min-height: 170px;
+            display: flex; align-items: center; justify-content: center; }
+  .mini3d canvas { display: block; width: 100%; height: 170px; touch-action: none; }
+  .admin-result { width: min(1180px, calc(100vw - 28px)); max-height: 92vh; }
+  #project3d { position: relative; min-height: 440px; border: 1px solid var(--line);
+    border-radius: 10px; background: #eef1f3; overflow: hidden; }
+  #project3d canvas { display: block; width: 100%; height: 440px; touch-action: none; }
+  .admin-badge { display: inline-block; margin-left: 8px; padding: 3px 7px; border-radius: 999px;
+    background: #3f4850; color: #fff; font-size: 11px; vertical-align: middle; }
+  dialog { width: min(620px, calc(100vw - 28px)); max-height: 78vh; padding: 0;
+    border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--panel); }
+  dialog::backdrop { background: rgba(20,24,28,.45); }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .dialog-body { padding: 12px 16px 16px; overflow: auto; }
+  .saved-row { display: grid; grid-template-columns: minmax(0,1fr) 110px auto; gap: 8px;
+    align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .saved-row:last-child { border-bottom: 0; }
+  .saved-date { color: var(--ink-3); font-size: 12px; }
+  @media (max-width: 600px) { .saved-row { grid-template-columns: 1fr auto; }
+    .saved-row .saved-date { grid-column: 1; grid-row: 2; color: var(--ink-3); font-size: 12px; }
+    .saved-row button { grid-column: 2; grid-row: 1 / span 2; } }
+  .mini3d-empty { color: var(--ink-3); font-size: 12.5px; padding: 18px; text-align: center; }
+
+  .empty { color: var(--ink-3); font-size: 13.5px; padding: 18px 4px; text-align: center; }
+  .status { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            padding: 10px 16px; border-top: 1px solid var(--line);
+            background: var(--panel-2); font-size: 13px; color: var(--ink-2); }
+  .status b { color: var(--ink); }
+  .status .done { color: var(--ok); font-weight: 700; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(12px);
+    background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px;
+    font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+    z-index: 50; max-width: 86vw; text-align: center;
+  }
+  #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+  @media (max-width: 600px) {
+    #toast { top: 14px; bottom: auto; transform: translateX(-50%) translateY(-12px); }
+    #toast.on { transform: translateX(-50%) translateY(0); }
+  }
+  #undobar {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(12px);
+    background: var(--ink); color: var(--bg); padding: 8px 8px 8px 18px; border-radius: 999px;
+    font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+    z-index: 51; max-width: 92vw; display: flex; align-items: center; gap: 10px;
+  }
+  #undobar.on { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  #undobar button { background: transparent; color: var(--accent-solid, #ffb199); border: none;
+    font-weight: 700; padding: 8px 12px; min-height: 44px; border-radius: 999px; }
+  @media (max-width: 600px) {
+    #undobar { top: 14px; bottom: auto; transform: translateX(-50%) translateY(-12px); }
+    #undobar.on { transform: translateX(-50%) translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) { #undobar { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>창호 실측입력</h1>
+  <p>현장 평면도에 번호를 찍고, 그 번호대로 실측값을 입력합니다.</p>
+</header>
+
+<div class="wrap">
+
+  <section class="card">
+    <div class="body">
+      <div class="site-setup" id="sitesetup">
+        <div class="site-setup-head"><b>기초입력</b><button type="button" class="tiny" id="editsitesetup" hidden>기초입력 확인/수정</button></div>
+        <label class="field" for="basetext" style="margin-top:8px">일정 내용을 붙여넣으면 가능한 항목을 자동으로 채웁니다</label>
+        <textarea id="basetext" placeholder="예: 실측(박) | 10년 보증 체크 / 구리시 교문동 덕현아파트 107동 1903호 / 010-0000-0000"></textarea>
+        <div class="site-fields">
+          <label class="field">실측 날짜<input type="date" id="setupdate"></label>
+          <label class="field">담당자<input type="text" id="setupmanager" value="박" placeholder="예: 박"></label>
+          <label class="field">브랜드<select id="setupvendor"><option>LX</option><option>KCC</option><option>홈CC</option><option value="custom">직접입력</option></select></label>
+          <label class="field" id="setupvendorcustomwrap" hidden>브랜드 직접입력<input type="text" id="setupvendorcustom"></label>
+          <label class="field">거래처명<input type="text" id="setupvendorname" value="와이케이" placeholder="예: 와이케이"></label>
+          <label class="field wide">현장주소<input type="text" id="setupaddress" placeholder="예: 구리시 교문동 덕현아파트 107동 1903호"></label>
+          <label class="field wide">비고<input type="text" id="setupnote" placeholder="예: 10년 보증 체크, 49평형"></label>
+        </div>
+        <div class="site-preview" id="sitepreview" aria-live="polite"></div>
+        <div class="site-setup-actions"><button type="button" class="primary" id="applysite">기초입력 적용</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card floorplan-card">
+    <h2>현장 평면도 <span class="hint" id="planhint">이미지를 올린 뒤 클릭하면 번호가 찍힙니다</span></h2>
+    <div class="body">
+      <div class="plan-view-tools" id="planviewtools" aria-label="평면도 확대 축소" hidden><button type="button" id="planzoomout" title="평면도 축소" aria-label="평면도 축소">−</button><button type="button" id="planzoomreset" title="원본 크기" aria-label="평면도 원본 크기">100%</button><button type="button" id="planzoomin" title="평면도 확대" aria-label="평면도 확대">＋</button></div>
+      <div id="drop">
+        <div id="ph">
+          <p style="margin:0 0 10px"><b>현장 평면도 이미지를 끌어다 놓거나</b></p>
+          <button type="button" id="pick">파일 선택</button>
+          <p style="margin:10px 0 0; font-size:12.5px">PNG · JPG</p>
+        </div>
+        <div id="stage" hidden><img id="plan" alt="평면도" draggable="false"></div>
+      </div>
+      <input type="file" id="file" accept="image/*" class="sr">
+      <div class="plan-tools" role="toolbar" aria-label="평면도 편집 도구">
+        <div class="tool-group">
+          <button type="button" id="addnum" title="창호 번호 추가" aria-label="창호 번호 추가"><span class="full-label">+ 번호 추가</span><span class="compact-label">+ 번호</span></button>
+          <button type="button" id="addentry" title="현관문 위치 지정" aria-label="현관문 위치 지정"><span class="full-label">+ 현관문 지정</span><span class="compact-label">+ 현관문</span></button>
+          <button type="button" id="repick" title="현장 평면도 이미지 교체" aria-label="현장 평면도 이미지 교체"><span class="full-label">현장 평면도 교체</span><span class="compact-label">평면도 교체</span></button>
+        </div>
+        <div class="tool-group">
+          <button type="button" id="flipv" title="평면도 상하 반전" aria-label="평면도 상하 반전"><span class="full-label">상하반전</span><span class="compact-label">↕ 상하</span></button>
+          <button type="button" id="fliph" title="평면도 좌우 반전" aria-label="평면도 좌우 반전"><span class="full-label">좌우반전</span><span class="compact-label">↔ 좌우</span></button>
+        </div>
+        <div class="tool-group">
+          <button type="button" id="calibrate" title="실제 폭을 아는 기준 창의 양끝을 지정해 축척 설정" aria-label="기준 창 실측값으로 축척 설정"><span class="full-label">축척 설정 (기준 창 실측)</span><span class="compact-label">축척 설정</span></button>
+          <span id="scalehint" role="status" aria-live="polite" style="margin-left:2px">미설정 — 번호가 점으로만 표시됩니다</span>
+        </div>
+        <div class="tool-group">
+          <button type="button" id="walladd" title="누락된 벽 추가" aria-label="누락된 벽 추가"><span class="full-label">+ 누락 벽 추가</span><span class="compact-label">+ 벽 추가</span></button>
+          <button type="button" id="wallremove" title="잘못 인식된 벽 제외" aria-label="잘못 인식된 벽 제외"><span class="full-label">잘못된 벽 제외</span><span class="compact-label">벽 제외</span></button>
+          <button type="button" id="wallreset" class="danger-tool" title="벽 보정 내용 초기화" aria-label="벽 보정 내용 초기화"><span class="full-label">벽 보정 초기화</span><span class="compact-label">벽 초기화</span></button>
+        </div>
+        <div class="tool-group tool-group-danger">
+          <button type="button" id="clearpins" class="danger-tool" title="창호 번호 전체 삭제" aria-label="창호 번호 전체 삭제"><span class="full-label">번호 전체 삭제</span><span class="compact-label">번호 전체 삭제</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>실측입력 <span class="hint">창호 위치·구성·프레임·부가항목·실측값</span></h2>
+    <div class="body">
+      <label class="field" for="site">자동 생성명</label>
+      <input type="text" id="site" readonly>
+      <label class="field" for="surveydate" style="margin-top:12px">실측 날짜</label>
+      <input type="date" id="surveydate">
+
+      <div class="site-fields" style="margin-top:12px">
+        <label class="field">양중방법
+          <select id="liftingmethod">
+            <option value="">미정</option><option>사다리차</option><option>윈치</option><option>엘리베이터</option><option>계단 운반</option><option value="기타">기타</option>
+          </select>
+        </label>
+        <label class="field" id="liftingotherwrap" hidden>기타 양중방법<input type="text" id="liftingother" placeholder="양중방법 직접 입력"></label>
+        <label class="field wide">전체 특이사항<textarea id="overallnotes" placeholder="현장 전체에 적용되는 특이사항" rows="3"></textarea></label>
+      </div>
+
+      <div id="ops" style="margin-top:16px"></div>
+      <div class="empty" id="empty">현장 평면도에서 창호 위치를 클릭하면(또는 "+ 번호 추가") 실측입력이 생깁니다.</div>
+
+      <div class="survey-actions" style="margin-top:14px">
+        <button type="button" class="primary" id="save">현장 저장</button>
+        <button type="button" id="load">현장 불러오기</button>
+        <button type="button" id="savedrawing">실측도면 출력본 저장</button>
+        <button type="button" id="previewdrawing">실측도면 미리보기</button>
+        <button type="button" id="printdrawing">실측도면 출력</button>
+        <button type="button" id="generate3d">3D 생성 (관리자 전용)</button>
+      </div>
+    </div>
+    <div class="status">
+      <span>실측 <b id="cdone">0</b> / <b id="ctotal">0</b></span>
+      <span id="cmsg"></span>
+    </div>
+  </section>
+
+</div>
+
+<dialog class="admin-result" id="adminresult">
+  <div class="dialog-head"><b>3D 생성 결과 <span class="admin-badge">관리자 전용</span></b><button type="button" class="x" id="close3d">×</button></div>
+  <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div></div>
+</dialog>
+
+<dialog id="drawingpreview"><div class="dialog-head"><b>실측도면 미리보기</b><div class="page-tools"><button type="button" id="previewprev" aria-label="이전 페이지">‹</button><span id="previewpage">1 / 1페이지</span><button type="button" id="previewnext" aria-label="다음 페이지">›</button></div><span class="sp"></span><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomreset" aria-label="미리보기 100%">100%</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><div id="drawingpreviewcontent"><img id="drawingpreviewimage" draggable="false" alt="실측도면 출력본 미리보기" style="display:block;width:100%;height:auto"></div></div></dialog>
+
+<dialog id="savedialog">
+  <div class="dialog-head"><b>저장된 현장</b><button type="button" class="x" id="closesaved">×</button></div>
+  <div class="dialog-body">
+    <div id="savedlist"></div>
+    <div class="btnrow" style="margin-top:14px"><button type="button" id="openlegacy">실측현장 파일 선택</button></div>
+    <input type="file" id="loadfile" accept="application/json,.json" class="sr">
+  </div>
+</dialog>
+<dialog id="driveconflict"><div class="dialog-head"><b>Google Drive에 같은 파일이 있습니다</b></div><div class="dialog-body"><div id="driveconflictfiles" class="cap2"></div><p>저장 방법을 선택해주세요.</p><div class="btnrow"><button type="button" class="primary" id="driveoverwrite">덮어쓰기</button><button type="button" id="driveversion">새 버전으로 저장</button><button type="button" id="drivecancel">취소</button></div></div></dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="undobar" role="status" aria-live="assertive" hidden>
+  <span id="undobar-msg"></span>
+  <button type="button" id="undobar-btn">실행취소</button>
+</div>
+<datalist id="frame-options">
+  <option value="B/F115"><option value="B/F140"><option value="B/F235"><option value="B/F250"><option value="B/FWA">
+</datalist>
+<datalist id="addon-frame-options">
+  <option value="B/F115"><option value="B/F140"><option value="B/F235"><option value="B/F250"><option value="B/FWA"><option value="40×105">
+</datalist>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  window.__THREE = THREE;
+  window.__OrbitControls = OrbitControls;
+  window.dispatchEvent(new Event('mini3d-ready'));
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =========================================================
+     선택 목록 — 항목을 추가/수정하려면 아래 배열만 고치면 된다.
+     ========================================================= */
+  var FRAME_TYPES   = ["B/F115", "B/F140", "B/F235", "B/F250", "B/FWA"]; // 추천값만 제한하며 구자료 값은 텍스트로 보존
+  var MULLION_SPECS = ["100×100", "40×105", "105×40"];              // 통바 규격(정면 폭×평면 깊이)
+  var PANEL_TYPES   = ["2짝", "3짝", "4짝", "고정"];                 // 창 짝수
+  var PRIMARY_TYPES = [["left", "왼쪽"], ["right", "오른쪽"],
+                       ["both", "양쪽"], ["none", "없음"]];          // 주 사용문
+  var SWING_TYPES   = [["out", "외여닫이 (미는 방향)"],
+                       ["in", "내여닫이 (당기는 방향)"]];             // 터닝도어 개폐 방향
+  var HANDLE_TYPES  = [["left", "좌측"], ["right", "우측"]];         // 터닝도어 손잡이 위치
+  /* ========================================================= */
+
+  var KEY = "yk-survey-input-v3";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function todayLocal() {
+    var d = new Date(), z = function (v) { return String(v).padStart(2, "0"); };
+    return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
+  }
+  var state = { site: "", surveyDate: todayLocal(), siteSetup: {}, overallNotes: "", lifting: { method: "", other: "" }, planName: "", planData: "", pins: [], scale: null,
+                flipV: false, flipH: false, wallEdits: { add: [], remove: [] } };
+  var sel = null;
+  var pickMode = null;
+  var activeMini3D = null;   // 현재 열린 카드의 3D 프리뷰 정리 함수 보관(WebGL 컨텍스트 누수 방지)
+  var activeProject3D = null;
+  var planPixels = null;     // 업로드한 원본 평면도의 굵은 벽선 방향 판별용
+  var planZoom = 1, previewZoom = 1, panMoved = false, pinching = false, previewPages=[], previewPageIndex=0, previewPageStates=[], previewHasSitePlan=false;
+  var DRIVE_BRIDGE_URL="https://script.google.com/a/macros/ykenc.com/s/AKfycbz8QFsPx_YJe9mtxToAzjO0xD7rq34b6AEJQapUpAxtapFAoQXR4T4aCa1chneAeupghg/exec",driveBridgeWindow=null,driveBridgeFrame=null,driveBridgeChannel=null,driveBridgeReady=false,driveRequests={};
+  function openDriveBridgePopup(){window.name="ykSurveyDriveClient";if(driveBridgeWindow&&!driveBridgeWindow.closed)return driveBridgeWindow;driveBridgeReady=false;driveBridgeChannel=null;driveBridgeWindow=window.open(DRIVE_BRIDGE_URL,"ykSurveyDriveBridge","popup=yes,width=520,height=420,resizable=yes,scrollbars=yes");if(!driveBridgeWindow)throw new Error("Drive 인증 팝업이 차단됐습니다. 팝업을 허용해주세요");return driveBridgeWindow;}
+  function openDriveBridgeFrame(){if(driveBridgeFrame&&driveBridgeFrame.contentWindow)return driveBridgeFrame;driveBridgeReady=false;driveBridgeChannel=null;driveBridgeFrame=document.createElement("iframe");driveBridgeFrame.src=DRIVE_BRIDGE_URL;driveBridgeFrame.title="Google Drive 연결";driveBridgeFrame.hidden=true;driveBridgeFrame.setAttribute("aria-hidden","true");document.body.appendChild(driveBridgeFrame);return driveBridgeFrame;}
+  function bridgeAvailable(){return !!(driveBridgeChannel&&(driveBridgeReady||driveBridgeFrame||(driveBridgeWindow&&!driveBridgeWindow.closed)));}
+  window.addEventListener("message",function(event){var msg=event.data||{},googleOrigin=/^https:\/\/([a-z0-9-]+\.)?(script\.google\.com|googleusercontent\.com)$/.test(event.origin),isReady=msg==="Drive bridge ready"||msg.ready||msg.action==="ready"||msg.message==="Drive bridge ready"||msg.type==="drive-bridge-ready"||msg.type==="DRIVE_BRIDGE_READY";if(isReady&&googleOrigin){driveBridgeChannel=event.source;driveBridgeReady=true;return;}if(!driveBridgeChannel||event.source!==driveBridgeChannel||!msg.requestId)return;var req=driveRequests[msg.requestId];if(!req)return;delete driveRequests[msg.requestId];clearTimeout(req.timer);var ok=msg.ok!==undefined?msg.ok:(msg.success!==undefined?msg.success:!msg.error),result=msg.result!==undefined?msg.result:(msg.data!==undefined?msg.data:msg);ok?req.resolve(result):req.reject(new Error(msg.error||msg.message||"Google Drive 요청 실패"));});
+  function waitDriveBridgeReady(){return new Promise(function(resolve,reject){var started=Date.now(),timer=setInterval(function(){if(driveBridgeReady&&driveBridgeChannel){clearInterval(timer);resolve();return;}if(Date.now()-started>10000){clearInterval(timer);reject(new Error("Drive 인증 응답 시간이 초과됐습니다. ys.jin@ykenc.com 로그인 상태를 확인하세요"));}},100);});}
+  function hasDirectDrive(){return typeof google!=="undefined"&&google.script&&google.script.run;}
+  function directDriveCall(action,payload){return new Promise(function(resolve,reject){var runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(function(error){reject(new Error(error&&error.message||String(error)));});if(action==="saveSite")runner.saveSite(payload||{});else if(action==="saveDrawing")runner.saveDrawing(payload||{});else if(action==="listSites")runner.listSites();else if(action==="loadSite")runner.loadSite(payload||{});else resolve({status:"ready"});});}
+  if(hasDirectDrive()&&window.parent!==window){
+    var BRIDGE_CLIENT_ORIGIN="https://www18romacom.github.io";
+    window.parent.postMessage({ykSurveyBridge:true,ready:true,status:"ready",message:"Drive bridge ready"},BRIDGE_CLIENT_ORIGIN);
+    window.addEventListener("message",function(event){var msg=event.data||{};if(event.origin!==BRIDGE_CLIENT_ORIGIN||!msg.ykSurveyBridge||!msg.requestId)return;directDriveCall(msg.action,msg.payload||{}).then(function(result){event.source.postMessage({ykSurveyBridge:true,requestId:msg.requestId,ok:true,success:true,result:result,data:result},event.origin);}).catch(function(error){event.source.postMessage({ykSurveyBridge:true,requestId:msg.requestId,ok:false,success:false,error:error.message||String(error)},event.origin);});});
+  }
+  function driveCall(action,payload){if(hasDirectDrive())return directDriveCall(action,payload);return new Promise(function(resolve,reject){if(!driveBridgeReady||!driveBridgeChannel){reject(new Error("Google Drive 연결 페이지가 아직 준비되지 않았습니다"));return;}var id="survey-"+Date.now()+"-"+Math.random().toString(36).slice(2),timer=setTimeout(function(){delete driveRequests[id];reject(new Error("Google Drive "+action+" 응답 시간이 초과됐습니다"));},10000);driveRequests[id]={resolve:resolve,reject:reject,timer:timer};driveBridgeChannel.postMessage({type:"drive-bridge-request",ykSurveyBridge:true,requestId:id,action:action,payload:payload||{}},"*");});}
+  async function ensureDriveBridge(hiddenPreferred){if(hasDirectDrive())return {status:"ready"};if(!bridgeAvailable()){if(hiddenPreferred)openDriveBridgeFrame();else openDriveBridgePopup();}await waitDriveBridgeReady();return driveCall("ping",{});}
+  function chooseDriveConflict(files){return new Promise(function(resolve){$("driveconflictfiles").textContent=(files||[]).join("\n");var dialog=$("driveconflict"),done=false;function finish(value){if(done)return;done=true;dialog.close();resolve(value);}$("driveoverwrite").onclick=function(){finish("overwrite");};$("driveversion").onclick=function(){finish("version");};$("drivecancel").onclick=function(){finish("cancel");};dialog.oncancel=function(e){e.preventDefault();finish("cancel");};dialog.showModal();});}
+  function driveDuplicate(result){return !!(result&&(result.needsDecision||result.duplicate||result.exists||result.conflict||result.status==="duplicate"||result.status==="exists"||result.code==="DUPLICATE"));}
+  async function saveToDriveWithDecision(action,payload){payload.duplicateMode="ask";var first=await driveCall(action,payload);if(!driveDuplicate(first))return first;var choice=await chooseDriveConflict(first.conflicts||first.files||first.fileNames||[]);if(choice==="cancel")return {cancelled:true};payload.duplicateMode=choice;return driveCall(action,payload);}
+
+  function applyPlanZoom() {
+    $("stage").style.width = Math.round(planZoom * 100) + "%";
+    $("stage").style.maxWidth = "none";
+    render();
+    requestAnimationFrame(function(){state.pins.forEach(function(_,i){refreshSpanBar(i);});});
+  }
+  function applyPreviewZoom() { var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap"),left=viewport.scrollLeft,top=viewport.scrollTop;$("drawingpreviewcontent").style.width=Math.round(previewZoom*100)+"%";viewport.scrollLeft=left;viewport.scrollTop=top; }
+  function showPreviewPage(index,saveCurrent) {
+    var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap");if(!previewPages.length)return;
+    if(saveCurrent&&previewPageStates[previewPageIndex])previewPageStates[previewPageIndex]={zoom:previewZoom,left:viewport.scrollLeft,top:viewport.scrollTop};
+    previewPageIndex=Math.max(0,Math.min(previewPages.length-1,index));var pageState=previewPageStates[previewPageIndex]||{zoom:1,left:0,top:0};previewZoom=pageState.zoom;
+    $("drawingpreviewimage").src=previewPages[previewPageIndex];applyPreviewZoom();
+    var drawingCount=previewHasSitePlan?previewPages.length-1:previewPages.length,drawingIndex=previewHasSitePlan?previewPageIndex:previewPageIndex+1;
+    $("previewpage").textContent=(previewHasSitePlan&&previewPageIndex===0)?"현장도면":(drawingCount>1?"실측도면 "+drawingIndex+"/"+drawingCount:"실측도면");
+    $("previewprev").disabled=previewPageIndex===0;$("previewnext").disabled=previewPageIndex===previewPages.length-1;
+    requestAnimationFrame(function(){viewport.scrollLeft=pageState.left;viewport.scrollTop=pageState.top;});
+  }
+  function installPanScroller(el,enabled) {
+    var tracking=false,engaged=false,activeId=null,startX=0,startY=0,startLeft=0,startTop=0;
+    el.addEventListener("pointerdown",function(e){if(tracking||!enabled(e)||e.target.closest(".marker,.span-bar,button"))return;tracking=true;engaged=false;activeId=e.pointerId;panMoved=false;startX=e.clientX;startY=e.clientY;startLeft=el.scrollLeft;startTop=el.scrollTop;});
+    el.addEventListener("pointermove",function(e){if(!tracking||e.pointerId!==activeId||pinching)return;var dx=e.clientX-startX,dy=e.clientY-startY;
+      if(!engaged){if(Math.abs(dx)+Math.abs(dy)<=14)return;engaged=true;panMoved=true;el.classList.add("panning");try{el.setPointerCapture(activeId);}catch(_){ }}
+      e.preventDefault();el.scrollLeft=startLeft-dx;el.scrollTop=startTop-dy;});
+    function end(e){if(!tracking||e.pointerId!==activeId)return;tracking=false;activeId=null;if(engaged){el.classList.remove("panning");try{el.releasePointerCapture(e.pointerId);}catch(_){ }}engaged=false;setTimeout(function(){panMoved=false;},0);}
+    el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
+  }
+  function installPlanPinch(el) {
+    var points=new Map(),startDistance=0,startZoom=1,startScrollLeft=0,startScrollTop=0,centerX=0,centerY=0;
+    function distance(){var a=Array.from(points.values());return a.length<2?0:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);}
+    el.addEventListener("pointerdown",function(e){if(e.pointerType!=="touch")return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(points.size===2){var a=Array.from(points.values()),r=el.getBoundingClientRect();pinching=true;panMoved=true;startDistance=distance();startZoom=planZoom;startScrollLeft=el.scrollLeft;startScrollTop=el.scrollTop;centerX=(a[0].x+a[1].x)/2-r.left;centerY=(a[0].y+a[1].y)/2-r.top;}});
+    el.addEventListener("pointermove",function(e){if(!points.has(e.pointerId))return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(!pinching||points.size<2)return;e.preventDefault();var next=Math.max(.5,Math.min(3,startZoom*distance()/Math.max(1,startDistance))),ratio=next/startZoom;planZoom=Math.round(next*100)/100;applyPlanZoom();el.scrollLeft=(startScrollLeft+centerX)*ratio-centerX;el.scrollTop=(startScrollTop+centerY)*ratio-centerY;});
+    function end(e){points.delete(e.pointerId);if(points.size<2&&pinching){pinching=false;setTimeout(function(){panMoved=false;},0);}}
+    el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
+  }
+
+  var SETUP_FIELDS = ["manager", "vendor", "vendorCustom", "vendorName", "address", "siteName", "note", "baseText"];
+  function normalizedSetup(v) {
+    var out = {}, src = v || {};
+    SETUP_FIELDS.forEach(function (k) { out[k] = typeof src[k] === "string" ? src[k] : ""; });
+    if (!out.manager) out.manager = "박";
+    if (!out.vendor) out.vendor = "LX";
+    if (!out.vendorName) out.vendorName = "와이케이";
+    return out;
+  }
+  function compactDate(v) { return String(v || todayLocal()).replace(/-/g, "").slice(2); }
+  function generatedSiteName() {
+    var s = normalizedSetup(state.siteSetup), vendor = s.vendor === "custom" ? s.vendorCustom : s.vendor;
+    var people = [s.manager || "박", vendor || "LX", s.vendorName || "와이케이"].map(function(v){return v.trim();}).filter(Boolean);
+    return [compactDate(state.surveyDate), "[실측]", "(" + people.join("-") + ")", s.address.trim(), s.note.trim() ? "(" + s.note.trim() + ")" : ""].filter(Boolean).join(" ").replace(/[\\/:*?\"<>|\x00-\x1f]/g, "_");
+  }
+  function normalizedLifting(v) {
+    var src=v||{}, method=typeof src.method==="string"?src.method:"", other=typeof src.other==="string"?src.other:"";
+    return { method: method, other: other };
+  }
+  function liftingText() {
+    var l=normalizedLifting(state.lifting), value=l.method==="기타"?l.other:l.method;
+    return value ? "양중: "+value : "";
+  }
+  function syncGlobalInputs() {
+    state.overallNotes=$("overallnotes").value || "";
+    state.lifting={method:$("liftingmethod").value || "",other:$("liftingother").value || ""};
+    $("liftingotherwrap").hidden=state.lifting.method!=="기타";
+  }
+  function fillGlobalInputs() {
+    state.overallNotes=typeof state.overallNotes==="string"?state.overallNotes:"";
+    state.lifting=normalizedLifting(state.lifting);
+    $("overallnotes").value=state.overallNotes; $("liftingmethod").value=state.lifting.method; $("liftingother").value=state.lifting.other;
+    $("liftingotherwrap").hidden=state.lifting.method!=="기타";
+  }
+  function setupFromInputs() {
+    state.surveyDate = $("setupdate").value || todayLocal();
+    state.siteSetup = { baseText: $("basetext").value, manager: $("setupmanager").value || "박", vendor: $("setupvendor").value || "LX", vendorCustom: $("setupvendorcustom").value,
+      vendorName: $("setupvendorname").value, address: $("setupaddress").value, siteName: "", note: $("setupnote").value };
+    $("sitepreview").textContent = generatedSiteName() || "자동 생성명 미리보기";
+  }
+  function fillSetup(collapse) {
+    state.siteSetup = normalizedSetup(state.siteSetup);
+    $("basetext").value = state.siteSetup.baseText; $("setupmanager").value = state.siteSetup.manager;
+    $("setupvendor").value = ["LX","KCC","홈CC","custom"].includes(state.siteSetup.vendor) ? state.siteSetup.vendor : "custom";
+    if ($("setupvendor").value === "custom" && !state.siteSetup.vendorCustom) state.siteSetup.vendorCustom = state.siteSetup.vendor;
+    $("setupvendorcustom").value = state.siteSetup.vendorCustom; $("setupvendorcustomwrap").hidden = $("setupvendor").value !== "custom"; $("setupvendorcustom").disabled = $("setupvendor").value !== "custom"; $("setupvendorname").value = state.siteSetup.vendorName;
+    $("setupaddress").value = state.siteSetup.address; $("setupnote").value = state.siteSetup.note;
+    $("setupdate").value = state.surveyDate || todayLocal(); setupFromInputs();
+    $("sitesetup").classList.toggle("collapsed", !!collapse); $("editsitesetup").hidden = !collapse;
+  }
+  function parseBaseText() {
+    var raw = $("basetext").value.trim(), cleaned = raw.replace(/\r/g, "");
+    if (!cleaned) { setupFromInputs(); persist(); return; }
+    var first = cleaned.split(/\n|\//).map(function(v){return v.trim();}).filter(Boolean);
+    var head = first[0] || "", manager = (head.match(/(?:실측|시공|AS)\s*\(([^)]+)\)/i) || [])[1] || "";
+    if (/^(?:예약|미정)$/i.test(manager.trim())) manager = "";
+    var pipe = cleaned.split("|");
+    var afterPipe = pipe.length > 1 ? pipe.slice(1).join("|").split(/[\/\n]/)[0].trim() : "";
+    var phone = /(?:\+?82[- .]?)?0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}/g;
+    var phoneTest = /(?:\+?82[- .]?)?0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}/;
+    var candidates = first.map(function(v){return v.replace(phone, "").replace(/^(?:실측|시공|AS)\s*\([^)]*\)\s*(?:\|.*)?$/i, "").trim();}).filter(Boolean);
+    var looksLikeAddress = function(v){ return /(?:시|군|구|동|읍|면|리|아파트|빌라|로|길|번지|호)/.test(v); };
+    var addressSource = (looksLikeAddress(afterPipe) ? afterPipe : "") || candidates.filter(looksLikeAddress)[0] || "";
+    var address = addressSource;
+    var trailingNotes=[];
+    address=address.replace(/\s*\(([^()]*(?:전화|요망|보증|평형|체크|준비)[^()]*)\)\s*$/g,function(_,v){trailingNotes.push(v.trim());return "";}).trim();
+    var vendorIndex=first.findIndex(function(v){return /^(?:LX|KCC|홈CC)$/i.test(v);});
+    var vendorToken=vendorIndex>=0?first[vendorIndex]:"";
+    if(!manager&&vendorIndex>0&&/^[가-힣A-Za-z]{1,8}$/.test(first[vendorIndex-1])) manager=first[vendorIndex-1];
+    if (manager) $("setupmanager").value = manager;
+    if(vendorToken) $("setupvendor").value=/^LX$/i.test(vendorToken)?"LX":/^KCC$/i.test(vendorToken)?"KCC":"홈CC";
+    var vendorNameToken=vendorIndex>=0&&first[vendorIndex+1]&&!/(?:시|군|구|동|읍|면|리|아파트|빌라|로|길|번지|호|월|일|시|평|보증)/.test(first[vendorIndex+1])?first[vendorIndex+1]:"";
+    if(!vendorNameToken) vendorNameToken=first.filter(function(v){return v!==vendorToken&&v!==manager&&v!==address&&!phoneTest.test(v)&&!/(?:시|군|구|동|읍|면|리|아파트|빌라|로|길|번지|호|월|일|시|평|보증)/.test(v)&&v.length<=12;})[0];
+    if(vendorNameToken) $("setupvendorname").value=vendorNameToken;
+    if (address) $("setupaddress").value = address;
+    var notes = trailingNotes.concat(first.filter(function(v){ return v !== address && !phoneTest.test(v) && v !== manager && v!==vendorToken && v!==vendorNameToken && !/^(?:LX|KCC|홈CC|와이케이)$/i.test(v) && !/^(?:실측|시공|AS)\s*\(/i.test(v); }));
+    if (afterPipe && afterPipe !== addressSource && !phoneTest.test(afterPipe)) notes.unshift(afterPipe);
+    var reservation=(cleaned.match(/실측\s*\(예약\)\s*(\d{1,2})(?::(\d{2}))?/i)||[]);
+    if(reservation.length) notes.unshift("예약"+reservation[1]+(reservation[2]&&reservation[2]!=="00"?"시 "+reservation[2]+"분":"시"));
+    $("setupnote").value = Array.from(new Set(notes.map(function(v){return v.replace(phone,"").trim();}).filter(Boolean))).join(", ");
+    setupFromInputs(); persist();
+  }
+  ["setupdate","setupmanager","setupvendor","setupvendorcustom","setupvendorname","setupaddress","setupnote"].forEach(function(id){
+    $(id).addEventListener("input", function(){ setupFromInputs(); persist(); });
+  });
+  $("setupvendor").addEventListener("change", function(){ var custom=this.value === "custom"; $("setupvendorcustomwrap").hidden = !custom; $("setupvendorcustom").disabled = !custom; setupFromInputs(); persist(); });
+  $("basetext").addEventListener("input", parseBaseText);
+  $("applysite").addEventListener("click", function(){ setupFromInputs(); var name = generatedSiteName(); if (!state.siteSetup.address.trim()) { toast("현장주소를 확인해주세요"); $("setupaddress").focus(); return; } $("site").value = state.site = name; $("surveydate").value = state.surveyDate; persist(); fillSetup(true); toast("기초입력을 적용했습니다"); });
+  $("editsitesetup").addEventListener("click", function(){ fillSetup(false); $("basetext").focus(); });
+  ["overallnotes","liftingmethod","liftingother"].forEach(function(id){
+    $(id).addEventListener(id==="liftingmethod"?"change":"input",function(){syncGlobalInputs();persist();});
+  });
+
+  // 현장 평면도를 화면에 뒤집어 보여줄 때(상하/좌우), 저장되는 좌표는 항상 "원본 이미지
+  // 기준"으로 유지한다 — 화면표시용 변환과 클릭입력 역변환에 같은 공식(자기 자신의 역)을 쓴다.
+  function dispX(fx) { return state.flipH ? (1 - fx) : fx; }
+  function dispY(fy) { return state.flipV ? (1 - fy) : fy; }
+  var realX = dispX, realY = dispY;   // 뒤집기는 대칭이라 정방향/역방향 공식이 같다
+
+  function newSash(type) { return { kind: "sash", sashType: type || "normal", w: "0", h: "0", panels: "2짝", primary: "right", smallW:"0", smallSide:"left", addon:null }; }
+  function normalizeAddon(v,frame){if(!v||typeof v!=="object")return null;return {w:v.w===undefined||v.w===null?"0":String(v.w),h:v.h===undefined||v.h===null?"0":String(v.h),sashType:v.sashType||"normal",frame:typeof v.frame==="string"?v.frame:(frame||"")};}
+  function newMullion() { return { kind: "mullion", spec: MULLION_SPECS[0], count: 1, stackDirection: "outside-in", layers: [{ spec: MULLION_SPECS[0], count: 1 }] }; }
+  function newTurn() { return { kind: "turn", w: "0", h: "0", swing: "push", handle: "right" }; }
+  function newEntry() { return { kind: "entry", w: "900", h: "2100", drawInDrawing: false }; }
+  function normalizeMullionSpec(v) {
+    var s=String(v||"").replace(/\s/g,"").replace(/X/g,"x");
+    if (/100x100/.test(s)) return "100×100";
+    if (/40x105/.test(s)) return "40×105";
+    if (/105x40/.test(s)) return "105×40";
+    return v || MULLION_SPECS[0];
+  }
+  function normalizeMullionPart(t) {
+    var rows=[];
+    if(Array.isArray(t.layers)) t.layers.forEach(function(v){v.spec=normalizeMullionSpec(v.spec);v.count=Math.max(1,parseInt(v.count,10)||1);rows.push(v);});
+    if(!rows.length&&typeof t.stack==="string"&&t.stack.trim()) t.stack.trim().split(/\s*\+\s*/).forEach(function(token){var m=token.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);if(m)rows.push({spec:normalizeMullionSpec(m[1]+"×"+m[2]),count:1});});
+    if(!rows.length) rows=[{spec:normalizeMullionSpec(t.spec==="100×45"?"40×105":t.spec),count:Math.max(1,parseInt(t.count,10)||1)}];
+    t.layers=rows; t.spec=rows[0].spec; t.count=rows[0].count; t.stackDirection=t.stackDirection==="inside-out"?"inside-out":"outside-in"; delete t.stack; delete t.groupId; return t;
+  }
+  function mullionLayerRows(t){return normalizeMullionPart(t).layers;}
+  function mullionLayers(t) {
+    var layers=[];mullionLayerRows(t).forEach(function(row){var spec=String(row.spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=spec?Number(spec[1]):100,depth=spec?Number(spec[2]):100;for(var i=0;i<row.count;i++)layers.push({face:face,depth:depth,label:Math.round(face)+"×"+Math.round(depth)});});return t.stackDirection==="inside-out"?layers.reverse():layers;
+  }
+  function mullionDepth(t){return mullionLayers(t).reduce(function(n,v){return n+v.depth;},0);}
+  function placedMullionLayers(t,frameDepth){
+    var layers=mullionLayers(t),at=t.stackDirection==="inside-out"?frameDepth:0;
+    return layers.map(function(layer){if(t.stackDirection==="inside-out")at-=layer.depth;var placed={face:layer.face,depth:layer.depth,label:layer.label,y:at};if(t.stackDirection!=="inside-out")at+=layer.depth;return placed;});
+  }
+  function drawingPartsGrouped(p) { return (p.parts||[]).slice(); }
+  function parseComposition(text) {
+    var out=[];
+    String(text||"").split(/\s*\+\s*/).forEach(function(token){
+      var m=token.match(/통바\s*(100\s*[xX×]\s*100|40\s*[xX×]\s*105|105\s*[xX×]\s*40)/i);
+      if(m){out.push({kind:"mullion",spec:normalizeMullionSpec(m[1])});return;}
+      var w=token.match(/창\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)(?:\s*[-·]?\s*(\d+)\s*짝)?/i);
+      if(w){var sash=newSash("normal");sash.w=w[1];sash.h=w[2];sash.panels=(w[3]||"2")+"짝";out.push(sash);}
+    });
+    return out;
+  }
+  function compositionSummary(p) {
+    return (p.parts || []).map(function(t){
+      if(t.kind==="mullion") return "통바 "+mullionLayerRows(t).map(function(v){return v.spec+" "+v.count+"개";}).join(" / ");
+      if(t.kind==="entry") return "현관문 900x2100";
+      var st=t.kind==="turn"?"turn":(t.sashType||"normal"), names={normal:"창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},addon=normalizeAddon(t.addon,p.frame);
+      return (names[st]||"창")+" "+(t.w||0)+"x"+(t.h||0)+(st==="normal"?" - "+(t.panels||"2짝"):st==="unbalanced"?" - 소형창 폭 "+(t.smallW||0)+" ("+(t.smallSide==="right"?"오른쪽":"왼쪽")+")":"")+(addon?" - 덧창 "+addon.w+"x"+addon.h:"");
+    }).join(" + ");
+  }
+  function syncComposition(p) { p.composition=compositionSummary(p); var i=state.pins.indexOf(p),el=document.querySelector('textarea[data-composition-pin="'+i+'"]');if(el)el.value=p.composition; }
+  var DETAIL_FIELDS = [["molding","몰딩"],["filling","사춤"],["tile","타일"],["drainHole","물구멍"],["screen","방충망"],["brick","벽돌"]];
+  var DETAIL_DEFAULT_ON = { drainHole: true, screen: true };
+  function normalizedDetails(v) {
+    var out = {}, src = v || {};
+    DETAIL_FIELDS.forEach(function(item){
+      if (item[0] === "molding" || item[0] === "brick") out[item[0]] = typeof src[item[0]] === "string" ? src[item[0]] : "";
+      else if (src[item[0]] === undefined) out[item[0]] = !!DETAIL_DEFAULT_ON[item[0]];
+      else out[item[0]] = src[item[0]] === true || (typeof src[item[0]] === "string" && !!src[item[0]] && src[item[0]] !== "없음");
+    });
+    return out;
+  }
+  function isEntryPin(p) {
+    return !!(p && p.parts && p.parts.some(function (t) { return t.kind === "entry"; }));
+  }
+  function requiresFrame(p) {
+    return !!(p && p.parts && p.parts.some(function(t){ return t.kind === "sash" || t.kind === "turn"; }));
+  }
+  function frameDepthMm(v) { var s=String(v||""),special=s.match(/40\s*[xX×]\s*105/),m=s.match(/(115|140|235|250)/);return special?105:(m?Number(m[1]):(/FWA/i.test(s)?230:null)); }
+  function visiblePinLabel(p, index) {
+    if (isEntryPin(p)) return "현관";
+    var number = 0;
+    for (var i = 0; i <= index; i++) if (!isEntryPin(state.pins[i])) number++;
+    return String(number);
+  }
+  function markerSizeForPin() { var base = window.matchMedia("(max-width:600px)").matches ? 12 : 16; return Math.round(base * (planZoom || 1)); }
+  function edgeFallbackAngle(x, y) {
+    var toLR = Math.min(x, 1 - x);   // 좌/우 가장자리까지 거리 — 가까우면 세로벽(세로 막대)
+    var toTB = Math.min(y, 1 - y);   // 상/하 가장자리까지 거리 — 가까우면 가로벽(가로 막대)
+    return toLR < toTB ? 90 : 0;
+  }
+  function isWallPixel(x, y) {
+    if (!planPixels || x < 0 || y < 0 || x >= planPixels.w || y >= planPixels.h) return false;
+    var k = (Math.floor(y) * planPixels.w + Math.floor(x)) * 4, d = planPixels.data;
+    // 평면도의 검은/진회색 벽선만 잡고 바닥무늬·방 색상·글자는 최대한 제외한다.
+    return d[k + 3] > 100 && (d[k] + d[k + 1] + d[k + 2]) / 3 < 72;
+  }
+  function stripScore(cx, cy, horizontal) {
+    if (!planPixels) return 0;
+    var longR = Math.max(14, Math.round((horizontal ? planPixels.w : planPixels.h) * .045));
+    var band = 2, hit = 0, total = 0;
+    for (var a = -longR; a <= longR; a += 2) {
+      var found = false;
+      for (var b = -band; b <= band; b++) {
+        var x = horizontal ? cx + a : cx + b, y = horizontal ? cy + b : cy + a;
+        if (isWallPixel(x, y)) { found = true; break; }
+      }
+      if (found) hit++; total++;
+    }
+    return total ? hit / total : 0;
+  }
+  function rayToWall(cx, cy, dx, dy) {
+    if (!planPixels) return null;
+    var max = Math.round((dx ? planPixels.w : planPixels.h) * .22);
+    for (var n = 6; n <= max; n++) {
+      var hits = 0;
+      for (var b = -2; b <= 2; b++) {
+        var x = cx + dx * n + (dy ? b : 0), y = cy + dy * n + (dx ? b : 0);
+        if (isWallPixel(x, y)) hits++;
+      }
+      if (hits >= 3) return n;
+    }
+    return null;
+  }
+  function nearestWallLine(cx, cy, vertical) {
+    if (!planPixels) return null;
+    var across = vertical ? planPixels.w : planPixels.h;
+    var along = vertical ? planPixels.h : planPixels.w;
+    var searchR = Math.max(10, Math.round(across * .035));
+    var longR = Math.max(14, Math.round(along * .045));
+    var best = null;
+    for (var off = -searchR; off <= searchR; off++) {
+      var hit = 0, total = 0;
+      for (var a = -longR; a <= longR; a += 2) {
+        var found = false;
+        for (var band = -1; band <= 1; band++) {
+          var x = vertical ? cx + off + band : cx + a;
+          var y = vertical ? cy + a : cy + off + band;
+          if (isWallPixel(x, y)) { found = true; break; }
+        }
+        if (found) hit++; total++;
+      }
+      var score = total ? hit / total : 0;
+      var rank = score - Math.abs(off) / searchR * .12;
+      if (!best || rank > best.rank) best = { off: off, score: score, rank: rank };
+    }
+    if (!best || best.score < .28) return null;
+
+    // 굵은 벽의 한쪽 모서리가 아니라 검은 선 덩어리의 중앙에 맞춘다.
+    var weighted = 0, weight = 0;
+    for (var d = -5; d <= 5; d++) {
+      var pos = best.off + d, localHit = 0, localTotal = 0;
+      for (var q = -longR; q <= longR; q += 3) {
+        var px = vertical ? cx + pos : cx + q;
+        var py = vertical ? cy + q : cy + pos;
+        if (isWallPixel(px, py)) localHit++;
+        localTotal++;
+      }
+      var localScore = localTotal ? localHit / localTotal : 0;
+      if (localScore >= best.score * .55) { weighted += pos * localScore; weight += localScore; }
+    }
+    var center=(vertical ? cx : cy)+(weight?weighted/weight:best.off),minCoordinate=center,maxCoordinate=center;
+    for(var edgeOff=-searchR;edgeOff<=searchR;edgeOff++){
+      var edgeHit=0,edgeTotal=0;for(var edgeAlong=-longR;edgeAlong<=longR;edgeAlong+=3){var edgeFound=false;for(var edgeBand=-1;edgeBand<=1;edgeBand++){var ex=vertical?cx+edgeOff+edgeBand:cx+edgeAlong,ey=vertical?cy+edgeAlong:cy+edgeOff+edgeBand;if(isWallPixel(ex,ey)){edgeFound=true;break;}}if(edgeFound)edgeHit++;edgeTotal++;}
+      if(edgeTotal&&edgeHit/edgeTotal>=best.score*.55){var coordinate=(vertical?cx:cy)+edgeOff;minCoordinate=Math.min(minCoordinate,coordinate);maxCoordinate=Math.max(maxCoordinate,coordinate);}
+    }
+    return { coordinate:center,minCoordinate:minCoordinate,maxCoordinate:maxCoordinate,
+             score: best.score, distance: Math.abs(best.off) };
+  }
+  // 근처 벽선을 찾아 스냅 좌표·각도·잠금 정보를 계산한다(벽이 없으면 null).
+  // 자동 배치(analyzePlacement)의 초기 위치 추정과, 수동 "벽에 고정" 버튼이 함께 사용한다.
+  function computeWallLock(x, y) {
+    if (!planPixels) return null;
+    var cx = x * planPixels.w, cy = y * planPixels.h;
+    var vertical = nearestWallLine(cx, cy, true), horizontal = nearestWallLine(cx, cy, false);
+    if (!vertical && !horizontal) return null;
+    var useVertical = vertical && (!horizontal || vertical.score >= horizontal.score);
+    if (useVertical) {
+      var wallX=x<.5?vertical.minCoordinate:vertical.maxCoordinate,sx = Math.min(1, Math.max(0, wallX / planPixels.w));
+      return { x: sx, y: y, angle: 90, wallLock: { angle: 90, coordinate: sx } };
+    }
+    var wallY=y<.5?horizontal.minCoordinate:horizontal.maxCoordinate,sy = Math.min(1, Math.max(0, wallY / planPixels.h));
+    return { x: x, y: sy, angle: 0, wallLock: { angle: 0, coordinate: sy } };
+  }
+  function analyzePlacement(x, y) {
+    if (!planPixels) return { x: x, y: y, angle: edgeFallbackAngle(x, y), mode: "free", wallLock: null };
+    // 벽이 감지되면 위치·각도는 그 벽 기준으로 스냅하되, 드래그 잠금(mode:"wall")은 걸지
+    // 않는다 — 오탐(치수선·해칭 등)이 잦아 기본은 자유 이동, 잠금은 사용자가 카드의
+    // "벽에 고정" 버튼으로 직접 선택한다.
+    var lock = computeWallLock(x, y);
+    if (lock) return { x: lock.x, y: lock.y, angle: lock.angle, mode: "free", wallLock: null };
+    return { x: x, y: y, angle: guessAngle(x, y), mode: "free", wallLock: null };
+  }
+  function applyPlacement(p) {
+    var a = analyzePlacement(p.x, p.y);
+    p.x = a.x; p.y = a.y; p.angle = a.angle;
+    p.placementMode = a.mode; p.wallLock = a.wallLock;
+  }
+  function guessAngle(x, y) {
+    if (!planPixels) return edgeFallbackAngle(x, y);
+    var cx = x * planPixels.w, cy = y * planPixels.h;
+    var hs = stripScore(cx, cy, true), vs = stripScore(cx, cy, false);
+    // 번호가 굵은 벽선 위에 있으면 그 벽선 자체의 방향을 따른다.
+    if (Math.max(hs, vs) >= .30 && Math.abs(hs - vs) >= .08) return vs > hs ? 90 : 0;
+
+    // 터닝도어처럼 개구부의 허공을 찍으면 서로 마주 보는 가장 가까운 두 벽을 찾는다.
+    var left = rayToWall(cx, cy, -1, 0), right = rayToWall(cx, cy, 1, 0);
+    var up = rayToWall(cx, cy, 0, -1), down = rayToWall(cx, cy, 0, 1);
+    var horizontalGap = left !== null && right !== null ? (left + right) / planPixels.w : Infinity;
+    var verticalGap = up !== null && down !== null ? (up + down) / planPixels.h : Infinity;
+    if (horizontalGap !== Infinity || verticalGap !== Infinity) return horizontalGap <= verticalGap ? 0 : 90;
+    return edgeFallbackAngle(x, y);
+  }
+  function newPin(x, y) {
+    var p = { name: "", frame: "", notes: "", composition: "", details: normalizedDetails(), parts: [], x: x, y: y, angle: 0,
+              placementMode: "free", wallLock: null };
+    applyPlacement(p);
+    return p;
+  }
+
+  /* ---------------- 저장 / 복원 ---------------- */
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  function restore() {
+    var raw;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return; }
+    if (!raw) return;
+    try {
+      var s = JSON.parse(raw);
+      if (s && Array.isArray(s.pins)) {
+        state = { site: s.site || "", siteSetup: s.siteSetup || {}, overallNotes: typeof s.overallNotes==="string"?s.overallNotes:"", lifting: normalizedLifting(s.lifting), planName: s.planName || "",
+                  surveyDate: s.surveyDate || todayLocal(),
+                  planData: s.planData || "", pins: s.pins,
+                  scale: s.scale && (s.scale.mmPerPixel || s.scale.mmPerFracX) ? s.scale : null,
+                  flipV: !!s.flipV, flipH: !!s.flipH,
+                  wallEdits: s.wallEdits || { add: [], remove: [] } };
+        if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
+        if (!Array.isArray(state.wallEdits.remove)) state.wallEdits.remove = [];
+        state.pins.forEach(function (p) {
+          if (!Array.isArray(p.parts)) p.parts = [];
+          p.parts.forEach(function (t) {
+            if (t.kind === "mullion") normalizeMullionPart(t);
+            if (t.kind === "turn") { if(t.swing!=="push"&&t.swing!=="pull")t.swing="push"; if(t.handle!=="left"&&t.handle!=="right")t.handle="right"; }
+            if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if (typeof t.drawInDrawing !== "boolean") t.drawInDrawing = false; }
+            if (t.kind === "sash") {
+              if (!t.sashType) t.sashType = t.panels === "고정" ? "fix" : "normal";
+              if (t.sashType === "unbalanced") { t.primary = "small"; if (t.smallSide !== "left" && t.smallSide !== "right") t.smallSide = "left"; }
+            }
+          });
+          if (/현관/.test(p.name || "")) p.parts = p.parts.map(function (t) {
+            return t.kind === "turn" ? newEntry() : t;
+          });
+          if (typeof p.frame !== "string") p.frame = "";
+          if (typeof p.notes !== "string") p.notes = "";
+          if (typeof p.composition !== "string") p.composition = "";
+          if(isEntryPin(p)&&typeof p.drawInDrawing!=="boolean")p.drawInDrawing=!!(p.parts.filter(function(t){return t.kind==="entry";})[0]||{}).drawInDrawing;
+          p.details = normalizedDetails(p.details);
+          if (typeof p.angle !== "number") p.angle = 0;
+          if (p.placementMode !== "wall") p.placementMode = "free";
+          if (!p.wallLock || typeof p.wallLock.coordinate !== "number") p.wallLock = null;
+          delete p.span;
+        });
+      }
+    } catch (e) {}
+  }
+
+  function toast(msg) {
+    var t = $("toast");
+    t.textContent = msg; t.classList.add("on");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.classList.remove("on"); }, 3200);
+  }
+  function showUndo(msg, onUndo) {
+    var bar = $("undobar"), btn = $("undobar-btn");
+    $("undobar-msg").textContent = msg;
+    bar.hidden = false; bar.classList.add("on");
+    clearTimeout(showUndo._t);
+    function hide() { bar.classList.remove("on"); setTimeout(function () { bar.hidden = true; }, 200); }
+    function onClick() { hide(); clearTimeout(showUndo._t); onUndo(); btn.removeEventListener("click", onClick); }
+    btn.removeEventListener("click", showUndo._prevClick || function () {});
+    btn.addEventListener("click", onClick);
+    showUndo._prevClick = onClick;
+    showUndo._t = setTimeout(hide, 5000);
+  }
+
+  /* ---------------- 평면도 ---------------- */
+  function applyFlip() {
+    $("plan").style.transform =
+      "scale(" + (state.flipH ? -1 : 1) + "," + (state.flipV ? -1 : 1) + ")";
+  }
+  function showPlan(dataUrl, name) {
+    state.planData = dataUrl;
+    state.planName = name || state.planName;
+    $("plan").src = dataUrl;
+    $("stage").hidden = false;
+    $("planviewtools").hidden = false;
+    $("ph").hidden = true;
+    $("drop").classList.add("hasimg");
+    applyFlip();
+    persist();
+  }
+  $("plan").addEventListener("load", function () {
+    try {
+      var maxSide = 1400, ratio = Math.min(1, maxSide / Math.max(this.naturalWidth, this.naturalHeight));
+      var c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(this.naturalWidth * ratio));
+      c.height = Math.max(1, Math.round(this.naturalHeight * ratio));
+      var ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(this, 0, 0, c.width, c.height);
+      planPixels = { w: c.width, h: c.height, data: ctx.getImageData(0, 0, c.width, c.height).data };
+      state.pins.forEach(applyPlacement);
+      persist(); render();
+      if (state.pins.length) toast("기존 번호 " + state.pins.length + "곳의 방향을 자동 적용했습니다");
+    } catch (e) { planPixels = null; }
+  });
+  function readFile(f) {
+    if (!f || !/^image\//.test(f.type)) { toast("이미지 파일만 올릴 수 있습니다"); return; }
+    var r = new FileReader();
+    r.onload = function () {
+      planZoom = 1; $("stage").style.width = "100%";
+      state.flipV = false; state.flipH = false;
+      state.scale = null;
+      state.wallEdits = { add: [], remove: [] };
+      state.pins.forEach(function (p) { p.span = null; });
+      showPlan(r.result, f.name); toast("현장 평면도를 불러왔습니다");
+    };
+    r.readAsDataURL(f);
+  }
+  $("pick").addEventListener("click", function () { $("file").click(); });
+  $("repick").addEventListener("click", function () { $("file").click(); });
+  $("file").addEventListener("change", function (e) {
+    if (e.target.files && e.target.files[0]) readFile(e.target.files[0]);
+    e.target.value = "";
+  });
+  var drop = $("drop");
+  $("plan").addEventListener("dragstart",function(e){e.preventDefault();});
+  installPanScroller(drop,function(){return planZoom>1;});
+  installPlanPinch(drop);
+  installPanScroller($("drawingpreview").querySelector(".preview-zoom-wrap"),function(){return previewZoom>1;});
+  ["dragenter", "dragover"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+  });
+  drop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+  });
+
+  $("flipv").addEventListener("click", function () {
+    if (!state.planData) { toast("현장 평면도를 먼저 올려주세요"); return; }
+    state.flipV = !state.flipV; applyFlip(); persist(); render();
+  });
+  $("fliph").addEventListener("click", function () {
+    if (!state.planData) { toast("현장 평면도를 먼저 올려주세요"); return; }
+    state.flipH = !state.flipH; applyFlip(); persist(); render();
+  });
+  $("planzoomout").addEventListener("click",function(){planZoom=Math.max(.5,Math.round((planZoom-.25)*100)/100);applyPlanZoom();});
+  $("planzoomreset").addEventListener("click",function(){planZoom=1;applyPlanZoom();drop.scrollLeft=0;drop.scrollTop=0;});
+  $("planzoomin").addEventListener("click",function(){planZoom=Math.min(3,Math.round((planZoom+.25)*100)/100);applyPlanZoom();});
+
+  function planPointFromClient(clientX,clientY) {
+    var r=$("plan").getBoundingClientRect();
+    if(!r.width||!r.height)return null;
+    var rawX=Math.min(1,Math.max(0,(clientX-r.left)/r.width));
+    var rawY=Math.min(1,Math.max(0,(clientY-r.top)/r.height));
+    return {x:realX(rawX),y:realY(rawY),rawX:rawX,rawY:rawY};
+  }
+
+  /* ---------------- 아코디언 열기(공용) ---------------- */
+  function openCard(i, focusName) {
+    sel = i;
+    render();
+    requestAnimationFrame(function () {
+      var card = document.querySelectorAll(".op")[i];
+      if (!card) return;
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (focusName) {
+        var nm = card.querySelector(".nm");
+        if (nm) nm.focus();
+      }
+    });
+  }
+
+  /* ---------------- 핀 추가 ---------------- */
+  $("stage").addEventListener("click", function (e) {
+    if (e.target.classList.contains("marker")) return;
+    if (dragMoved || panMoved) return;
+    var point=planPointFromClient(e.clientX,e.clientY);
+    if(!point)return;
+    var fx=point.x,fy=point.y;
+    if (pickMode) {
+      if (pickMode.type === "entry") {
+        state.pins = state.pins.filter(function(pin){return !isEntryPin(pin);});
+        var entryPin = newPin(fx, fy); entryPin.name = "현관"; entryPin.drawInDrawing = false; entryPin.parts = [newEntry()];
+        state.pins.push(entryPin); pickMode = null; persist(); openCard(state.pins.length - 1, false);
+        toast("현관 위치를 지정했습니다"); return;
+      }
+      pickMode.points.push({ x: fx, y: fy });
+      if (pickMode.points.length === 1) {
+        render(); toast(pickMode.type === "scale" ? "기준 창의 반대쪽 끝점을 눌러주세요" : "두 번째 점을 눌러주세요"); return;
+      }
+      var a = pickMode.points[0], b = pickMode.points[1];
+      if (pickMode.type === "scale") {
+        var px = imagePixelDistance(a, b);
+        if (px < 5) { pickMode = null; render(); toast("두 점이 너무 가깝습니다. 다시 설정해주세요"); return; }
+        state.scale = { mmPerPixel: pickMode.mm / px, referenceMm: pickMode.mm,
+          a: a, b: b, imageWidth: $("plan").naturalWidth, imageHeight: $("plan").naturalHeight };
+        pickMode = null; updateScaleHint(); persist(); render(); toast("축척을 설정했습니다"); return;
+      }
+      if (pickMode.type === "wall-add" || pickMode.type === "wall-remove") {
+        var editKey = pickMode.type === "wall-add" ? "add" : "remove";
+        state.wallEdits[editKey].push({ a: a, b: b });
+        pickMode = null; persist(); render();
+        toast(editKey === "add" ? "누락 벽을 추가했습니다" : "잘못된 벽을 제외했습니다"); return;
+      }
+      pickMode = null; render(); return;
+    }
+    state.pins.push(newPin(fx, fy));
+    openCard(state.pins.length - 1, false);
+  });
+
+  function updateScaleHint() {
+    var h = $("scalehint");
+    h.textContent = state.scale
+      ? "설정됨 — 기준 창 실측값을 평면도 전체에 적용합니다"
+      : "미설정 — 실제 폭을 아는 기준 창으로 설정해주세요";
+  }
+
+  function imagePixelDistance(a, b) {
+    var w = $("plan").naturalWidth || (state.scale && state.scale.imageWidth) || 1;
+    var h = $("plan").naturalHeight || (state.scale && state.scale.imageHeight) || 1;
+    return Math.hypot((b.x - a.x) * w, (b.y - a.y) * h);
+  }
+  $("calibrate").addEventListener("click", function () {
+    if (!state.planData) { toast("현장 평면도를 먼저 올려주세요"); return; }
+    if (state.scale && !confirm("이미 축척이 설정되어 있습니다. 다시 설정할까요?")) return;
+    var mmStr = prompt("기준 창의 실제 폭을 입력하세요(mm)\n예: 2400");
+    var mm = parseFloat(mmStr);
+    if (!mm || mm <= 0) { toast("취소되었습니다"); return; }
+    pickMode = { type: "scale", mm: mm, points: [] };
+    $("planhint").textContent = "기준 창의 한쪽 끝점을 눌러주세요";
+    toast("기준 창의 한쪽 끝점을 눌러주세요");
+    render();
+  });
+  function beginWallEdit(type, message) {
+    if (!state.planData) { toast("현장 평면도를 먼저 올려주세요"); return; }
+    pickMode = { type: type, points: [] }; render(); toast(message);
+  }
+  $("walladd").addEventListener("click", function () {
+    beginWallEdit("wall-add", "추가할 벽의 시작점을 눌러주세요");
+  });
+  $("wallremove").addEventListener("click", function () {
+    beginWallEdit("wall-remove", "제외할 벽의 시작점을 눌러주세요");
+  });
+  $("wallreset").addEventListener("click", function () {
+    var edits = state.wallEdits.add.length + state.wallEdits.remove.length;
+    if (!edits) { toast("저장된 벽 보정이 없습니다"); return; }
+    if (!confirm("추가·제외한 벽 보정을 모두 초기화할까요?")) return;
+    state.wallEdits = { add: [], remove: [] }; persist(); render(); toast("벽 보정을 초기화했습니다");
+  });
+
+  $("addnum").addEventListener("click", function () {
+    if (!state.planData) { toast("현장 평면도를 먼저 올려주세요"); return; }
+    var n = state.pins.length;
+    var offsets = [[0, 0], [0.06, 0.04], [-0.06, 0.04], [0.06, -0.04], [-0.06, -0.04]];
+    var off = offsets[n % offsets.length];
+    var x = Math.min(0.94, Math.max(0.06, 0.5 + off[0]));
+    var y = Math.min(0.94, Math.max(0.06, 0.5 + off[1]));
+    state.pins.push(newPin(x, y));
+    openCard(state.pins.length - 1, false);
+    toast((state.pins.length) + "번을 추가했습니다 — 현장 평면도에서 위치를 드래그해 옮기세요");
+  });
+
+  $("addentry").addEventListener("click", function () {
+    if (!state.planData) { toast("현장 평면도를 먼저 올려주세요"); return; }
+    pickMode = { type: "entry", points: [] }; render();
+    toast("현장 평면도에서 현관 위치를 한 번 눌러주세요");
+  });
+
+  $("clearpins").addEventListener("click", function () {
+    if (!state.pins.length) return;
+    if (!confirm("번호 " + state.pins.length + "개를 모두 지울까요? 입력한 값도 함께 사라집니다.")) return;
+    var backup = state.pins, backupSel = sel;
+    state.pins = []; sel = null; persist(); render(); refreshDone();
+    showUndo("번호 " + backup.length + "개를 지웠습니다", function () {
+      state.pins = backup; sel = backupSel; persist(); render(); refreshDone();
+      toast("복구했습니다");
+    });
+  });
+
+  /* ---------------- 개소 순서 바꾸기(드래그) / 개별 삭제 ---------------- */
+  function removePin(i) {
+    state.pins.splice(i, 1);
+    if (sel === i) sel = null; else if (sel !== null && sel > i) sel -= 1;
+    render();
+  }
+
+  var rdIdx = -1, rdStartY = 0, rdRowH = 44, rdEl = null;
+  function onHandleDown(e) {
+    e.stopPropagation();
+    rdIdx = +this.dataset.i;
+    if (activeMini3D) { activeMini3D.cancel(); activeMini3D = null; }
+    document.querySelectorAll(".op.open").forEach(function (el) { el.classList.remove("open"); });
+    sel = null;
+    var rows = document.querySelectorAll(".op");
+    rdEl = rows[rdIdx];
+    rdRowH = rdEl.getBoundingClientRect().height + 6;
+    rdStartY = e.clientY;
+    rdEl.classList.add("dragging-row");
+    this.setPointerCapture(e.pointerId);
+  }
+  function onHandleMove(e) {
+    if (rdIdx < 0 || !rdEl) return;
+    var dy = e.clientY - rdStartY;
+    rdEl.style.transform = "translateY(" + dy + "px)";
+  }
+  function onHandleUp(e) {
+    if (rdIdx < 0) return;
+    var dy = e.clientY - rdStartY;
+    var shift = Math.round(dy / rdRowH);
+    var target = Math.min(state.pins.length - 1, Math.max(0, rdIdx + shift));
+    if (rdEl) { rdEl.style.transform = ""; rdEl.classList.remove("dragging-row"); }
+    if (target !== rdIdx) {
+      var item = state.pins.splice(rdIdx, 1)[0];
+      state.pins.splice(target, 0, item);
+      sel = target;
+    }
+    rdIdx = -1; rdEl = null;
+    render();
+  }
+
+  /* ---------------- 구성(통바/창) 순서 바꾸기 / 삭제 — 카드 안에서만 ---------------- */
+  function movePartUp(p, k) {
+    if (k <= 0) return;
+    var t = p.parts[k]; p.parts[k] = p.parts[k - 1]; p.parts[k - 1] = t; syncComposition(p);
+    render();
+  }
+  function movePartDown(p, k) {
+    if (k >= p.parts.length - 1) return;
+    var t = p.parts[k]; p.parts[k] = p.parts[k + 1]; p.parts[k + 1] = t; syncComposition(p);
+    render();
+  }
+  function removePart(p, k) {
+    p.parts.splice(k, 1); syncComposition(p);
+    render();
+  }
+
+  /* ---------------- 마커 드래그 ---------------- */
+  var dragIdx = -1, dragMoved = false;
+  function onDown(e) {
+    dragIdx = +this.dataset.i; dragMoved = false;
+    this.setPointerCapture(e.pointerId);
+  }
+  function onMove(e) {
+    if (dragIdx < 0) return;
+    dragMoved = true;
+    var point=planPointFromClient(e.clientX,e.clientY),p=state.pins[dragIdx];
+    if(!point)return;
+    var rawX=point.rawX,rawY=point.rawY,nx=point.x,ny=point.y;
+    if (p.placementMode === "wall" && p.wallLock) {
+      if (p.wallLock.angle === 90) { p.x = p.wallLock.coordinate; p.y = ny; }
+      else { p.x = nx; p.y = p.wallLock.coordinate; }
+      rawX = dispX(p.x); rawY = dispY(p.y);
+    } else { p.x = nx; p.y = ny; }
+    var el = document.querySelector('.marker[data-i="' + dragIdx + '"]');
+    if (el) { el.style.left = (rawX * 100) + "%"; el.style.top = (rawY * 100) + "%"; }
+    var bar = document.querySelector('.span-bar[data-i="' + dragIdx + '"]');
+    if (bar) { bar.style.left = (rawX * 100) + "%"; bar.style.top = (rawY * 100) + "%"; }
+  }
+  function onUp() {
+    if (dragIdx < 0) return;
+    var p = state.pins[dragIdx];
+    var moved = dragMoved;
+    if (p && moved && p.placementMode !== "wall") p.angle = guessAngle(p.x, p.y);
+    dragIdx = -1; persist();
+    if (moved) render();
+    setTimeout(function () { dragMoved = false; }, 0);
+  }
+  function onMarkerClick(ev) {
+    ev.stopPropagation();
+    if (dragMoved) return;
+    openCard(+this.dataset.i, false);
+  }
+
+  /* ---------------- 판정 / 요약 ---------------- */
+  // 폭·높이 치수가 필요한 구성(창/터닝도어/현관문). 통바는 폭 규격만 있고 실측 완료 판정에서 제외.
+  function sizedParts(p) {
+    return p.parts.filter(function (t) { return t.kind === "sash" || t.kind === "turn" || t.kind === "entry"; });
+  }
+  // "0"은 기본입력값일 뿐 실제 실측 아님 — 0보다 커야 완료로 판정한다.
+  function hasSize(t) { return Number(t.w) > 0 && Number(t.h) > 0; }
+  function isDone(p) {
+    var s = sizedParts(p);
+    return s.length > 0 && s.every(hasSize);
+  }
+  function summarize(p) {
+    if (!p.parts.length) return "구성 선택 전";
+    var s = sizedParts(p);
+    var base = (s.length && hasSize(s[0])) ? (s[0].w + "×" + s[0].h) : "치수 미입력";
+    var extra = p.parts.length > 1 ? (" 외 " + (p.parts.length - 1) + "개 구성") : "";
+    var frame = requiresFrame(p) && p.frame ? (" · " + p.frame) : "";
+    return base + extra + frame;
+  }
+
+  /* ---------------- 요소 생성 헬퍼 ---------------- */
+  function sel1(options, value, onChange, cls, placeholder) {
+    var s = document.createElement("select");
+    if (cls) s.className = cls;
+    if (placeholder !== undefined) {
+      var o0 = document.createElement("option");
+      o0.value = ""; o0.textContent = placeholder;
+      s.appendChild(o0);
+    }
+    options.forEach(function (o) {
+      var val = Array.isArray(o) ? o[0] : o, txt = Array.isArray(o) ? o[1] : o;
+      var op = document.createElement("option");
+      op.value = val; op.textContent = txt;
+      s.appendChild(op);
+    });
+    s.value = value;
+    s.addEventListener("change", function () { onChange(this.value, this); });
+    return s;
+  }
+  function numInput(val, ph, onInput, cls) {
+    var i = document.createElement("input");
+    i.type = "number"; i.value = val; i.placeholder = ph;
+    i.className = "dim" + (cls ? " " + cls : "");
+    i.min = "0"; i.step = "1"; i.inputMode = "numeric";
+    i.addEventListener("focus", function () { this.select(); });
+    i.addEventListener("input", function () { onInput(this.value); persist(); refreshDone(); });
+    i.addEventListener("change", function () {
+      // 숫자 입력을 마친 뒤 평면도와 3D 미리보기도 새 값으로 다시 그린다.
+      // 다음 버튼의 click을 가로채지 않도록 현재 이벤트가 끝난 뒤 실행한다.
+      // 예전엔 전체 render()를 불러 카드 목록 전체를 새로 만들었는데, 이러면
+      // 방금 Tab으로 옮겨간 다음 입력칸까지 통째로 교체돼 포커스가 body로
+      // 날아가 PC에서 Tab 이동이 안 되는 문제가 있었다. 열린 카드의 평면도
+      // 막대·3D 미리보기만 갱신해 카드 DOM 자체는 건드리지 않는다.
+      setTimeout(function () {
+        if (sel !== null && state.pins[sel]) {
+          refreshSpanBar(sel);
+          var openCardEl = document.querySelectorAll(".op")[sel];
+          var openBody = openCardEl && openCardEl.querySelector(".mini3d");
+          if (openBody) { if (activeMini3D) activeMini3D.cancel(); activeMini3D = mountMini3D(openBody, state.pins[sel]); }
+        }
+      }, 0);
+    });
+    return i;
+  }
+  function labeled(text, el) {
+    var d = document.createElement("div");
+    var l = document.createElement("span");
+    l.className = "lab"; l.textContent = text;
+    d.appendChild(l); d.appendChild(el);
+    return d;
+  }
+  function reorderButtons(disabledUp, disabledDown, onUp, onDown, labelPrefix) {
+    var w = document.createElement("div");
+    w.className = "reorder";
+    var up = document.createElement("button");
+    up.type = "button"; up.textContent = "▲"; up.title = "위로"; up.disabled = disabledUp;
+    up.setAttribute("aria-label", labelPrefix + " 위로 이동");
+    up.addEventListener("click", function (e) { e.stopPropagation(); onUp(); });
+    var down = document.createElement("button");
+    down.type = "button"; down.textContent = "▼"; down.title = "아래로"; down.disabled = disabledDown;
+    down.setAttribute("aria-label", labelPrefix + " 아래로 이동");
+    down.addEventListener("click", function (e) { e.stopPropagation(); onDown(); });
+    w.appendChild(up); w.appendChild(down);
+    return w;
+  }
+  function applyPanelRule(sash, primarySelect) {
+    if (sash.panels === "3짝") {
+      sash.primary = "both";
+      if (primarySelect) primarySelect.value = "both";
+    } else if (sash.panels === "고정") {
+      sash.primary = "none";
+      if (primarySelect) primarySelect.value = "none";
+    }
+  }
+
+  /* ---------------- 렌더 ---------------- */
+  function render() {
+    if (activeMini3D) { activeMini3D.cancel(); activeMini3D = null; }
+
+    var stage = $("stage");
+    Array.prototype.slice.call(stage.querySelectorAll(".marker, .span-bar, .pick-dot, .wall-edit")).forEach(function (n) { n.remove(); });
+    state.wallEdits.add.forEach(function (line) { appendWallEdit(stage, line, "add"); });
+    state.wallEdits.remove.forEach(function (line) { appendWallEdit(stage, line, "remove"); });
+    state.pins.forEach(function (p, i) {
+      var sx = dispX(p.x), sy = dispY(p.y);
+      if ((p.parts||[]).length) {
+        var totalMm = planStructure(p).width;
+        if (totalMm > 0) {
+          var bar = document.createElement("div");
+          bar.className = "span-bar" + (sel === i ? " sel" : "");
+          bar.dataset.i = i;
+          bar.style.left = (sx * 100) + "%";
+          bar.style.top = (sy * 100) + "%";
+          stage.appendChild(bar);
+          refreshSpanBar(i);
+        }
+      }
+      var m = document.createElement("button");
+      m.type = "button";
+      m.className = "marker" + (isDone(p) ? " done" : "") + (sel === i ? " sel" : "");
+      m.style.left = (sx * 100) + "%";
+      m.style.top = (sy * 100) + "%";
+      var pinLabel = visiblePinLabel(p, i);
+      m.textContent = pinLabel;
+      if (isEntryPin(p)) m.classList.add("entry-marker");
+      var markerSize = markerSizeForPin(p);
+      if (markerSize) {
+        m.style.width = markerSize + "px"; m.style.height = markerSize + "px";
+        m.style.marginLeft = (-markerSize / 2) + "px"; m.style.marginTop = (-markerSize / 2) + "px";
+        m.style.fontSize = Math.max(8, markerSize * .46) + "px";
+      }
+      m.dataset.i = i;
+      m.title = (p.name || "이름 없음") + " — 드래그해서 위치 조정";
+      m.setAttribute("aria-label", isEntryPin(p) ? "현관" : (pinLabel + "번 " + (p.name || "이름 없음")));
+      m.addEventListener("pointerdown", onDown);
+      m.addEventListener("pointermove", onMove);
+      m.addEventListener("pointerup", onUp);
+      m.addEventListener("pointercancel", onUp);
+      m.addEventListener("click", onMarkerClick);
+      stage.appendChild(m);
+    });
+    if (pickMode && pickMode.points.length === 1) appendPickDot(stage, pickMode.points[0]);
+    $("planhint").textContent = pickMode
+      ? (pickMode.type === "entry" ? "현관 위치를 한 번 눌러주세요" :
+        (pickMode.points.length ? (pickMode.type === "scale" ? "기준 창의 반대쪽 끝점을 눌러주세요" : "두 번째 점을 눌러주세요") :
+          (pickMode.type === "wall-add" ? "추가할 벽의 시작점을 눌러주세요" :
+            (pickMode.type === "wall-remove" ? "제외할 벽의 시작점을 눌러주세요" : "첫 번째 점을 눌러주세요"))))
+      : "번호 위치의 벽선을 읽어 가로·세로를 자동 판별합니다";
+
+    var host = $("ops");
+    host.textContent = "";
+    state.pins.forEach(function (p, i) { host.appendChild(buildCard(p, i)); });
+
+    $("empty").hidden = state.pins.length > 0;
+    refreshDone();
+    persist();
+
+    if (sel !== null && state.pins[sel]) {
+      var openCardEl = document.querySelectorAll(".op")[sel];
+      var openBody = openCardEl && openCardEl.querySelector(".mini3d");
+      if (openBody) activeMini3D = mountMini3D(openBody, state.pins[sel]);
+    }
+  }
+
+  function appendPickDot(stage, pt) {
+    var d = document.createElement("div"); d.className = "pick-dot";
+    d.style.left = (dispX(pt.x) * 100) + "%"; d.style.top = (dispY(pt.y) * 100) + "%";
+    stage.appendChild(d);
+  }
+  function appendWallEdit(stage, line, type) {
+    if (!line || !line.a || !line.b) return;
+    var ax = dispX(line.a.x) * stage.clientWidth, ay = dispY(line.a.y) * stage.clientHeight;
+    var bx = dispX(line.b.x) * stage.clientWidth, by = dispY(line.b.y) * stage.clientHeight;
+    var el = document.createElement("div"); el.className = "wall-edit " + type;
+    el.style.left = ax + "px"; el.style.top = ay + "px";
+    el.style.width = Math.hypot(bx - ax, by - ay) + "px";
+    el.style.transform = "rotate(" + Math.atan2(by - ay, bx - ax) + "rad)";
+    stage.appendChild(el);
+  }
+  function buildCard(p, i) {
+    var card = document.createElement("div");
+    card.className = "op" + (sel === i ? " open" : "");
+    card.dataset.i = i;
+
+    // ---- 헤더: 드래그핸들 + 화살표 + 번호 + 이름 + 삭제 (VS Code 트리 스타일) ----
+    var head = document.createElement("div");
+    head.className = "op-head";
+    var row = document.createElement("div");
+    row.className = "op-head-row";
+
+    var handle = document.createElement("button");
+    handle.type = "button"; handle.className = "drag-handle"; handle.textContent = "≡";
+    handle.title = "눌러서 드래그하면 순서를 바꿀 수 있습니다";
+    handle.setAttribute("aria-label", (i + 1) + "번 순서 옮기기(드래그)");
+    handle.dataset.i = i;
+    handle.addEventListener("pointerdown", onHandleDown);
+    handle.addEventListener("pointermove", onHandleMove);
+    handle.addEventListener("pointerup", onHandleUp);
+    handle.addEventListener("pointercancel", onHandleUp);
+    row.appendChild(handle);
+
+    var chev = document.createElement("span");
+    chev.className = "chev-ico"; chev.textContent = "▸"; chev.setAttribute("aria-hidden", "true");
+    row.appendChild(chev);
+
+    var badge = document.createElement("span");
+    badge.className = "no" + (isDone(p) ? " done" : "");
+    if (isEntryPin(p)) badge.classList.add("entry-no");
+    badge.textContent = visiblePinLabel(p, i);
+    row.appendChild(badge);
+
+    var nm = document.createElement("input");
+    nm.type = "text"; nm.className = "nm"; nm.value = p.name;
+    nm.placeholder = "창호명 (예: 거실외창)";
+    nm.addEventListener("input", function () { p.name = this.value; persist();
+      var s = document.querySelectorAll(".op")[i].querySelector(".op-sum");
+      if (s) s.textContent = summarize(p);
+    });
+    nm.addEventListener("change", function () {
+      if (/현관/.test(p.name || "")) {
+        var changed = false;
+        p.parts = p.parts.map(function (t) {
+          if (t.kind !== "turn") return t;
+          changed = true; return newEntry();
+        });
+        if (changed) { persist(); render(); }
+      }
+    });
+    row.appendChild(nm);
+
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "x"; del.textContent = "×";
+    del.title = (i + 1) + "번 삭제";
+    del.setAttribute("aria-label", (i + 1) + "번 삭제");
+    del.addEventListener("click", function (e) { e.stopPropagation(); removePin(i); });
+    row.appendChild(del);
+
+    head.appendChild(row);
+
+    var sum = document.createElement("div");
+    sum.className = "op-sum"; sum.textContent = summarize(p);
+    head.appendChild(sum);
+
+    // 행 전체 클릭 = 펼치기/접기 토글(VS Code와 동일). 이름 입력창 클릭은 예외(펼치기만, 편집 중 접히지 않게).
+    head.addEventListener("click", function (e) {
+      if (e.target === nm) { if (sel !== i) openCard(i, true); return; }
+      sel = (sel === i) ? null : i;
+      render();
+      if (sel === i) {
+        requestAnimationFrame(function () {
+          var c = document.querySelectorAll(".op")[i];
+          if (c) c.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      }
+    });
+    card.appendChild(head);
+
+    // ---- 펼침 영역 ----
+    var body = document.createElement("div");
+    body.className = "op-body";
+
+    var lockRow = document.createElement("div");
+    lockRow.className = "cap2";
+    lockRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;";
+    if (p.placementMode === "wall" && p.wallLock) {
+      var lockLabel = document.createElement("span");
+      lockLabel.textContent = "벽을 따라서만 이동 가능";
+      var freeBtn = document.createElement("button");
+      freeBtn.type = "button"; freeBtn.className = "tiny";
+      freeBtn.textContent = "자유 이동으로 전환";
+      freeBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        p.placementMode = "free"; p.wallLock = null;
+        persist(); render();
+        toast("이제 자유롭게 이동할 수 있습니다");
+      });
+      lockRow.appendChild(lockLabel); lockRow.appendChild(freeBtn);
+      body.appendChild(lockRow);
+    } else {
+      var lockLabel2 = document.createElement("span");
+      lockLabel2.textContent = "자유롭게 이동 가능";
+      var lockBtn = document.createElement("button");
+      lockBtn.type = "button"; lockBtn.className = "tiny";
+      lockBtn.textContent = "벽에 고정";
+      lockBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var lock = computeWallLock(p.x, p.y);
+        if (!lock) { toast("근처에 벽으로 인식되는 선이 없습니다"); return; }
+        p.placementMode = "wall"; p.wallLock = lock.wallLock; p.x = lock.x; p.y = lock.y; p.angle = lock.angle;
+        persist(); render();
+        toast("벽에 고정했습니다");
+      });
+      lockRow.appendChild(lockLabel2); lockRow.appendChild(lockBtn);
+      body.appendChild(lockRow);
+    }
+
+    // 아직 구성이 없으면(새로 추가된 번호) 창/통바 중 무엇으로 시작할지 먼저 고른다
+    // — 통바를 나중에 앞으로 옮길 필요 없이, 원하는 순서 그대로 쌓아갈 수 있다.
+    if (!p.parts.length) {
+      var sc = document.createElement("div");
+      sc.className = "startchoice";
+      var scCap = document.createElement("div");
+      scCap.className = "cap2"; scCap.textContent = "실내에서 볼 때 왼쪽부터, 첫 구성을 선택하세요";
+      sc.appendChild(scCap);
+      var scSash = document.createElement("button");
+      scSash.type = "button"; scSash.textContent = "＋ 창으로 시작";
+      scSash.addEventListener("click", function (e) { e.stopPropagation(); p.parts.push(newSash()); render(); });
+      var scMul = document.createElement("button");
+      scMul.type = "button"; scMul.textContent = "＋ 통바로 시작";
+      scMul.addEventListener("click", function (e) { e.stopPropagation(); p.parts.push(newMullion()); render(); });
+      sc.appendChild(scSash); sc.appendChild(scMul);
+      body.appendChild(sc);
+      card.appendChild(body);
+      return card;
+    }
+
+    function makeFrameField() {
+    var frameInput = document.createElement("input");
+    frameInput.type = "text"; frameInput.value = p.frame || ""; frameInput.placeholder = "예: B/F115";
+    frameInput.setAttribute("list", "frame-options");
+    frameInput.addEventListener("input", function () { p.frame = this.value; persist(); refreshSpanBar(i); refreshDone(); });
+    frameInput.addEventListener("focus", function () { this.dataset.prev = this.value; this.value = ""; });
+    frameInput.addEventListener("blur", function () { if (this.value.trim() === "" && this.dataset.prev) { this.value = this.dataset.prev; p.frame = this.value; refreshSpanBar(i); } });
+    return labeled("프레임 두께", frameInput);
+    }
+
+    var wrap = document.createElement("div");
+    wrap.className = "parts";
+    var cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = "구성 — 실내에서 볼 때 왼쪽부터. 카드의 빈 곳을 길게 눌러 순서를 바꿀 수 있습니다.";
+    wrap.appendChild(cap);
+
+    p.parts.forEach(function (t, k) { wrap.appendChild(buildPart(p, t, k, i, makeFrameField)); });
+
+    var prow = document.createElement("div");
+    prow.className = "btnrow";
+    var bm = document.createElement("button");
+    bm.type = "button"; bm.className = "tiny"; bm.textContent = "+ 통바";
+    bm.addEventListener("click", function () { p.parts.push(newMullion()); render(); });
+    var bs = document.createElement("button");
+    bs.type = "button"; bs.className = "tiny"; bs.textContent = "+ 창";
+    bs.addEventListener("click", function () { p.parts.push(newSash()); render(); });
+    prow.appendChild(bm); prow.appendChild(bs);
+    wrap.appendChild(prow);
+    body.appendChild(wrap);
+
+    if (!isEntryPin(p)) {
+      p.details = normalizedDetails(p.details);
+      var detailGrid = document.createElement("div"); detailGrid.className = "survey-detail-grid";
+      [["molding","몰딩"],["brick","벽돌"]].forEach(function(item){
+        var box=document.createElement("div"), mode=document.createElement("select"), custom=document.createElement("input");
+        mode.innerHTML='<option value="none">없음</option><option value="input">입력</option>'; mode.value=p.details[item[0]]?"input":"none";
+        custom.type="text"; custom.value=p.details[item[0]]||""; custom.placeholder="내용 입력"; custom.hidden=mode.value!=="input";
+        mode.addEventListener("change",function(){custom.hidden=this.value!=="input";if(this.value==="none"){p.details[item[0]]="";custom.value="";}persist();});
+        custom.addEventListener("input",function(){p.details[item[0]]=this.value;persist();}); box.appendChild(mode);box.appendChild(custom);detailGrid.appendChild(labeled(item[1],box));
+      });
+      [["filling","사춤"],["tile","타일"],["drainHole","물구멍"],["screen","방충망"]].forEach(function(item){
+        var yn=sel1([["false","없음"],["true","있음"]],String(!!p.details[item[0]]),function(v){p.details[item[0]]=v==="true";persist();});detailGrid.appendChild(labeled(item[1],yn));
+      });
+      body.appendChild(detailGrid);
+    }
+    if (isEntryPin(p)) {
+      var entryPart=p.parts.filter(function(t){return t.kind==="entry";})[0];
+      if(typeof p.drawInDrawing!=="boolean")p.drawInDrawing=!!entryPart.drawInDrawing;
+      var drawSel=sel1([["false","도면 미표시"],["true","도면 표시"]],String(!!p.drawInDrawing),function(v){p.drawInDrawing=v==="true";entryPart.drawInDrawing=p.drawInDrawing;persist();});
+      body.appendChild(labeled("창호 실측도면 표시",drawSel));
+    }
+    if (!isEntryPin(p)) {
+      syncComposition(p);
+      var comp = document.createElement("div"); comp.className = "frame-row";
+      var compInput = document.createElement("textarea"); compInput.value = p.composition; compInput.readOnly = true; compInput.dataset.compositionPin=i;
+      comp.appendChild(labeled("창호 구성 문자열 · 자동 요약", compInput)); body.appendChild(comp);
+    }
+    // ---- 3D 미리보기 ----
+    var m3wrap = document.createElement("div");
+    m3wrap.className = "mini3d-wrap";
+    var m3cap = document.createElement("div");
+    m3cap.className = "cap";
+    m3cap.textContent = "실측 미리보기 · 개략도(짝 폭은 균등 분할 가정, 실제와 다를 수 있음)";
+    m3wrap.appendChild(m3cap);
+    var m3box = document.createElement("div");
+    m3box.className = "mini3d";
+    m3box.innerHTML = '<div class="mini3d-empty">치수를 입력하면 미리보기가 나타납니다</div>';
+    m3wrap.appendChild(m3box);
+    body.appendChild(m3wrap);
+
+    card.appendChild(body);
+    return card;
+  }
+
+  var PART_TAGS = { mullion: "통바", turn: "터닝도어", entry: "현관문", sash: "창" };
+  function installPartDrag(el,p,t,k,pinIndex){
+    var timer=null,dragging=false,dragTarget=k,pointerId=null;
+    function clearDropFeedback(){Array.from(el.parentNode.querySelectorAll(".part")).forEach(function(card){card.classList.remove("part-drop-before","part-drop-after");});}
+    function blocked(target){return !!target.closest("input,select,button,textarea,label,a")&&!target.closest(".part-drag-handle");}
+    function begin(e){dragging=true;pointerId=e.pointerId;dragTarget=p.parts.indexOf(t);el.classList.add("part-dragging");el.setPointerCapture(e.pointerId);}
+    el.addEventListener("pointerdown",function(e){if(blocked(e.target))return;if(e.target.closest(".part-drag-handle")){e.preventDefault();begin(e);}else timer=setTimeout(function(){begin(e);},380);});
+    el.addEventListener("pointermove",function(e){if(!dragging)return;e.preventDefault();var cards=Array.from(el.parentNode.querySelectorAll(".part")),target=cards.findIndex(function(card){var r=card.getBoundingClientRect();return e.clientY<r.top+r.height/2;});dragTarget=target<0?cards.length-1:target;clearDropFeedback();var targetCard=cards[Math.max(0,Math.min(cards.length-1,dragTarget))];if(targetCard&&targetCard!==el)targetCard.classList.add(dragTarget>=cards.indexOf(el)?"part-drop-after":"part-drop-before");});
+    function end(){if(timer)clearTimeout(timer);timer=null;clearDropFeedback();if(dragging){var current=p.parts.indexOf(t),target=Math.max(0,Math.min(p.parts.length-1,dragTarget));if(target!==current){var moved=p.parts.splice(current,1)[0];p.parts.splice(target,0,moved);syncComposition(p);persist();sel=pinIndex;}dragging=false;el.classList.remove("part-dragging");render();}pointerId=null;}
+    el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
+  }
+
+  function buildPart(p, t, k, pinIndex, makeFrameField) {
+    var d = document.createElement("div");
+    d.className = "part " + t.kind;
+    installPartDrag(d,p,t,k,pinIndex);
+
+    var top = document.createElement("div");
+    top.className = "part-top";
+    var no = document.createElement("span");
+    no.className = "pno"; no.textContent = (k + 1) + ".";
+    top.appendChild(no);
+    var tag = document.createElement("span");
+    tag.className = "tag"; tag.textContent = PART_TAGS[t.kind] || t.kind;
+    top.appendChild(tag);
+    if(t.kind==="mullion"){var handle=document.createElement("span");handle.className="part-drag-handle";handle.textContent="↕";handle.title="통바 위치를 드래그해 좌우 순서 변경";handle.setAttribute("role","button");handle.setAttribute("aria-label","통바 위치 좌우 순서 드래그");top.appendChild(handle);}
+
+    var sp = document.createElement("span"); sp.className = "sp"; top.appendChild(sp);
+    var x = document.createElement("button");
+    x.type = "button"; x.className = "x"; x.textContent = "×";
+    x.title = "이 구성 삭제";
+    x.setAttribute("aria-label", "구성 " + (k + 1) + " 삭제");
+    x.addEventListener("click", function () { removePart(p, k); });
+    top.appendChild(x);
+    d.appendChild(top);
+
+    if (t.kind === "mullion") {
+      normalizeMullionPart(t);
+      d.appendChild(labeled("적층 방향",sel1([["outside-in","실외 → 실내"],["inside-out","실내 → 실외"]],t.stackDirection,function(v){t.stackDirection=v;syncComposition(p);persist();refreshDone();},"stackDirection")));
+      var layerList=document.createElement("div");layerList.className="mullion-layer-list";
+      function rebuildLayers(){layerList.innerHTML="";t.layers.forEach(function(layer,layerIndex){
+        var row=document.createElement("div");row.className="mullion-layer-row";
+        row.appendChild(labeled(layerIndex===0?"통바 규격":"같은 위치 적층 규격",sel1(MULLION_SPECS,layer.spec,function(v){layer.spec=v;t.spec=t.layers[0].spec;syncComposition(p);persist();},"spec")));
+        var count=document.createElement("input");count.type="number";count.className="dim";count.min="1";count.step="1";count.inputMode="numeric";count.value=String(Math.max(1,parseInt(layer.count,10)||1));
+        count.addEventListener("input",function(){var n=parseInt(this.value,10);if(!isNaN(n)&&n>=1){layer.count=n;t.count=t.layers[0].count;syncComposition(p);persist();refreshDone();}});
+        count.addEventListener("change",function(){var n=Math.max(1,parseInt(this.value,10)||1);this.value=String(n);layer.count=n;t.count=t.layers[0].count;syncComposition(p);persist();refreshDone();});row.appendChild(labeled("수량",count));
+        var remove=document.createElement("button");remove.type="button";remove.className="x";remove.textContent="×";remove.disabled=t.layers.length===1;remove.title="이 적층 규격 삭제";remove.addEventListener("click",function(){t.layers.splice(layerIndex,1);t.spec=t.layers[0].spec;t.count=t.layers[0].count;syncComposition(p);persist();rebuildLayers();});row.appendChild(remove);layerList.appendChild(row);
+      });}
+      rebuildLayers();d.appendChild(layerList);
+      var addLayer=document.createElement("button");addLayer.type="button";addLayer.className="tiny";addLayer.textContent="+ 통바 추가 (같은 위치 적층)";addLayer.addEventListener("click",function(){t.layers.push({spec:MULLION_SPECS[0],count:1});syncComposition(p);persist();rebuildLayers();});d.appendChild(addLayer);
+      var stackHint=document.createElement("div");stackHint.className="cap2";stackHint.textContent="이 항목 안에서 추가하면 같은 위치에 깊이 방향으로 쌓입니다. 아래의 +통바는 좌우의 새 위치입니다.";d.appendChild(stackHint);
+    }
+
+    if (t.kind === "sash") {
+      var g = document.createElement("div");
+      g.className = "grid2";
+      var typeSel=sel1([["normal","일반 창"],["unbalanced","언발란스 창"],["turn","터닝도어"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"]],t.sashType||"normal",function(v){t.sashType=v;if(v==="unbalanced"){t.panels="2짝";t.primary="small";if(t.smallSide!=="left"&&t.smallSide!=="right")t.smallSide="left";}else if(v!=="normal"){t.panels="고정";t.primary="none";}else if(t.panels==="고정")t.panels="2짝";syncComposition(p);persist();render();});
+      g.appendChild(labeled("창 종류",typeSel));
+      if(k===p.parts.findIndex(function(part){return part.kind==="sash"||part.kind==="turn";}))g.appendChild(makeFrameField());
+      g.appendChild(labeled("폭 (mm)", numInput(t.w, "4170", function (v) { t.w = v; syncComposition(p); persist(); refreshSpanBar(pinIndex); })));
+      g.appendChild(labeled("높이 (mm)", numInput(t.h, "2250", function (v) { t.h = v; syncComposition(p); persist(); })));
+      if ((t.sashType||"normal") === "normal") {
+        var pr = sel1(PRIMARY_TYPES, t.primary, function (v) { t.primary = v; persist(); refreshDone(); });
+        g.appendChild(labeled("짝수", sel1(PANEL_TYPES.filter(function(v){return v!=="고정";}), t.panels, function (v) { t.panels = v; applyPanelRule(t, pr); syncComposition(p); persist(); refreshDone(); })));
+        g.appendChild(labeled("주 사용문", pr));
+      }
+      if ((t.sashType||"normal") === "unbalanced") {
+        t.primary="small";
+        if(t.smallSide!=="left"&&t.smallSide!=="right")t.smallSide="left";
+        g.appendChild(labeled("소형창 폭 (mm)",numInput(t.smallW||"0","800",function(v){t.smallW=v;syncComposition(p);persist();refreshDone();})));
+        g.appendChild(labeled("소형창 위치",sel1([["left","왼쪽"],["right","오른쪽"]],t.smallSide,function(v){t.smallSide=v;syncComposition(p);persist();refreshDone();render();})));
+      }
+      if ((t.sashType||"normal") === "turn") {
+        if(t.swing!=="push"&&t.swing!=="pull")t.swing="push";
+        if(t.handle!=="left"&&t.handle!=="right")t.handle="right";
+        g.appendChild(labeled("개폐방향",sel1([["push","미는 문"],["pull","당기는 문"]],t.swing,function(v){t.swing=v;persist();render();})));
+        g.appendChild(labeled("손잡이 위치(실내 기준)",sel1([["right","오른쪽"],["left","왼쪽"]],t.handle,function(v){t.handle=v;persist();render();})));
+      }
+      d.appendChild(g);
+      t.addon=normalizeAddon(t.addon,p.frame);
+      if(!t.addon){var addAddon=document.createElement("button");addAddon.type="button";addAddon.className="tiny";addAddon.textContent="+ 덧창 추가";addAddon.addEventListener("click",function(){t.addon={w:t.w||"0",h:t.h||"0",sashType:"normal",frame:p.frame||""};persist();render();});d.appendChild(addAddon);}
+      else {var addon=document.createElement("div");addon.className="addon-box";var addonHead=document.createElement("div");addonHead.className="addon-head";var addonTitle=document.createElement("b");addonTitle.textContent="안쪽 덧창";var addonRemove=document.createElement("button");addonRemove.type="button";addonRemove.className="x";addonRemove.textContent="×";addonRemove.title="덧창 삭제";addonRemove.addEventListener("click",function(){t.addon=null;persist();render();});addonHead.appendChild(addonTitle);addonHead.appendChild(addonRemove);addon.appendChild(addonHead);var addonGrid=document.createElement("div");addonGrid.className="grid2";addonGrid.appendChild(labeled("덧창 종류",sel1([["normal","일반 창"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"],["mullion","통바 프레임"]],t.addon.sashType,function(v){t.addon.sashType=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 폭 (mm)",numInput(t.addon.w,"4170",function(v){t.addon.w=v;persist();refreshDone();})));addonGrid.appendChild(labeled("덧창 높이 (mm)",numInput(t.addon.h,"2250",function(v){t.addon.h=v;persist();refreshDone();})));var addonFrame=document.createElement("input");addonFrame.type="text";addonFrame.setAttribute("list","addon-frame-options");addonFrame.value=t.addon.frame||"";addonFrame.placeholder="예: B/F140 또는 40×105";addonFrame.addEventListener("input",function(){t.addon.frame=this.value;persist();refreshDone();});addonFrame.addEventListener("focus",function(){this.dataset.prev=this.value;this.value="";});addonFrame.addEventListener("blur",function(){if(this.value.trim()===""&&this.dataset.prev)this.value=this.dataset.prev;});addonGrid.appendChild(labeled("덧창 프레임",addonFrame));addon.appendChild(addonGrid);d.appendChild(addon);}
+    } else if (t.kind === "turn") {
+      var g2 = document.createElement("div");
+      g2.className = "grid2";
+      if(k===p.parts.findIndex(function(part){return part.kind==="sash"||part.kind==="turn";}))g2.appendChild(makeFrameField());
+      g2.appendChild(labeled("폭 (mm)", numInput(t.w, "900", function (v) { t.w = v; persist(); refreshSpanBar(pinIndex); })));
+      g2.appendChild(labeled("높이 (mm)", numInput(t.h, "2100", function (v) { t.h = v; })));
+      if(t.swing!=="push"&&t.swing!=="pull")t.swing="push";
+      if(t.handle!=="left"&&t.handle!=="right")t.handle="right";
+      g2.appendChild(labeled("개폐방향",sel1([["push","미는 문"],["pull","당기는 문"]],t.swing,function(v){t.swing=v;persist();render();})));
+      g2.appendChild(labeled("손잡이 위치(실내 기준)",sel1([["right","오른쪽"],["left","왼쪽"]],t.handle,function(v){t.handle=v;persist();render();})));
+      d.appendChild(g2);
+    } else if (t.kind === "entry") {
+      t.w = "900"; t.h = "2100";
+      var fixed = document.createElement("div"); fixed.className = "cap2";
+      fixed.textContent = "기본 현관문으로 자동 적용됩니다";
+      d.appendChild(fixed);
+    }
+    return d;
+  }
+
+  function planStructure(p){
+    var x=0,frameDepth=frameDepthMm(p.frame)||140,minY=0,maxY=frameDepth,items=[];
+    (p.parts||[]).forEach(function(t){
+      if(t.kind==="mullion"){
+        var layers=placedMullionLayers(t,frameDepth),w=Math.max.apply(null,layers.map(function(v){return v.face;}).concat([40]));
+        layers.forEach(function(v){minY=Math.min(minY,v.y);maxY=Math.max(maxY,v.y+v.depth);});items.push({kind:"mullion",x:x,w:w,layers:layers,direction:t.stackDirection});x+=w;
+      }else{
+        var w=Number(t.w)||(t.kind==="entry"?900:0),d=t.kind==="entry"?140:frameDepth,addon=normalizeAddon(t.addon,p.frame),addonDepth=addon?(frameDepthMm(addon.frame)||frameDepth):0;
+        if(w>0){items.push({kind:t.kind,x:x,w:w,y:0,depth:d,layers:[],addon:addon?{y:d+20,depth:addonDepth}:null});x+=w;maxY=Math.max(maxY,d,addon?d+20+addonDepth:0);}
+      }
+    });
+    return {width:Math.max(1,x),depth:Math.max(1,maxY-minY),frameDepth:frameDepth,minY:minY,maxY:maxY,items:items};
+  }
+  function outsideSignForPin(p){
+    if(typeof p.outsideSign==="number")return p.outsideSign;
+    return (p.angle||0)===90?(p.x<.5?1:-1):(p.y<.5?-1:1);
+  }
+  function drawPlanStructureSvg(host,layout){
+    host.textContent="";var ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 "+layout.minY+" "+layout.width+" "+layout.depth);svg.setAttribute("preserveAspectRatio","none");
+    layout.items.forEach(function(item){
+      if(item.kind!=="mullion"){
+        var frame=document.createElementNS(ns,"rect");frame.setAttribute("x",item.x);frame.setAttribute("y",item.y);frame.setAttribute("width",item.w);frame.setAttribute("height",item.depth);frame.setAttribute("fill","#fffdf2");frame.setAttribute("stroke","#555");frame.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(frame);if(item.addon){var ar=document.createElementNS(ns,"rect");ar.setAttribute("x",item.x);ar.setAttribute("y",item.addon.y);ar.setAttribute("width",item.w);ar.setAttribute("height",item.addon.depth);ar.setAttribute("fill","#d9f1e9");ar.setAttribute("stroke","#2f8577");ar.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(ar);}return;
+      }
+      item.layers.forEach(function(layer){var r=document.createElementNS(ns,"rect");r.setAttribute("x",item.x);r.setAttribute("y",layer.y);r.setAttribute("width",layer.face);r.setAttribute("height",layer.depth);r.setAttribute("fill",layer.label==="100×100"?"#75c9ec":"#c8ebfa");r.setAttribute("stroke","#14748a");r.setAttribute("stroke-width",Math.max(2,layout.width/350));svg.appendChild(r);});
+    });host.appendChild(svg);
+  }
+  function planOverlayPixels(p,planW,planH,img){
+    var layout=planStructure(p),horiz=(p.angle||0)===0,shown=horiz?planW:planH,natural=horiz?(img&&img.naturalWidth):(img&&img.naturalHeight),pxPerMm=0,denominator=state.scale?(horiz?state.scale.mmPerFracX:state.scale.mmPerFracY):0;
+    if(state.scale&&state.scale.mmPerPixel&&natural)pxPerMm=(shown/natural)/state.scale.mmPerPixel;
+    else if(denominator)pxPerMm=shown/denominator;
+    else pxPerMm=Math.min(150/layout.width,34/layout.depth);
+    return {layout:layout,width:layout.width*pxPerMm,depth:layout.depth*pxPerMm};
+  }
+  function drawPlanStructureCanvas(ctx,p,cx,cy,planW,planH,img){
+    var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth,interiorAxis=-outsideSignForPin(p);ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.scale(1,interiorAxis);ctx.translate(-view.width/2,0);
+    view.layout.items.forEach(function(item){if(item.kind!=="mullion"){ctx.fillStyle="#fffdf2";ctx.fillRect(item.x*sx,item.y*sy,item.w*sx,item.depth*sy);ctx.strokeStyle="#555";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,item.y*sy,item.w*sx,item.depth*sy);if(item.addon){ctx.fillStyle="#d9f1e9";ctx.fillRect(item.x*sx,item.addon.y*sy,item.w*sx,item.addon.depth*sy);ctx.strokeStyle="#2f8577";ctx.strokeRect(item.x*sx,item.addon.y*sy,item.w*sx,item.addon.depth*sy);}return;}item.layers.forEach(function(layer){ctx.fillStyle=layer.label==="100×100"?"#75c9ec":"#c8ebfa";ctx.fillRect(item.x*sx,layer.y*sy,layer.face*sx,layer.depth*sy);ctx.strokeStyle="#14748a";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,layer.y*sy,layer.face*sx,layer.depth*sy);});});ctx.restore();
+  }
+  function refreshSpanBar(i) {
+    var p = state.pins[i], bar = document.querySelector('.span-bar[data-i="' + i + '"]');
+    if (!p || !bar) return;
+    var view=planOverlayPixels(p,$("stage").clientWidth,$("stage").clientHeight,$("plan"));
+    var sy=view.depth/view.layout.depth,offset=view.layout.minY*sy,interiorAxis=-outsideSignForPin(p);
+    bar.style.width=view.width+"px";bar.style.height=view.depth+"px";bar.style.transform="rotate("+(p.angle||0)+"deg) scale(1,"+interiorAxis+") translate(-50%, "+offset+"px)";bar.style.transformOrigin="0 0";drawPlanStructureSvg(bar,view.layout);
+  }
+
+  function refreshDone() {
+    var surveyPins = state.pins.filter(function (p) { return !isEntryPin(p); });
+    var done = surveyPins.filter(isDone).length;
+    $("cdone").textContent = done;
+    $("ctotal").textContent = surveyPins.length;
+    var msg = $("cmsg");
+    if (!surveyPins.length) { msg.textContent = ""; msg.className = ""; }
+    else if (done === surveyPins.length) { msg.textContent = "✓ 전부 입력 완료"; msg.className = "done"; }
+    else { msg.textContent = "미입력 " + (surveyPins.length - done) + "곳"; msg.className = ""; }
+
+    var cards = document.querySelectorAll(".op");
+    state.pins.forEach(function (p, i) {
+      var d = isDone(p);
+      var mk = document.querySelector('.marker[data-i="' + i + '"]');
+      if (mk) mk.classList.toggle("done", d);
+      refreshSpanBar(i);
+      var op = cards[i];
+      if (op) {
+        var b = op.querySelector(".no");
+        if (b) b.classList.toggle("done", d);
+        var s = op.querySelector(".op-sum");
+        if (s) s.textContent = summarize(p);
+      }
+    });
+
+    if (sel !== null && state.pins[sel]) {
+      if (activeMini3D) { activeMini3D.cancel(); activeMini3D = null; }
+      var host = cards[sel] && cards[sel].querySelector(".mini3d");
+      if (host) activeMini3D = mountMini3D(host, state.pins[sel]);
+    }
+    persist();
+  }
+
+  $("site").addEventListener("input", function () { state.site = this.value; persist(); });
+  $("surveydate").addEventListener("input", function () { state.surveyDate = this.value; persist(); });
+
+  /* ============================================================
+     개소별 3D 미리보기 — 3d_generator.py(창호3D_생성.py)와 같은
+     치수 상수(T_OUTER/T_PANEL/D_PANEL/GLASS_T/RAIL_OFF)와 같은
+     재질(프레임=은회색, 통바=진회색)을 써서 같은 룩으로 보이게 함.
+     벽/방 위치 정보가 없어 그 창호 하나만 정면에서 보여주는 개략도이며,
+     실제 3D 생성(전체 세대)과는 별개.
+     ============================================================ */
+  var MINI3D_LAST_ID = 0;
+  function opGeometryBoxes(p) {
+    var T_OUTER = 60, T_PANEL = 50, D_PANEL = 70, GLASS_T = 8, RAIL_OFF = 18;
+    var selectedFrameDepth = frameDepthMm(p.frame) || 140;
+    var PRIMARY_MAP = {
+      2: { left: [0], right: [1], both: [0, 1], none: [] },
+      3: { left: [0], right: [2], both: [0, 2], none: [] },
+      4: { left: [0], right: [3], both: [0, 3], none: [] }
+    };
+    var boxes = [];
+    var maxH = 0;
+    sizedParts(p).forEach(function (s) { var h = Number(s.h) || 0; if (h > maxH) maxH = h; });
+    if (!maxH) maxH = 1200;
+
+    function ring(u0, v0, w, h, t, d, noff, mat) {
+      boxes.push({ mat: mat, pos: [u0 + w / 2, v0 + t / 2, noff], size: [w, t, d] });
+      boxes.push({ mat: mat, pos: [u0 + w / 2, v0 + h - t / 2, noff], size: [w, t, d] });
+      boxes.push({ mat: mat, pos: [u0 + t / 2, v0 + h / 2, noff], size: [t, h - 2 * t, d] });
+      boxes.push({ mat: mat, pos: [u0 + w - t / 2, v0 + h / 2, noff], size: [t, h - 2 * t, d] });
+    }
+
+    var x = 0;
+    var previousKind = null;
+    p.parts.forEach(function (t) {
+      if (t.kind === "mullion" && previousKind === "mullion") {
+        boxes.push({ mat: "divider", pos: [x, maxH / 2, 72], size: [8, maxH, 5] });
+      }
+      if (t.kind === "mullion") {
+        var mlayers=placedMullionLayers(t,selectedFrameDepth),mw=Math.max.apply(null,mlayers.map(function(v){return v.face;}).concat([40]));
+        mlayers.forEach(function(layer){var mullionMat=layer.label==="100×100"?"mullion100":"mullion40105",mz=-selectedFrameDepth/2+layer.y;boxes.push({mat:mullionMat,pos:[x+mw/2,maxH/2,mz+layer.depth/2],size:[layer.face,maxH,layer.depth]});});
+        x += mw;
+      } else if (t.kind === "turn" || t.kind === "entry") {
+        var isEntry = t.kind === "entry";
+        var tw = Number(t.w) || (isEntry ? 900 : 0), th = Number(t.h) || (isEntry ? 2100 : maxH);
+        if (!tw || !th) { return; }
+        ring(x, 0, tw, th, T_OUTER, isEntry ? 140 : selectedFrameDepth, 0, isEntry ? "entry" : "frame");
+        if (isEntry) { x += tw; previousKind = t.kind; return; }
+        var leafT = 45, innerW = tw - 2 * T_OUTER, innerH = th - 2 * T_OUTER;
+        var outsideSign = typeof p.outsideSign === "number" ? p.outsideSign :
+          (((p.angle || 0) === 90) ? (p.x < .5 ? 1 : -1) : (p.y < .5 ? -1 : 1));
+        var interiorSign = -outsideSign;
+        // 현관문은 외부에서 볼 때 왼쪽 손잡이·당기는 문으로 고정한다. 터닝도어는 사용자가
+        // 실내 기준으로 고른 손잡이 위치·개폐방향을 따른다. 손잡이가 있는 쪽이 경첩 반대편이고,
+        // 보는 면(실내/실외)이 바뀌면 로컬 좌우도 뒤집힌다.
+        var handleAtRight = isEntry ? false : (t.handle||"right")==="right";
+        var hingeAtLeft = isEntry ? outsideSign < 0 : (handleAtRight ? interiorSign > 0 : interiorSign < 0);
+        var hingeX = hingeAtLeft ? (x + T_OUTER) : (x + tw - T_OUTER);
+        var signX = hingeAtLeft ? 1 : -1;
+        // 터닝도어는 15°만 살짝, 현관문은 식별이 되도록 55° 연다.
+        var openDeg = isEntry ? 55 : 15;
+        // 미는 문은 실내에서 실외 쪽으로, 당기는 문은 그 반대로 열린다. 현관문은 항상 당기는 문이다.
+        var pushDoor = isEntry ? true : (t.swing||"push")!=="pull";
+        var rotY = (pushDoor?-1:1) * outsideSign * signX * openDeg * Math.PI / 180;
+        var vx = signX * innerW / 2;
+        var leafCx = hingeX + vx * Math.cos(rotY);
+        var leafCz = -vx * Math.sin(rotY);
+        boxes.push({ mat: isEntry ? "entry" : "turn",
+                     pos: [leafCx, T_OUTER + innerH / 2, leafCz],
+                     size: [innerW, innerH, leafT], rotY: rotY });
+        if (isEntry || t.kind === "turn") {
+          var hxv = signX * innerW * .84;
+          boxes.push({ mat: "handle",
+            pos: [hingeX + hxv * Math.cos(rotY), T_OUTER + innerH * .52, -hxv * Math.sin(rotY)],
+            size: [24, 130, 55], rotY: rotY });
+        }
+        x += tw;
+      } else {
+        var w = Number(t.w) || 0, h = Number(t.h) || maxH;
+        if (!w || !h) { return; }
+        var sashY = maxH - h;                         // 창은 공통 상단선부터 아래로 배치
+        ring(x, sashY, w, h, T_OUTER, selectedFrameDepth, 0, "frame");
+        var iw = w - 2 * T_OUTER, ih = h - 2 * T_OUTER;
+        function sashPanel(px,py,pw,ph,noff,mat){if(pw<=2*T_PANEL||ph<=2*T_PANEL)return;ring(px,py,pw,ph,T_PANEL,D_PANEL,noff,mat||"frame");boxes.push({mat:"glass",pos:[px+pw/2,py+ph/2,noff],size:[pw-2*T_PANEL,ph-2*T_PANEL,GLASS_T]});}
+        if((t.sashType||"normal")==="unbalanced"){
+          var smallW=Math.max(2*T_PANEL+10,Math.min(iw-2*T_PANEL-10,Number(t.smallW)||iw*.3)),smallH=ih,smallOnRight=t.smallSide==="right";
+          var smallX=smallOnRight?x+T_OUTER+(iw-smallW):x+T_OUTER,bigX=smallOnRight?x+T_OUTER:x+T_OUTER+smallW;
+          sashPanel(smallX,sashY+T_OUTER,smallW,smallH,-RAIL_OFF,"frame");
+          sashPanel(bigX,sashY+T_OUTER,iw-smallW,ih,RAIL_OFF,"frame");
+          var markerSize=Math.min(smallW,ih)*.34,markerT=markerSize*.12,markerOff=markerSize*.18,markerCx=smallX+smallW/2,markerCy=sashY+T_OUTER+ih/2,markerCz=-RAIL_OFF+D_PANEL/2+15;
+          [-markerOff,markerOff].forEach(function(dd){boxes.push({mat:"marker",pos:[markerCx+dd,markerCy,markerCz],size:[markerT,markerSize,12]});boxes.push({mat:"marker",pos:[markerCx,markerCy+dd,markerCz],size:[markerSize,markerT,12]});});
+        }else{
+          var n = (t.panels === "fix" || t.panels === "고정") ? 1 : (parseInt(t.panels, 10) || 2),ratios = n === 3 ? [1, 2, 1] : new Array(n).fill(1),ratioTotal = ratios.reduce(function (a, b) { return a + b; }, 0), panelX = 0,prim = (PRIMARY_MAP[n] && PRIMARY_MAP[n][t.primary]) || [];
+          for (var k = 0; k < n; k++) {var noff=(k%2===0)?-RAIL_OFF:RAIL_OFF,pw=iw*ratios[k]/ratioTotal,px=x+T_OUTER+panelX;panelX+=pw;sashPanel(px,sashY+T_OUTER,pw,ih,noff,"frame");if(prim.indexOf(k)>=0){var s=Math.min(pw,ih)*.34,tt=s*.12,off=s*.18,cx=px+pw/2,cy=sashY+T_OUTER+ih/2,cz=noff+D_PANEL/2+15;[-off,off].forEach(function(dd){boxes.push({mat:"marker",pos:[cx+dd,cy,cz],size:[tt,s,12]});boxes.push({mat:"marker",pos:[cx,cy+dd,cz],size:[s,tt,12]});});}}
+        }
+        var addon=normalizeAddon(t.addon,p.frame);if(addon){var aw=Math.min(w,Number(addon.w)||w),ah=Math.min(h,Number(addon.h)||h),addonDepth=frameDepthMm(addon.frame)||selectedFrameDepth,addonY=sashY+h-ah,addonZ=selectedFrameDepth/2+20+addonDepth/2;ring(x+(w-aw)/2,addonY,aw,ah,T_OUTER,addonDepth,addonZ,"addon");}
+        x += w;
+      }
+      previousKind = t.kind;
+    });
+    return { boxes: boxes, width: x, height: maxH };
+  }
+
+  function mountMini3D(container, p) {
+    var myId = ++MINI3D_LAST_ID;
+    var geo = opGeometryBoxes(p);
+    if (!geo.boxes.length || !geo.width) {
+      container.innerHTML = '<div class="mini3d-empty">치수를 입력하면 미리보기가 나타납니다</div>';
+      return { cancel: function () {} };
+    }
+    if (!window.__THREE) {
+      container.innerHTML = '<div class="mini3d-empty">미리보기 준비 중…</div>';
+      var handler = function () {
+        window.removeEventListener("mini3d-ready", handler);
+        if (myId === MINI3D_LAST_ID) render();
+      };
+      window.addEventListener("mini3d-ready", handler);
+      return { cancel: function () { window.removeEventListener("mini3d-ready", handler); } };
+    }
+
+    var THREE = window.__THREE, OrbitControls = window.__OrbitControls;
+    var W = container.clientWidth || 380, H = 170, mm = 0.001;
+    container.innerHTML = "";
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(W, H);
+    container.appendChild(renderer.domElement);
+
+    var scene = new THREE.Scene();
+    var matMap = {
+      frame:   new THREE.MeshStandardMaterial({ color: 0xfff3cf, roughness: .5, metalness: .03 }),  // 밝은 아이보리
+      addon:   new THREE.MeshStandardMaterial({ color: 0xb9e4d6, roughness: .48, metalness: .02 }), // 안쪽 덧창
+      mullion100: new THREE.MeshStandardMaterial({ color: 0x75c9ec, roughness: .5 }),                // 하늘색
+      mullion40105: new THREE.MeshStandardMaterial({ color: 0xc8ebfa, roughness: .55 }),             // 연한 하늘색
+      turn:    new THREE.MeshStandardMaterial({ color: 0x2f8577, roughness: .5, metalness: .1 }),    // 터닝도어(청록)
+      entry:   new THREE.MeshStandardMaterial({ color: 0x7b573d, roughness: .62, metalness: .05 }),  // 현관문
+      handle:  new THREE.MeshStandardMaterial({ color: 0x22262a, roughness: .35, metalness: .65 }),
+      divider: new THREE.MeshStandardMaterial({ color: 0x4c7182, roughness: .6 }),
+      glass:   new THREE.MeshStandardMaterial({ color: 0x6bb0d9, roughness: .05, transparent: true, opacity: .30 }),
+      marker:  new THREE.MeshStandardMaterial({ color: 0xdc4a29, roughness: .6 })
+    };
+    geo.boxes.forEach(function (b) {
+      var g = new THREE.BoxGeometry(b.size[0] * mm, b.size[1] * mm, Math.max(b.size[2] * mm, 0.001));
+      var mesh = new THREE.Mesh(g, matMap[b.mat]);
+      mesh.position.set(b.pos[0] * mm, b.pos[1] * mm, b.pos[2] * mm);
+      if (b.rotY) mesh.rotation.y = b.rotY;
+      scene.add(mesh);
+    });
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a80, 1.15));
+    var d1 = new THREE.DirectionalLight(0xffffff, 1.05); d1.position.set(1, 1.6, 2.2); scene.add(d1);
+
+    var cw = geo.width * mm, ch = geo.height * mm, cx = cw / 2, cy = ch / 2;
+    var cam = new THREE.PerspectiveCamera(32, W / H, 0.01, 50);
+    // 살짝 정면(사시)보다 각도를 더 줘서 통바·터닝도어처럼 깊이(Z)가 있는
+    // 구성도 형태가 드러나게 함(2026-08-18, 터닝도어 리프가 거의 안 보이던 문제 수정).
+    var dist = Math.max(cw, ch) * 1.55 + 0.4;
+    cam.position.set(cx - cw * 0.38, cy + ch * 0.2, dist);
+    cam.lookAt(cx, cy, 0);
+
+    var controls = new OrbitControls(cam, renderer.domElement);
+    controls.enableDamping = true; controls.enablePan = false;
+    controls.target.set(cx, cy, 0);
+    controls.minDistance = dist * 0.45; controls.maxDistance = dist * 2.4;
+
+    var raf = null, disposed = false;
+    function loop() { if (disposed) return; controls.update(); renderer.render(scene, cam); raf = requestAnimationFrame(loop); }
+    loop();
+
+    return {
+      cancel: function () {
+        disposed = true;
+        if (raf) cancelAnimationFrame(raf);
+        controls.dispose();
+        renderer.dispose();
+      }
+    };
+  }
+
+  function parseFloorplanStructure() {
+    if (!planPixels) return null;
+    // 벽선이 가는 도면도 놓치지 않도록 모바일에서도 충분한 분석 격자를 사용한다.
+    var gw = 128, gh = Math.max(64, Math.round(gw * planPixels.h / planPixels.w));
+    var occupied = new Array(gw * gh).fill(false), line = new Array(gw * gh).fill(false);
+    function at(a, x, y) { return x >= 0 && y >= 0 && x < gw && y < gh && a[y * gw + x]; }
+    function detailAt(x, y) {
+      if (x < 0 || y < 0 || x >= gw || y >= gh) return false;
+      for (var sy = 1; sy <= 5; sy++) for (var sx = 1; sx <= 5; sx++) {
+        if (isWallPixel((x + sx / 6) / gw * planPixels.w, (y + sy / 6) / gh * planPixels.h)) return true;
+      }
+      return false;
+    }
+    for (var y = 0; y < gh; y++) for (var x = 0; x < gw; x++) {
+      var hits = 0, total = 0;
+      for (var sy = 1; sy <= 4; sy++) for (var sx = 1; sx <= 4; sx++) {
+        var px = (x + sx / 5) / gw * planPixels.w, py = (y + sy / 5) / gh * planPixels.h;
+        if (isWallPixel(px, py)) hits++; total++;
+      }
+      occupied[y * gw + x] = hits / total >= .16;
+    }
+    // 글자와 치수 숫자는 버리고, 일정 길이 이상 이어지는 수평·수직 검은 선만 벽 후보로 둔다.
+    for (var ry = 0; ry < gh; ry++) {
+      var start = -1;
+      for (var rx = 0; rx <= gw; rx++) {
+        if (rx < gw && at(occupied, rx, ry)) { if (start < 0) start = rx; }
+        else if (start >= 0) { if (rx - start >= 3) for (var q = start; q < rx; q++) line[ry * gw + q] = true; start = -1; }
+      }
+    }
+    for (var cx = 0; cx < gw; cx++) {
+      var top = -1;
+      for (var cy = 0; cy <= gh; cy++) {
+        if (cy < gh && at(occupied, cx, cy)) { if (top < 0) top = cy; }
+        else if (top >= 0) { if (cy - top >= 3) for (var v = top; v < cy; v++) line[v * gw + cx] = true; top = -1; }
+      }
+    }
+    // 외부 치수선처럼 떨어진 선은 제외하고, 서로 연결된 가장 큰 벽망만 남긴다.
+    var seen = new Uint8Array(gw * gh), best = [];
+    for (var i = 0; i < line.length; i++) if (line[i] && !seen[i]) {
+      var stack = [i], comp = []; seen[i] = 1;
+      while (stack.length) {
+        var n = stack.pop(), nx = n % gw, ny = Math.floor(n / gw); comp.push(n);
+        for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) {
+          var xx = nx + dx, yy = ny + dy, ni = yy * gw + xx;
+          if ((dx || dy) && at(line, xx, yy) && !seen[ni]) { seen[ni] = 1; stack.push(ni); }
+        }
+      }
+      if (comp.length > best.length) best = comp;
+    }
+    if (best.length < 20 && !state.wallEdits.add.length) return null;
+    var mask = new Uint8Array(gw * gh), minX = gw, maxX = 0, minY = gh, maxY = 0;
+    best.forEach(function (n) { mask[n] = 1; var x = n % gw, y = Math.floor(n / gw);
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
+
+    // 사용자가 확정한 벽 보정은 이미지 자동 분석보다 우선한다.
+    function rasterWallEdit(seg, value, radius) {
+      if (!seg || !seg.a || !seg.b) return;
+      var ax = seg.a.x * (gw - 1), ay = seg.a.y * (gh - 1);
+      var bx = seg.b.x * (gw - 1), by = seg.b.y * (gh - 1);
+      var steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * 2));
+      for (var step = 0; step <= steps; step++) {
+        var t = step / steps, px = Math.round(ax + (bx - ax) * t), py = Math.round(ay + (by - ay) * t);
+        for (var ey = -radius; ey <= radius; ey++) for (var ex = -radius; ex <= radius; ex++) {
+          var xx = px + ex, yy = py + ey;
+          if (xx < 0 || yy < 0 || xx >= gw || yy >= gh) continue;
+          mask[yy * gw + xx] = value;
+          if (value) { minX = Math.min(minX, xx); maxX = Math.max(maxX, xx); minY = Math.min(minY, yy); maxY = Math.max(maxY, yy); }
+        }
+      }
+    }
+    state.wallEdits.add.forEach(function (seg) { rasterWallEdit(seg, 1, 1); });
+    state.wallEdits.remove.forEach(function (seg) { rasterWallEdit(seg, 0, 2); });
+
+    // 외벽의 빈 구간 중 바깥쪽에 문짝/호가 있는 곳을 현관 후보로 선택한다.
+    var candidates = [];
+    function scanSide(side) {
+      var vertical = side === "left" || side === "right";
+      var fixed = side === "left" ? minX : side === "right" ? maxX : side === "top" ? minY : maxY;
+      var from = vertical ? minY : minX, to = vertical ? maxY : maxX, run = -1;
+      function wallAt(t) {
+        for (var b = -1; b <= 1; b++) {
+          var x = vertical ? fixed + b : t, y = vertical ? t : fixed + b;
+          if (at(mask, x, y)) return true;
+        }
+        return false;
+      }
+      for (var t = from + 1; t <= to; t++) {
+        if (!wallAt(t)) { if (run < 0) run = t; }
+        else if (run >= 0) {
+          var len = t - run;
+          if (len >= 3 && len <= 18) {
+            var score = 0, outward = (side === "left" || side === "top") ? -1 : 1;
+            for (var a = run - 2; a <= t + 2; a++) for (var o = 2; o <= 6; o++) {
+              var xx = vertical ? fixed + outward * o : a;
+              var yy = vertical ? a : fixed + outward * o;
+              if (detailAt(xx, yy)) score++;
+            }
+            if (score >= 1) candidates.push({ side: side, mid: (run + t - 1) / 2, len: len, score: score });
+          }
+          run = -1;
+        }
+      }
+    }
+    ["left", "right", "top", "bottom"].forEach(scanSide);
+
+    // 오목하게 들어간 현관도 찾기 위해 외곽 네 면뿐 아니라 전체 벽망의 모든 개구부를 조사한다.
+    // 먼저 작은 문/창 틈을 임시로 막은 벽망에서 바깥 공기를 flood-fill해 실내·실외를 구분한다.
+    var sealed = new Uint8Array(mask);
+    function sealShortGaps(vertical) {
+      var outer = vertical ? gw : gh, inner = vertical ? gh : gw;
+      for (var a = 0; a < outer; a++) {
+        var last = -1;
+        for (var b = 0; b < inner; b++) {
+          var x = vertical ? a : b, y = vertical ? b : a;
+          if (at(mask, x, y)) {
+            if (last >= 0 && b - last - 1 >= 1 && b - last - 1 <= 18) {
+              for (var f = last + 1; f < b; f++) {
+                var fx = vertical ? a : f, fy = vertical ? f : a; sealed[fy * gw + fx] = 1;
+              }
+            }
+            last = b;
+          }
+        }
+      }
+    }
+    sealShortGaps(true); sealShortGaps(false);
+    var outside = new Uint8Array(gw * gh), queue = [], qhead = 0;
+    function pushOutside(x, y) {
+      if (x < 0 || y < 0 || x >= gw || y >= gh) return;
+      var n = y * gw + x;
+      if (!sealed[n] && !outside[n]) { outside[n] = 1; queue.push(n); }
+    }
+    for (var bx = 0; bx < gw; bx++) { pushOutside(bx, 0); pushOutside(bx, gh - 1); }
+    for (var by = 0; by < gh; by++) { pushOutside(0, by); pushOutside(gw - 1, by); }
+    while (qhead < queue.length) {
+      var qn = queue[qhead++], qx = qn % gw, qy = Math.floor(qn / gw);
+      pushOutside(qx - 1, qy); pushOutside(qx + 1, qy); pushOutside(qx, qy - 1); pushOutside(qx, qy + 1);
+    }
+
+    function inspectWallOpenings(vertical) {
+      var fixedFrom = vertical ? minX : minY, fixedTo = vertical ? maxX : maxY;
+      var alongFrom = vertical ? minY : minX, alongTo = vertical ? maxY : maxX;
+      for (var fixed = fixedFrom; fixed <= fixedTo; fixed++) {
+        var gapStart = -1;
+        function wallAtAlong(t) {
+          for (var band = -1; band <= 1; band++) {
+            var x = vertical ? fixed + band : t, y = vertical ? t : fixed + band;
+            if (at(mask, x, y)) return true;
+          }
+          return false;
+        }
+        for (var along = alongFrom; along <= alongTo + 1; along++) {
+          var wallHere = along <= alongTo && wallAtAlong(along);
+          if (!wallHere) { if (gapStart < 0) gapStart = along; continue; }
+          if (gapStart >= 0) {
+            var gapLen = along - gapStart, mid = Math.round((gapStart + along - 1) / 2);
+            if (gapLen >= 3 && gapLen <= 18 && gapStart > alongFrom) {
+              var negX = vertical ? fixed - 3 : mid, negY = vertical ? mid : fixed - 3;
+              var posX = vertical ? fixed + 3 : mid, posY = vertical ? mid : fixed + 3;
+              var negOutside = at(outside, negX, negY), posOutside = at(outside, posX, posY);
+              if (!!negOutside !== !!posOutside) {
+                var detail = 0;
+                for (var ga = gapStart - 1; ga <= along + 1; ga++) for (var go = -8; go <= 8; go++) {
+                  var gx = vertical ? fixed + go : ga, gy = vertical ? ga : fixed + go;
+                  if (detailAt(gx, gy)) detail++;
+                }
+                // 벽 끝점만 있는 단순 틈은 제외하고, 틈 안쪽에 문짝 직선/개폐 호 흔적이 있어야 한다.
+                if (detail >= gapLen + 3) {
+                  candidates.push({ side: vertical ? (negOutside ? "left" : "right") : (negOutside ? "top" : "bottom"),
+                    mid: mid, fixed: fixed, len: gapLen, score: detail + 40, recessed: true });
+                }
+              }
+            }
+            gapStart = -1;
+          }
+        }
+      }
+    }
+    inspectWallOpenings(true); inspectWallOpenings(false);
+
+    // 같은 문을 벽 두께의 여러 격자선에서 찾은 중복 후보는 최고 점수 하나만 남긴다.
+    candidates.sort(function (a, b) { return b.score - a.score; });
+    var uniqueCandidates = [];
+    candidates.forEach(function (candidate) {
+      var duplicate = uniqueCandidates.some(function (u) {
+        return u.side === candidate.side && Math.abs(u.mid - candidate.mid) <= 3 &&
+          Math.abs((u.fixed || 0) - (candidate.fixed || 0)) <= 3;
+      });
+      if (!duplicate) uniqueCandidates.push(candidate);
+    });
+    candidates = uniqueCandidates;
+    var entrance = null, c = candidates[0];
+    if (c) {
+      if (c.side === "left" || c.side === "right") entrance = {
+        x: (c.recessed ? c.fixed : (c.side === "left" ? minX : maxX)) / gw, y: c.mid / gh, angle: 90,
+        outsideSign: c.side === "left" ? 1 : -1, width: Math.round(c.len / gh * planPixels.h * (state.scale && state.scale.mmPerPixel || 1))
+      };
+      else entrance = { x: c.mid / gw, y: (c.recessed ? c.fixed : (c.side === "top" ? minY : maxY)) / gh, angle: 0,
+        outsideSign: c.side === "top" ? -1 : 1, width: Math.round(c.len / gw * planPixels.w * (state.scale && state.scale.mmPerPixel || 1)) };
+      entrance.width = 900;
+    }
+    return { gw: gw, gh: gh, mask: mask, entrance: entrance };
+  }
+
+  function makeLabelSprite(THREE, text) {
+    var c = document.createElement("canvas"), ctx = c.getContext("2d");
+    ctx.font = "700 34px system-ui, sans-serif";
+    var textW = Math.ceil(ctx.measureText(text).width), padX = 22;
+    c.width = Math.max(180, textW + padX * 2); c.height = 82;
+    ctx.font = "700 34px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = "#4f5961"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+    ctx.fillStyle = "#20262b"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(text, c.width / 2, c.height / 2);
+    var mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true });
+    var s = new THREE.Sprite(mat); s.scale.set(c.width * .0051, .42, 1); s.renderOrder = 10; return s;
+  }
+
+  function mountProject3D(container) {
+    if (!window.__THREE) {
+      container.innerHTML = '<div class="mini3d-empty">3D 엔진을 불러오는 중입니다. 잠시 후 다시 눌러주세요.</div>';
+      return { cancel: function () {} };
+    }
+    var THREE = window.__THREE, OrbitControls = window.__OrbitControls, mm = .001;
+    var W = container.clientWidth || 900, H = 440;
+    container.innerHTML = "";
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(W, H); renderer.shadowMap.enabled = false;
+    container.appendChild(renderer.domElement);
+    var scene = new THREE.Scene(); scene.background = new THREE.Color(0xeef1f3);
+    var matMap = {
+      frame: new THREE.MeshStandardMaterial({ color: 0xfff3cf, roughness: .5, metalness: .03 }),
+      addon: new THREE.MeshStandardMaterial({ color: 0xb9e4d6, roughness: .48, metalness: .02 }),
+      mullion100: new THREE.MeshStandardMaterial({ color: 0x75c9ec, roughness: .5 }),
+      mullion40105: new THREE.MeshStandardMaterial({ color: 0xc8ebfa, roughness: .55 }),
+      turn: new THREE.MeshStandardMaterial({ color: 0x2f8577, roughness: .5 }),
+      entry: new THREE.MeshStandardMaterial({ color: 0x7b573d, roughness: .62 }),
+      handle: new THREE.MeshStandardMaterial({ color: 0x22262a, roughness: .35, metalness: .65 }),
+      divider: new THREE.MeshStandardMaterial({ color: 0x4c7182, roughness: .6 }),
+      glass: new THREE.MeshStandardMaterial({ color: 0x6bb0d9, roughness: .05, transparent: true, opacity: .30 }),
+      marker: new THREE.MeshStandardMaterial({ color: 0xdc4a29, roughness: .6 })
+    };
+    var naturalW = $("plan").naturalWidth || (state.scale && state.scale.imageWidth) || 1000;
+    var naturalH = $("plan").naturalHeight || (state.scale && state.scale.imageHeight) || 700;
+    var planWmm, planHmm;
+    if (state.scale && state.scale.mmPerPixel) {
+      planWmm = naturalW * state.scale.mmPerPixel; planHmm = naturalH * state.scale.mmPerPixel;
+    } else if (state.scale && state.scale.mmPerFracX) {
+      planWmm = state.scale.mmPerFracX; planHmm = state.scale.mmPerFracY;
+    } else {
+      planWmm = 10000; planHmm = planWmm * naturalH / naturalW;
+    }
+    var structure = parseFloorplanStructure();
+    if (structure) {
+      var wallCells = [];
+      for (var wi = 0; wi < structure.mask.length; wi++) if (structure.mask[wi]) wallCells.push(wi);
+      var wallOpenings = state.pins.map(function (p) {
+        var geo = opGeometryBoxes(p);
+        return { p: p, width: geo.width, height: geo.height,
+          hasDoor: p.parts.some(function (t) { return t.kind === "turn" || t.kind === "entry"; }) };
+      });
+      function openingAt(n) {
+        var cellXn = ((n % structure.gw) + .5) / structure.gw;
+        var cellYn = (Math.floor(n / structure.gw) + .5) / structure.gh;
+        for (var oi = 0; oi < wallOpenings.length; oi++) {
+          var o = wallOpenings[oi];
+          if (!o.width) continue;
+          var hit = (o.p.angle || 0) === 90
+            ? Math.abs(cellXn - o.p.x) * planWmm <= 230 && Math.abs(cellYn - o.p.y) * planHmm <= o.width / 2 + 45
+            : Math.abs(cellYn - o.p.y) * planHmm <= 230 && Math.abs(cellXn - o.p.x) * planWmm <= o.width / 2 + 45;
+          if (hit) return o;
+        }
+        return null;
+      }
+      var cellW = planWmm * mm / structure.gw, cellD = planHmm * mm / structure.gh;
+      var wallPieces = [];
+      wallCells.forEach(function (n) {
+        var opening = openingAt(n);
+        if (!opening) { wallPieces.push({ n: n, y: 1.2, h: 2.4 }); return; }
+        var openingH = Math.min(2400, Math.max(0, opening.height || 0)) * mm;
+        if (opening.hasDoor) {
+          var above = 2.4 - openingH;
+          if (above > .015) wallPieces.push({ n: n, y: openingH + above / 2, h: above });
+        } else {
+          var below = 2.4 - openingH;
+          if (below > .015) wallPieces.push({ n: n, y: below / 2, h: below });
+        }
+      });
+      var wallGeo = new THREE.BoxGeometry(1, 1, 1);
+      var wallMat = new THREE.MeshStandardMaterial({ color: 0xe8edf0, roughness: .88,
+        transparent: true, opacity: .40, depthWrite: false, side: THREE.DoubleSide });
+      var walls = new THREE.InstancedMesh(wallGeo, wallMat, wallPieces.length), matrix = new THREE.Matrix4();
+      wallPieces.forEach(function (piece, idx) {
+        var wx = piece.n % structure.gw, wy = Math.floor(piece.n / structure.gw);
+        matrix.makeScale(cellW * 1.08, piece.h, cellD * 1.08);
+        matrix.setPosition((wx + .5) * cellW, piece.y, (wy + .5) * cellD); walls.setMatrixAt(idx, matrix);
+      });
+      walls.instanceMatrix.needsUpdate = true;
+      scene.add(walls);
+    }
+    var renderPins = state.pins.slice();
+    renderPins.forEach(function (p, pinIndex) {
+      var geo = opGeometryBoxes(p); if (!geo.boxes.length || !geo.width) return;
+      var group = new THREE.Group();
+      geo.boxes.forEach(function (b) {
+        var g = new THREE.BoxGeometry(b.size[0] * mm, b.size[1] * mm, Math.max(b.size[2] * mm, .001));
+        var mesh = new THREE.Mesh(g, matMap[b.mat]);
+        mesh.position.set((b.pos[0] - geo.width / 2) * mm, b.pos[1] * mm, b.pos[2] * mm);
+        if (b.rotY) mesh.rotation.y = b.rotY;
+        group.add(mesh);
+      });
+      var hasDoor = p.parts.some(function (t) { return t.kind === "turn" || t.kind === "entry"; });
+      var baseY = hasDoor ? 0 : Math.max(0, 2.4 - geo.height * mm);
+      group.position.set(p.x * planWmm * mm, baseY, p.y * planHmm * mm);
+      if ((p.angle || 0) === 90) group.rotation.y = -Math.PI / 2;
+      // 통바/창 구성 순서는 언제나 실내에서 바라본 왼쪽부터 유지한다.
+      var pOutside = outsideSignForPin(p), wallFrameDepth=(frameDepthMm(p.frame)||(hasDoor?140:140))*mm;
+      // 번호 위치의 벽선은 창틀 실외면이다. 프레임 중심은 여기서 실내 방향으로 반 깊이 이동한다.
+      if((p.angle||0)===90)group.position.x+=pOutside*wallFrameDepth/2;
+      else group.position.z+=-pOutside*wallFrameDepth/2;
+      if (!hasDoor && pOutside > 0) group.scale.x = -1;
+      scene.add(group);
+      var labelName = p.name || ((pinIndex + 1) + "번");
+      var frameName = isEntryPin(p) ? "현관문" : (requiresFrame(p) ? (p.frame || "프레임 미선택") : "통바");
+      var label = makeLabelSprite(THREE, labelName + " · " + frameName + " · " + Math.round(geo.width) + "×" + Math.round(geo.height));
+      label.position.set(p.x * planWmm * mm, baseY + geo.height * mm + .95, p.y * planHmm * mm);
+      scene.add(label);
+    });
+    var floor = new THREE.Mesh(new THREE.PlaneGeometry(planWmm * mm, planHmm * mm),
+      new THREE.MeshStandardMaterial({ color: 0xd9dde0, roughness: .95, transparent: true, opacity: .55 }));
+    floor.rotation.x = -Math.PI / 2; floor.position.set(planWmm * mm / 2, -.01, planHmm * mm / 2);
+    scene.add(floor);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x7a7a72, 1.25));
+    var light = new THREE.DirectionalLight(0xffffff, 1.4);
+    light.position.set(-4, 9, 6); scene.add(light);
+    var cx = planWmm * mm / 2, cz = planHmm * mm / 2, span = Math.max(planWmm, planHmm) * mm;
+    var cam = new THREE.PerspectiveCamera(38, W / H, .01, 100);
+    cam.position.set(cx - span * .55, span * .72, cz + span * .82); cam.lookAt(cx, 1, cz);
+    var controls = new OrbitControls(cam, renderer.domElement);
+    controls.enableDamping = true; controls.target.set(cx, 1, cz);
+    var stopped = false, raf;
+    function loop() { if (stopped) return; controls.update(); renderer.render(scene, cam); raf = requestAnimationFrame(loop); }
+    loop();
+    return { cancel: function () { stopped = true; if (raf) cancelAnimationFrame(raf); controls.dispose(); renderer.dispose(); } };
+  }
+
+  /* ---------------- 내보내기 / 불러오기 ---------------- */
+  function panelsOut(v) {
+    if (v === "고정") return "fix";
+    var n = parseInt(v, 10);
+    return isNaN(n) ? v : n;
+  }
+  function num(v) { return v === "" || v === null || v === undefined ? null : Number(v); }
+
+  function escapeHTML(v) {
+    return String(v === null || v === undefined ? "" : v).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function drawingParts(p) {
+    return p.parts.map(function (t) {
+      if (t.kind === "mullion") return "통바 " + mullionLayerRows(t).map(function(v){return escapeHTML(v.spec)+" "+v.count+"개";}).join(" / ");
+      if (t.kind === "entry") return "현관문 900×2100";
+      var typeNames={normal:"일반 창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
+      var kind = t.kind === "turn" ? "터닝도어" : (typeNames[t.sashType||"normal"] || "일반 창");
+      var extra = t.kind === "sash" && (t.sashType||"normal") === "normal" ? " · " + escapeHTML(t.panels || "") : "";
+      var small=(t.sashType||"")==="unbalanced"?" · 소형창 폭 "+escapeHTML(t.smallW||"-")+" ("+(t.smallSide==="right"?"오른쪽":"왼쪽")+")":"",addon=normalizeAddon(t.addon,p.frame),addonText=addon?" · 덧창 "+escapeHTML(addon.w)+"×"+escapeHTML(addon.h):"";
+      return kind + " " + escapeHTML(t.w || "-") + "×" + escapeHTML(t.h || "-") + extra + small + addonText;
+    }).join("<br>");
+  }
+  function detailText(p) {
+    // 몰딩·벽돌·사춤·타일은 있을 때만, 물구멍·방충망은(기본 있음) 없을 때만 표기한다.
+    var d=normalizedDetails(p.details), values=[requiresFrame(p)?"프레임 "+(p.frame||"X"):"프레임 해당없음"];
+    [["molding","몰딩"],["brick","벽돌"]].forEach(function(item){var v=d[item[0]];if(v)values.push(item[1]+" "+v);});
+    [["filling","사춤"],["tile","타일"]].forEach(function(item){if(d[item[0]])values.push(item[1]+" 있음");});
+    [["drainHole","물구멍"],["screen","방충망"]].forEach(function(item){if(!d[item[0]])values.push(item[1]+" 없음");});
+    return values.join(" · ");
+  }
+  function buildDrawingHTML(autoPrint) {
+    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); syncGlobalInputs(); persist();
+    var rows = state.pins.map(function (p, i) {
+      return '<tr><td class="no-cell">' + escapeHTML(visiblePinLabel(p, i)) + '</td>' +
+        '<td>' + escapeHTML(p.name || (isEntryPin(p) ? "현관" : "")) + '</td>' +
+        '<td>' + drawingParts(p) + '</td><td>' + escapeHTML(requiresFrame(p) ? (p.frame || "") : "해당없음") + '</td>' +
+        '<td class="notes">' + escapeHTML(isEntryPin(p) ? "" : detailText(p)).replace(/\n/g, "<br>") + '</td></tr>';
+    }).join("");
+    var planMarkers = state.pins.map(function (p, i) {
+      var entry = isEntryPin(p), label = visiblePinLabel(p, i);
+      return '<span class="plan-marker' + (entry ? ' entry' : '') + '" style="left:' +
+        (dispX(p.x) * 100) + '%;top:' + (dispY(p.y) * 100) + '%">' + escapeHTML(label) + '</span>';
+    }).join("");
+    var planRatio = planPixels && planPixels.w && planPixels.h ? (planPixels.w + " / " + planPixels.h) : "4 / 3";
+    var plan = state.planData ? '<div class="plan-wrap" style="aspect-ratio:' + planRatio + '"><img class="plan" src="' +
+      state.planData + '" alt="평면도">' + planMarkers + '</div>' : '<div class="no-plan">평면도 없음</div>';
+    return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>' + escapeHTML(state.site || "실측도면") +
+      '</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:"Gulim",sans-serif;color:#111;margin:0;font-size:11px}' +
+      'h1{font-size:20px;margin:0 0 6px;text-align:center}.meta{display:flex;gap:28px;border:1px solid #111;padding:7px 10px;margin-bottom:8px}.plan-wrap{position:relative;width:100%;margin:0 auto 9px;overflow:hidden;page-break-inside:avoid}.plan{display:block;width:100%;height:100%;object-fit:contain}.plan-marker{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#ffd66b;border:1.5px solid #6d571d;color:#17130a;font-weight:700;font-size:10px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.28)}.plan-marker.entry{background:#287a68;border-color:#287a68;color:#fff;font-size:6px;letter-spacing:-.08em}.no-plan{text-align:center;padding:30px;border:1px solid #aaa}' +
+      'table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:5px;vertical-align:top;word-break:break-word}th{background:#eee}.no-cell{width:8%;text-align:center;font-weight:bold}th:nth-child(2){width:17%}th:nth-child(3){width:28%}th:nth-child(4){width:16%}.notes{white-space:normal}@media print{.no-print{display:none}}</style></head><body>' +
+      '<h1>' + escapeHTML(normalizedSetup(state.siteSetup).address || "현장주소 미입력") + '</h1>' +
+      ((liftingText()||state.overallNotes)?'<div class="meta">'+escapeHTML([liftingText(),state.overallNotes?'전체 특이사항: '+state.overallNotes:''].filter(Boolean).join(' · ')).replace(/\n/g,'<br>')+'</div>':'') + plan +
+      '<table><thead><tr><th>번호</th><th>위치</th><th>치수·구성</th><th>프레임 두께</th><th>참고사항</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">입력된 창호가 없습니다.</td></tr>') +
+      '</tbody></table>' + (autoPrint ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script>' : '') + '</body></html>';
+  }
+  function plainParts(p) {
+    return p.parts.map(function(t){
+      if (t.kind === "mullion") return "통바 " + mullionLayerRows(t).map(function(v){return v.spec+" "+v.count+"개";}).join(" / ");
+      if (t.kind === "entry") return "현관문 900×2100";
+      var names={normal:"일반 창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},addon=normalizeAddon(t.addon,p.frame);
+      return (t.kind === "turn" ? "터닝도어 " : (names[t.sashType||"normal"]||"일반 창")+" ") + (t.w || "-") + "×" + (t.h || "-") + (t.kind === "sash"&&(t.sashType||"normal")==="normal" ? " · " + (t.panels || "") : (t.sashType||"")==="unbalanced"?" · 소형창 폭 "+(t.smallW||"-")+" ("+(t.smallSide==="right"?"오른쪽":"왼쪽")+")":"")+(addon?" · 덧창 "+addon.w+"×"+addon.h:"");
+    }).join(" / ");
+  }
+  function wrapCanvasText(ctx, text, maxWidth) {
+    var lines = [], paragraphs = String(text || "").split(/\n/);
+    paragraphs.forEach(function(par){ var words = par.split(/\s+/), line = ""; if (!par) { lines.push(""); return; }
+      words.forEach(function(word){
+        if (ctx.measureText(word).width > maxWidth) { if(line){lines.push(line);line="";} var chunk=""; Array.from(word).forEach(function(ch){var next=chunk+ch;if(chunk&&ctx.measureText(next).width>maxWidth){lines.push(chunk);chunk=ch;}else chunk=next;}); line=chunk; return; }
+        var test = line ? line + " " + word : word; if (line && ctx.measureText(test).width > maxWidth) { lines.push(line); line = word; } else line = test;
+      }); lines.push(line);
+    }); return lines;
+  }
+  function loadPlanImage() { return new Promise(function(resolve, reject){ if (!state.planData) { resolve(null); return; } var img = new Image(); img.onload=function(){resolve(img);}; img.onerror=function(){reject(new Error("평면도 이미지를 읽지 못했습니다"));}; img.src=state.planData; }); }
+  function safeSiteFileBase(){return (state.site||generatedSiteName()||"현장").replace(/[\\/:*?"<>|\x00-\x1f]/g,"_").replace(/[. ]+$/g,"").slice(0,140);}
+  function canvasFileData(canvas,name){return new Promise(function(resolve,reject){canvas.toBlob(function(blob){if(!blob){reject(new Error(name+" 변환 실패"));return;}var reader=new FileReader();reader.onload=function(){resolve({name:name,mimeType:"image/png",data:String(reader.result).split(",")[1]});};reader.onerror=function(){reject(reader.error||new Error(name+" 읽기 실패"));};reader.readAsDataURL(blob);},"image/png");});}
+  function textFileData(text,name){var bytes=new TextEncoder().encode(text),binary="";for(var i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);return {name:name,mimeType:"application/json",data:btoa(binary)};}
+  async function buildSitePlanCanvas(){
+    var img=await loadPlanImage();if(!img)throw new Error("현장 평면도를 먼저 올려주세요");var maxW=1600,scale=Math.min(1,maxW/img.naturalWidth),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale)),planCanvas=document.createElement("canvas");planCanvas.width=w;planCanvas.height=h;var c=planCanvas.getContext("2d");c.fillStyle="#fff";c.fillRect(0,0,w,h);c.save();c.translate(state.flipH?w:0,state.flipV?h:0);c.scale(state.flipH?-1:1,state.flipV?-1:1);c.drawImage(img,0,0,w,h);c.restore();
+    state.pins.forEach(function(p,i){var x=dispX(p.x)*w,y=dispY(p.y)*h,entry=isEntryPin(p);drawPlanStructureCanvas(c,p,x,y,w,h,img);var radius=Math.max(8,Math.min(16,w/90));c.beginPath();c.arc(x,y,radius,0,Math.PI*2);c.fillStyle=entry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=entry?"#287a68":"#6d571d";c.lineWidth=Math.max(1,radius/8);c.stroke();c.fillStyle=entry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font='bold '+Math.max(8,radius)+ 'px "Gulim"';c.fillText(visiblePinLabel(p,i),x,y);});
+    // 평면도(왼쪽) + 번호별 위치 목록(오른쪽)을 한 이미지로 합쳐 balance 있게 중앙 배치한다.
+    var legendItems=state.pins.map(function(p,i){return visiblePinLabel(p,i)+". "+(p.name||(isEntryPin(p)?"현관":"위치 미입력"));});
+    var measure=document.createElement("canvas").getContext("2d"),legendFont=Math.max(16,Math.round(w/48)),lineH=Math.round(legendFont*1.7);
+    measure.font=legendFont+'px "Gulim", sans-serif';
+    var legendW=legendItems.length?Math.max(160,Math.max.apply(null,legendItems.map(function(t){return measure.measureText(t).width;}))+40):0;
+    var legendH=Math.max(1,legendItems.length*lineH);
+    var titleText=normalizedSetup(state.siteSetup).address||"현장주소 미입력",titleFont=Math.max(24,Math.round(w/28));
+    measure.font='bold '+titleFont+'px "Gulim", sans-serif';
+    var gap=legendItems.length?Math.round(w*.05):0,pad=Math.round(w*.05),titleH=titleFont+pad;
+    var contentW=w+gap+legendW,blockH=Math.max(h,legendH);
+    var totalW=Math.max(contentW,measure.measureText(titleText).width)+pad*2,totalH=titleH+blockH+pad*2;
+    var out=document.createElement("canvas");out.width=totalW;out.height=totalH;var oc=out.getContext("2d");
+    oc.fillStyle="#fff";oc.fillRect(0,0,totalW,totalH);
+    oc.fillStyle="#111";oc.textAlign="center";oc.textBaseline="top";oc.font='bold '+titleFont+'px "Gulim", sans-serif';oc.fillText(titleText,totalW/2,pad/2);
+    var startX=(totalW-contentW)/2,planY=titleH+pad+(blockH-h)/2;
+    oc.drawImage(planCanvas,startX,planY);oc.strokeStyle="#ccc";oc.lineWidth=1;oc.strokeRect(startX,planY,w,h);
+    if(legendItems.length){
+      var legendX=startX+w+gap,legendY=titleH+pad+(blockH-legendH)/2;
+      oc.textAlign="left";oc.textBaseline="top";oc.font=legendFont+'px "Gulim", sans-serif';oc.fillStyle="#111";
+      legendItems.forEach(function(text,idx){oc.fillText(text,legendX,legendY+idx*lineH);});
+    }
+    return out;
+  }
+  async function buildDrawingCanvas() {
+    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal(); syncGlobalInputs(); persist();
+    var W = 2260, pad = 60;
+    var measure = document.createElement("canvas").getContext("2d");
+    measure.font = '25px "Gulim", sans-serif';
+    var siteLines = wrapCanvasText(measure, normalizedSetup(state.siteSetup).address || "현장주소 미입력", W - pad * 2);
+    var globalSummary=[liftingText(),state.overallNotes?"전체 특이사항: "+state.overallNotes:""].filter(Boolean).join(" · ");
+    measure.font='22px "Gulim", sans-serif'; var globalLines=globalSummary?wrapCanvasText(measure,globalSummary,W-pad*2):[];
+    var ty = 68 + siteLines.length * 46 + globalLines.length*30 + 20, panelGap=24, panelW=(W-pad*2-panelGap)/2;
+    var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
+    function panelFooterData(p){measure.font='17px "Gulim", sans-serif';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28)};}
+    function footerHeight(data){return 0;}
+    function panelHeightFor(p){var data=panelFooterData(p);return 570+Math.max(0,data.details.length-1)*20;}
+    var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
+    if(!rowHeights.length)rowHeights=[100];
+    var panelsHeight=rowHeights.reduce(function(n,v){return n+v;},0)+Math.max(0,rowHeights.length-1)*panelGap;
+    var H=ty+panelsHeight+60;
+    var canvas=document.createElement("canvas"); canvas.width=W; canvas.height=H; var c=canvas.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.fillStyle="#111";
+    c.textAlign="center";c.font='bold 40px "Gulim", sans-serif'; siteLines.forEach(function(line, i){ c.fillText(line, W/2, 58 + i * 46); });
+    c.textAlign="left";c.font='22px "Gulim", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);});
+    function partSize(t,p){
+      if(t.kind==="mullion"){var layers=mullionLayers(t),rows=mullionLayerRows(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;})),specLabel=rows.map(function(r){return r.spec+(r.count>1?" "+r.count+"개":"");}).join("+");return {w:mw,h:100,kind:t.kind,layers:layers,rows:rows,stackDirection:t.stackDirection,fixedW:mw<=40?12:28,label:"통바 "+specLabel};}
+      var dimsMissing=t.kind!=="entry"&&(!parseFloat(t.w)||!parseFloat(t.h));
+      var pw=parseFloat(t.w)|| (t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
+      var names={normal:"일반 창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"},stype=t.kind==="turn"?"turn":(t.sashType||"normal"),addon=normalizeAddon(t.addon,p.frame);
+      var isTurnPart=t.kind==="turn"||stype==="turn",swing=isTurnPart?(t.swing!=="pull"?"push":"pull"):null,handle=isTurnPart?(t.handle==="left"?"left":"right"):null;
+      return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,smallW:Number(t.smallW)||0,smallSide:t.smallSide==="right"?"right":"left",addon:addon,dimsMissing:dimsMissing,swing:swing,handle:handle,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+(dimsMissing?"치수 미입력":Math.round(pw)+"×"+Math.round(ph)),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
+    }
+    function drawPanel(p,i,x,y,panelH){
+      var footerData=panelFooterData(p),headH=48,footH=0,topViewH=190+Math.max(0,footerData.details.length-1)*20,drawTop=y+headH,drawH=panelH-headH-topViewH,sizes=drawingPartsGrouped(p).map(function(t){return partSize(t,p);}),layout=[];
+      c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.stroke();
+      c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Gulim", sans-serif';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
+      c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim", sans-serif';c.fillText("정면도 (실내에서 봄)",x+14,drawTop+8);
+      var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0), sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1,maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}));if(!isFinite(maxH))maxH=1;
+      sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
+      var scale=Math.min((panelW-70-fixedW)/sashTotal,(drawH-100)/maxH), renderedW=fixedW+sashTotal*scale,dx=x+(panelW-renderedW)/2, base=drawTop+drawH-38;
+      sizes.forEach(function(s,partIndex){
+        var sw=s.kind==="mullion"?s.fixedW:Math.max(10,s.w*scale),sh=Math.max(10,s.h*scale),sy=base-sh;layout.push({s:s,x:dx,w:sw});if(s.kind==="mullion"){c.fillStyle="#ccecf2";c.fillRect(dx,sy,sw,sh);}c.strokeStyle=s.kind==="mullion"?"#14748a":"#111";c.lineWidth=2;c.strokeRect(dx,sy,sw,sh);
+        if(s.kind==="entry"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.stroke();}
+        if(s.swing){c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 15px "Gulim", sans-serif';c.fillText(s.swing==="pull"?"당기는 문":"미는 문",dx+sw/2,base-sh/2);}
+        if(s.handle){var handleX=s.handle==="right"?dx+sw-14:dx+14;c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 20px "Gulim", sans-serif';c.fillText("O",handleX,base-sh/2);}
+        if(s.kind==="sash"&&s.sashType==="normal"&&s.panels>1){var panelRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),panelTotal=panelRatios.reduce(function(a,b){return a+b;},0),panelAt=0;panelRatios.slice(0,-1).forEach(function(r){panelAt+=r;c.beginPath();c.moveTo(dx+sw*panelAt/panelTotal,sy);c.lineTo(dx+sw*panelAt/panelTotal,base);c.stroke();});}
+        if(s.kind==="sash"&&s.sashType==="unbalanced"){var smallW=Math.max(1,Math.min(s.w-1,s.smallW||s.w*.3)),smallOnRight=s.smallSide==="right",smallX=smallOnRight?dx+sw*(1-smallW/s.w):dx+sw*smallW/s.w,labelCx=smallOnRight?(smallX+(dx+sw))/2:(dx+smallX)/2;c.beginPath();c.moveTo(smallX,sy);c.lineTo(smallX,base);c.stroke();c.fillStyle="#333";c.textAlign="center";c.textBaseline="top";c.font='13px "Gulim", sans-serif';c.fillText("소형창 폭 "+Math.round(smallW),labelCx,sy+4);c.textBaseline="middle";c.font='bold 25px "Gulim", sans-serif';c.fillText("#",labelCx,sy+sh/2);}
+        if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0],markRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1),markTotal=markRatios.reduce(function(a,b){return a+b;},0);c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 25px "Gulim"';primaryPanels.forEach(function(pi){var before=markRatios.slice(0,pi).reduce(function(a,b){return a+b;},0);c.fillText("#",dx+sw*(before+markRatios[pi]/2)/markTotal,sy+sh/2);});}
+        if(s.kind!=="mullion"&&s.addon){var inset=Math.min(10,sw*.06,sh*.06);c.save();c.setLineDash([7,5]);c.strokeStyle="#2f8577";c.lineWidth=2;c.strokeRect(dx+inset,sy+inset,Math.max(2,sw-inset*2),Math.max(2,sh-inset*2));c.restore();c.fillStyle="#2f8577";c.textAlign="center";c.textBaseline="bottom";c.font='13px "Gulim"';c.fillText("덧창 "+s.addon.w+"×"+s.addon.h,dx+sw/2,base-5);}
+        c.fillStyle=s.dimsMissing?"#c0392b":"#111";c.textAlign="center";c.textBaseline="bottom";c.font=(s.dimsMissing?"bold ":"")+(s.kind==="mullion"?'13px "Gulim", sans-serif':'16px "Gulim", sans-serif');c.fillText(s.label,dx+sw/2,sy-7);
+        dx+=sw;
+      });
+      var topY=y+headH+drawH, frameDepth=frameDepthMm(p.frame),drawDepth=frameDepth||115;
+      c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim", sans-serif';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
+      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,framePlanY=topY+90,leftTotals={},rightTotals={},specOrder=[],maxMullionDepth=Math.max.apply(null,sizes.filter(function(s){return s.kind==="mullion";}).map(function(s){return s.layers.reduce(function(n,v){return n+v.depth;},0);}).concat([0])),maxAddonExtent=Math.max.apply(null,sizes.filter(function(s){return s.addon;}).map(function(s){return drawDepth+20+(frameDepthMm(s.addon.frame)||drawDepth);}).concat([0])),depthScale=60/Math.max(1,drawDepth,maxMullionDepth,maxAddonExtent);
+      // 평면도(위에서 봄)는 정면도의 표시 폭(통바 가독성 확대분 포함)을 그대로 재사용하지
+      // 않고, 실제 mm 폭만으로 독립된 축척을 쓴다 — 위치와 폭이 서로 다른 축척을 쓰면
+      // 연속된 통바가 다음 항목과 겹쳐 보이는 문제가 있었다.
+      var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm;
+      function addTotals(target,rows){rows.forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
+      var plotX=geometryX;
+      sizes.forEach(function(s){var gx=plotX,gw=s.kind==="mullion"?Math.max(4,s.w*depthScale):Math.max(4,s.w*planScale);plotX+=gw;if(s.kind==="mullion"){var layerAt=s.stackDirection==="inside-out"?drawDepth:0;s.layers.forEach(function(layer,li){if(s.stackDirection==="inside-out")layerAt-=layer.depth;var lh=Math.max(2,layer.depth*depthScale),layerY=framePlanY+layerAt*depthScale;c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);if(s.stackDirection!=="inside-out")layerAt+=layer.depth;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{var framePlanDepth=drawDepth*depthScale;c.fillStyle="#f6f6f6";c.fillRect(gx,framePlanY,gw,framePlanDepth);c.strokeStyle="#111";c.strokeRect(gx,framePlanY,gw,framePlanDepth);if(s.addon){var addonDepth=(frameDepthMm(s.addon.frame)||drawDepth)*depthScale,addonY=framePlanY+(drawDepth+20)*depthScale;c.fillStyle="#d9f1e9";c.fillRect(gx,addonY,gw,addonDepth);c.strokeStyle="#2f8577";c.strokeRect(gx,addonY,gw,addonDepth);}}});
+      var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+leftTotals[spec]+"개"};}),rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+rightTotals[spec]+"개"};});
+      // 규격 목록 앞뒤에 실제 face:depth 비율 그대로의 작은 도형을 붙여, 평면도
+      // 본체(창 폭 축척이라 통바가 눌려 보임)와 별개로 실제 단면 비율을 보여준다.
+      function mullionIconWH(spec){var m=String(spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=m?Number(m[1]):100,depth=m?Number(m[2]):100,longer=Math.max(face,depth)||1,maxDim=14;return {w:Math.max(3,Math.round(maxDim*face/longer)),h:Math.max(3,Math.round(maxDim*depth/longer))};}
+      function drawMullionIcon(cx,cy,spec){var icon=mullionIconWH(spec);c.fillStyle="#ccecf2";c.strokeStyle="#14748a";c.lineWidth=1;c.fillRect(cx-icon.w/2,cy-icon.h/2,icon.w,icon.h);c.strokeRect(cx-icon.w/2,cy-icon.h/2,icon.w,icon.h);}
+      c.font='15px "Gulim", sans-serif';c.textBaseline="middle";c.fillStyle="#111";
+      var specRowH=20,iconSlot=22,specRowY=topY+52+8;
+      leftRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(x+14+iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="left";c.fillText(item.text,x+14+iconSlot,cy);});
+      rightRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(x+panelW-14-iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="right";c.fillText(item.text,x+panelW-14-iconSlot,cy);});
+      c.textAlign="left";c.textBaseline="top";c.font='17px "Gulim", sans-serif';
+      var footerY=topY+158;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});
+    }
+    c.textBaseline="top";
+    if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim", sans-serif';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
+    canvas._drawingLayout={ty:ty,rowHeights:rowHeights,panelGap:panelGap,headerH:ty};return canvas;
+  }
+  async function buildDrawingPages() {
+    // 창호 개수와 무관하게 항상 한 페이지에 전부 들어가야 하므로, 페이지를
+    // 나누지 않고 전체 내용이 담긴 캔버스를 그대로 한 장으로 반환한다.
+    var full=await buildDrawingCanvas();
+    var ctx=full.getContext("2d");ctx.fillStyle="#333";ctx.textAlign="right";ctx.textBaseline="top";ctx.font='18px "Gulim", sans-serif';ctx.fillText("실측도면",full.width-28,18);
+    return [full];
+  }
+  async function saveDrawingPNG() {
+    var pages=await buildDrawingPages(),base=safeSiteFileBase();
+    var downloadCanvas=pages[0];
+    if(pages.length>1){
+      var gap=24,mergedW=Math.max.apply(null,pages.map(function(p){return p.width;})),mergedH=pages.reduce(function(sum,p){return sum+p.height;},0)+gap*(pages.length-1);
+      downloadCanvas=document.createElement("canvas");downloadCanvas.width=mergedW;downloadCanvas.height=mergedH;
+      var mctx=downloadCanvas.getContext("2d");mctx.fillStyle="#ddd";mctx.fillRect(0,0,mergedW,mergedH);
+      var y=0;pages.forEach(function(p){mctx.drawImage(p,0,y);y+=p.height+gap;});
+    }
+    var downloadBlob=await new Promise(function(resolve){downloadCanvas.toBlob(resolve,"image/png");});
+    if(!downloadBlob)throw new Error("PNG 변환에 실패했습니다");
+    function downloadFile(blob,name){var a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1500);}
+    downloadFile(downloadBlob,base+"_실측도면.png");
+    var sitePlanSaved=false;
+    try{
+      var sitePlanCanvas=await buildSitePlanCanvas();
+      var sitePlanBlob=await new Promise(function(resolve){sitePlanCanvas.toBlob(resolve,"image/png");});
+      if(sitePlanBlob){await new Promise(function(r){setTimeout(r,400);});downloadFile(sitePlanBlob,base+"_현장도면.png");sitePlanSaved=true;}
+    }catch(e){ /* 현장 평면도가 없으면 현장도면 파일은 생략 */ }
+    var driveSaved=false,driveError="",driveCancelled=false;try{await ensureDriveBridge(true);var saved=await saveToDriveWithDecision("saveDrawing",{siteName:state.site||generatedSiteName(),pages:pages.map(function(canvas){return canvas.toDataURL("image/png");})});driveCancelled=!!(saved&&saved.cancelled);driveSaved=!driveCancelled;}catch(e){driveError=e.message||String(e);}return {count:pages.length,driveSaved:driveSaved,driveError:driveError,driveCancelled:driveCancelled,sitePlanSaved:sitePlanSaved};
+  }
+
+  function buildJSON() {
+    syncGlobalInputs();
+    return {
+      schemaVersion: "0.3-draft",
+      project: { name: state.site || "(현장명 없음)", surveyDate: state.surveyDate || todayLocal(), unit: "mm", siteSetup: normalizedSetup(state.siteSetup), overallNotes: state.overallNotes || "", lifting: normalizedLifting(state.lifting) },
+      floorplan: { file: state.planName || "", imageData: state.planData || "", scale: state.scale || null, flipH: !!state.flipH, flipV: !!state.flipV, wallEdits: state.wallEdits, workState: { selectedPin: sel, markerCount: state.pins.length } },
+      openings: state.pins.map(function (p, i) {
+        return {
+          no: i + 1,
+          name: p.name || "",
+          frame: requiresFrame(p) ? (p.frame || null) : null,
+          frameMeta: { required: requiresFrame(p), doubleLine: false },
+          notes: p.notes || "",
+          composition: p.composition || "",
+          drawInDrawing: isEntryPin(p) ? !!p.drawInDrawing : undefined,
+          details: normalizedDetails(p.details),
+          parts: p.parts.map(function (t) {
+            if (t.kind === "mullion") { normalizeMullionPart(t); return { kind: "mullion", spec: t.layers[0].spec, count: t.layers[0].count, stackDirection:t.stackDirection, layers: t.layers.map(function(v){return {spec:v.spec,count:v.count};}) }; }
+            if (t.kind === "entry") return { kind: "entry", width: 900, height: 2100, drawInDrawing: !!t.drawInDrawing };
+            if (t.kind === "turn") return { kind: "turn", width: num(t.w), height: num(t.h),
+                                             swing: t.swing, handle: t.handle, openDegrees: 15 };
+            var addon=normalizeAddon(t.addon,p.frame);
+            return { kind: "sash", sashType: t.sashType || "normal", width: num(t.w), height: num(t.h),
+                     panels: panelsOut(t.panels), primary: t.primary,
+                     smallWindow:(t.sashType||"")==="unbalanced"?{width:num(t.smallW),side:t.smallSide==="right"?"right":"left"}:null,
+                     addon:addon?{width:num(addon.w),height:num(addon.h),sashType:addon.sashType,frame:addon.frame}:null };
+          }),
+          plan: { x: Math.round(p.x * 10000) / 10000, y: Math.round(p.y * 10000) / 10000,
+                  angle: p.angle || 0, placementMode: p.placementMode || "free", outsideSign:outsideSignForPin(p) }
+        };
+      })
+    };
+  }
+
+  $("savedrawing").addEventListener("click", async function () {
+    var button=this; button.disabled=true;
+    try { var result=await saveDrawingPNG(); toast("실측도면"+(result.sitePlanSaved?"·현장도면 2개 파일":"")+" 저장 완료 — "+(result.driveSaved?"Google Drive 실측도면 폴더와 기기 다운로드 폴더를 확인하세요":(result.driveCancelled?"Drive 저장은 취소했고 기기 다운로드는 완료했습니다":(result.driveError?"Google Drive 저장에 실패하였습니다. 기기 파일 다운로드로 저장합니다. "+result.driveError:"기기 다운로드 폴더를 확인하세요")))); }
+    catch(e) { toast(e.message || "실측도면 출력본을 저장하지 못했습니다"); }
+    finally { button.disabled=false; }
+  });
+  $("previewdrawing").addEventListener("click", async function(){
+    var button=this;button.disabled=true;
+    try{
+      var pages=await buildDrawingPages();
+      previewPages=pages.map(function(canvas){return canvas.toDataURL("image/png");});
+      previewHasSitePlan=false;
+      try{var sitePlanCanvas=await buildSitePlanCanvas();previewPages.unshift(sitePlanCanvas.toDataURL("image/png"));previewHasSitePlan=true;}catch(e){ /* 현장 평면도가 없으면 실측도면만 미리보기 */ }
+      previewPageStates=previewPages.map(function(){return {zoom:1,left:0,top:0};});previewPageIndex=0;showPreviewPage(0,false);showDialogSafe($("drawingpreview"));
+    }
+    catch(e){toast(e.message||"실측도면 미리보기를 만들지 못했습니다");}
+    finally{button.disabled=false;}
+  });
+  $("previewzoomout").addEventListener("click",function(){previewZoom=Math.max(.5,Math.round((previewZoom-.25)*100)/100);applyPreviewZoom();});
+  $("previewzoomreset").addEventListener("click",function(){previewZoom=1;applyPreviewZoom();var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap");viewport.scrollLeft=0;viewport.scrollTop=0;});
+  $("previewzoomin").addEventListener("click",function(){previewZoom=Math.min(4,Math.round((previewZoom+.25)*100)/100);applyPreviewZoom();});
+  $("previewprev").addEventListener("click",function(){showPreviewPage(previewPageIndex-1,true);});
+  $("previewnext").addEventListener("click",function(){showPreviewPage(previewPageIndex+1,true);});
+  (function(){var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap"),startX=null,startY=null;viewport.addEventListener("pointerdown",function(e){if(previewZoom>1)return;startX=e.clientX;startY=e.clientY;});viewport.addEventListener("pointerup",function(e){if(startX===null||previewZoom>1)return;var dx=e.clientX-startX,dy=e.clientY-startY;startX=startY=null;if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy))showPreviewPage(previewPageIndex+(dx<0?1:-1),true);});viewport.addEventListener("pointercancel",function(){startX=startY=null;});})();
+  $("closepreview").addEventListener("click",function(){$("drawingpreview").close();previewPages=[];previewPageStates=[];previewHasSitePlan=false;});
+  $("printdrawing").addEventListener("click", function () {
+    var w = window.open("", "_blank");
+    if (!w) { toast("인쇄 창이 차단되었습니다"); return; }
+    w.document.open(); w.document.write(buildDrawingHTML(true)); w.document.close();
+  });
+
+  // 로컬 개발 화면은 관리자 테스트로 열고, 웹 배포 시에는 홈페이지 로그인 코드가
+  // window.YK_CURRENT_USER_ROLE = "admin"을 주입한 경우에만 버튼을 표시한다.
+  var IS_ADMIN = location.protocol === "file:" || window.YK_CURRENT_USER_ROLE === "admin" ||
+    new URLSearchParams(location.search).get("testAdmin") === "1";
+  $("generate3d").hidden = !IS_ADMIN;
+  function showDialogSafe(dialog) {
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+  function waitFor3DEngine(timeoutMs) {
+    if (window.__THREE && window.__OrbitControls) return Promise.resolve(true);
+    return new Promise(function (resolve) {
+      var finished = false;
+      function done(ok) {
+        if (finished) return; finished = true;
+        window.removeEventListener("mini3d-ready", ready);
+        clearTimeout(timer); resolve(ok);
+      }
+      function ready() { done(!!(window.__THREE && window.__OrbitControls)); }
+      var timer = setTimeout(function () { done(false); }, timeoutMs);
+      window.addEventListener("mini3d-ready", ready);
+    });
+  }
+  $("generate3d").addEventListener("click", async function () {
+    if (!IS_ADMIN) { toast("관리자만 3D를 생성할 수 있습니다"); return; }
+    if (!state.pins.length || !state.pins.some(isDone)) { toast("실측값을 먼저 입력해주세요"); return; }
+    if (activeProject3D) activeProject3D.cancel();
+    if (!$("adminresult").open) showDialogSafe($("adminresult"));
+    $("project3d").innerHTML = '<div class="mini3d-empty">3D 엔진을 불러오는 중입니다…</div>';
+    var button = this, oldText = button.textContent;
+    button.disabled = true; button.textContent = "3D 준비 중…";
+    try {
+      var ready = await waitFor3DEngine(15000);
+      if (!ready) throw new Error("3D 엔진을 불러오지 못했습니다. 인터넷 연결을 확인해주세요.");
+      activeProject3D = mountProject3D($("project3d"));
+      toast("3D를 생성했습니다");
+    } catch (err) {
+      $("project3d").innerHTML = '<div class="mini3d-empty">' + String(err.message || err) + '</div>';
+      toast("3D 생성에 실패했습니다");
+    } finally {
+      button.disabled = false; button.textContent = oldText;
+    }
+  });
+  $("close3d").addEventListener("click", function () {
+    if (activeProject3D) { activeProject3D.cancel(); activeProject3D = null; }
+    $("adminresult").close();
+  });
+
+  function openSurveyDB() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open("yk-window-surveys", 1);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains("surveys")) db.createObjectStore("surveys", { keyPath: "id" });
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function surveyId() { return (state.surveyDate || todayLocal()) + "|" + (state.site || "").trim(); }
+  async function saveLocalSurvey(){var db=await openSurveyDB(),tx=db.transaction("surveys","readwrite");tx.objectStore("surveys").put({id:surveyId(),siteKey:state.site,site:state.site,surveyDate:state.surveyDate,updatedAt:new Date().toISOString(),payload:JSON.stringify(state)});await new Promise(function(resolve,reject){tx.oncomplete=resolve;tx.onerror=function(){reject(tx.error);};});db.close();persist();}
+  $("save").addEventListener("click", async function () {
+    state.site = $("site").value.trim(); state.surveyDate = $("surveydate").value || todayLocal();
+    if (!state.site) { toast("기초입력에서 현장주소를 적용해주세요"); $("setupaddress").focus(); return; }
+    if (!window.confirm("Google Drive에 이 현장을 저장하시겠습니까?")) {
+      if (driveBridgeWindow && !driveBridgeWindow.closed) driveBridgeWindow.close();
+      return;
+    }
+    try {
+      syncGlobalInputs();persist();
+      try{await ensureDriveBridge(true);var planCanvas=await buildSitePlanCanvas(),driveSaved=await saveToDriveWithDecision("saveSite",{siteName:state.site,siteData:state,planPngDataUrl:planCanvas.toDataURL("image/png")});if(driveSaved&&driveSaved.cancelled){toast("Google Drive 저장을 취소했습니다");return;}if(driveBridgeWindow&&!driveBridgeWindow.closed)driveBridgeWindow.close();toast("현장 저장 완료 — Google Drive의 "+state.site+"/현장평면도 폴더에 저장했습니다");return;}catch(driveError){try{await saveLocalSurvey();toast("Google Drive 저장에 실패해 기기에 저장했습니다. "+(driveError.message||driveError));}catch(localError){toast("저장하지 못했습니다: "+(localError.message||localError));}return;}
+    } catch (e) { toast("저장하지 못했습니다: " + e.message); }
+  });
+
+  function applySavedState(saved) {
+    state = saved;
+    state.site = state.site || ""; state.surveyDate = state.surveyDate || todayLocal();
+    state.siteSetup = normalizedSetup(state.siteSetup || (state.project && state.project.siteSetup));
+    state.overallNotes = typeof state.overallNotes === "string" ? state.overallNotes : ((state.project && state.project.overallNotes) || "");
+    state.lifting = normalizedLifting(state.lifting || (state.project && state.project.lifting));
+    state.pins = Array.isArray(state.pins) ? state.pins : [];
+    state.wallEdits = state.wallEdits || { add: [], remove: [] };
+    if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
+    if (!Array.isArray(state.wallEdits.remove)) state.wallEdits.remove = [];
+    state.pins.forEach(function (p) {
+      if (typeof p.frame !== "string") p.frame = "";
+      if (typeof p.notes !== "string") p.notes = "";
+      if (typeof p.composition !== "string") p.composition = "";
+      p.details = normalizedDetails(p.details);
+      if (!Array.isArray(p.parts)) p.parts = [];
+      if (Array.isArray(p.parts)) p.parts.forEach(function (t) {
+        if (t.kind === "mullion") normalizeMullionPart(t);
+        if (t.kind === "turn") { if(t.swing!=="push"&&t.swing!=="pull")t.swing="push"; if(t.handle!=="left"&&t.handle!=="right")t.handle="right"; }
+        if (t.kind === "entry") { t.w = "900"; t.h = "2100"; if(typeof t.drawInDrawing!=="boolean")t.drawInDrawing=false; }
+        if (t.kind === "sash") { if(!t.sashType)t.sashType=t.panels==="고정"?"fix":"normal";t.smallW=t.smallW===undefined?"0":String(t.smallW);if(t.sashType==="unbalanced"){t.primary="small";if(t.smallSide!=="left"&&t.smallSide!=="right")t.smallSide="left";}delete t.smallH;t.addon=normalizeAddon(t.addon,p.frame); }
+      });
+      if (/현관/.test(p.name || "") && Array.isArray(p.parts)) p.parts = p.parts.map(function (t) {
+        return t.kind === "turn" ? newEntry() : t;
+      });
+      if(isEntryPin(p)&&typeof p.drawInDrawing!=="boolean")p.drawInDrawing=!!(p.parts.filter(function(t){return t.kind==="entry";})[0]||{}).drawInDrawing;
+    });
+    $("site").value = state.site; $("surveydate").value = state.surveyDate; fillGlobalInputs();
+    fillSetup(!!state.site);
+    sel = null; updateScaleHint();
+    if (state.planData) showPlan(state.planData, state.planName); else render();
+    persist();
+  }
+  async function showSavedSurveys() {
+    var host = $("savedlist"); host.innerHTML = '<div class="empty">불러오는 중…</div>';
+    $("savedialog").showModal();
+    try {
+      var db = await openSurveyDB(), tx = db.transaction("surveys", "readonly");
+      var req = tx.objectStore("surveys").getAll();
+      var rows = await new Promise(function (resolve, reject) { req.onsuccess = function () { resolve(req.result); }; req.onerror = function () { reject(req.error); }; });
+      db.close(); rows.sort(function (a, b) { return b.id.localeCompare(a.id); }); host.innerHTML = '<div class="cap2">이 브라우저</div>';
+      if (!rows.length) host.innerHTML += '<div class="empty">이 브라우저에 저장된 현장이 없습니다.</div>';
+      rows.forEach(function (row) {
+        var div = document.createElement("div"); div.className = "saved-row";
+        var date = document.createElement("span"); date.className = "saved-date"; date.textContent = row.surveyDate;
+        var site = document.createElement("b"); site.textContent = row.site;
+        var open = document.createElement("button"); open.type = "button"; open.textContent = "열기";
+        open.addEventListener("click", function () {
+          try { applySavedState(JSON.parse(row.payload)); $("savedialog").close(); toast(row.site + " 현장을 불러왔습니다"); }
+          catch (e) { toast("저장된 내용을 읽지 못했습니다"); }
+        });
+        div.appendChild(site); div.appendChild(date); div.appendChild(open); host.appendChild(div);
+      });
+      var driveTitle=document.createElement("div");driveTitle.className="cap2";driveTitle.style.marginTop="14px";driveTitle.textContent="Google Drive";host.appendChild(driveTitle);try{await ensureDriveBridge(true);var listed=await driveCall("listSites",{}),driveRows=Array.isArray(listed)?listed:(listed&&Array.isArray(listed.sites)?listed.sites:[]);if(!driveRows.length){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive에 저장된 현장이 없습니다.</div>');}driveRows.forEach(function(row){var rowName=row.siteName||row.name||"현장",div=document.createElement("div");div.className="saved-row";var site=document.createElement("b");site.textContent=rowName;var date=document.createElement("span");date.className="saved-date";date.textContent=row.modifiedTime||row.updatedAt?String(row.modifiedTime||row.updatedAt).slice(0,10):"Drive";var open=document.createElement("button");open.type="button";open.textContent="열기";open.addEventListener("click",async function(){open.disabled=true;try{var loaded=await driveCall("loadSite",{siteId:row.siteId||row.id,siteName:rowName}),saved=loaded&&loaded.siteData!==undefined?loaded.siteData:(loaded&&loaded.data!==undefined?loaded.data:loaded);if(typeof saved==="string")saved=JSON.parse(saved);if(!saved||typeof saved!=="object")throw new Error("현장 데이터 형식이 올바르지 않습니다");applySavedState(saved);$("savedialog").close();toast(rowName+" 현장을 Google Drive에서 불러왔습니다");}catch(e){toast("Drive 현장을 읽지 못했습니다: "+e.message);}finally{open.disabled=false;}});div.appendChild(site);div.appendChild(date);div.appendChild(open);host.appendChild(div);});}catch(e){host.insertAdjacentHTML("beforeend",'<div class="empty">Drive 연결 실패 — ys.jin@ykenc.com 로그인 상태를 확인하세요.</div>');}
+    } catch (e) { host.innerHTML = '<div class="empty">저장 목록을 불러오지 못했습니다.</div>'; }
+  }
+  $("load").addEventListener("click", showSavedSurveys);
+  $("closesaved").addEventListener("click", function () { $("savedialog").close(); });
+  $("openlegacy").addEventListener("click", function () { $("loadfile").click(); });
+  $("loadfile").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var j = JSON.parse(r.result);
+        var list = j && (j.openings || j.markers);
+        if (!Array.isArray(list)) throw new Error("형식이 다릅니다");
+        state.site = (j.project && j.project.name) || "";
+        state.surveyDate = (j.project && j.project.surveyDate) || todayLocal();
+        state.siteSetup = normalizedSetup(j.project && j.project.siteSetup);
+        state.overallNotes = (j.project && typeof j.project.overallNotes === "string") ? j.project.overallNotes : "";
+        state.lifting = normalizedLifting(j.project && j.project.lifting);
+        state.planName = (j.floorplan && j.floorplan.file) || "";
+        state.planData = (j.floorplan && j.floorplan.imageData) || "";
+        state.flipH = !!(j.floorplan && j.floorplan.flipH);
+        state.flipV = !!(j.floorplan && j.floorplan.flipV);
+        state.scale = (j.floorplan && j.floorplan.scale &&
+                      (j.floorplan.scale.mmPerPixel || j.floorplan.scale.mmPerFracX))
+          ? j.floorplan.scale : null;
+        state.wallEdits = (j.floorplan && j.floorplan.wallEdits) || { add: [], remove: [] };
+        if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
+        if (!Array.isArray(state.wallEdits.remove)) state.wallEdits.remove = [];
+        state.pins = list.map(function (m) {
+          var parts;
+          if (Array.isArray(m.parts) && m.parts.length) {
+            parts = m.parts.map(function (t) {
+              if (t.kind === "mullion") return normalizeMullionPart({ kind: "mullion", spec: t.spec, count: t.count, stackDirection:t.stackDirection, layers: t.layers, stack: t.stack });
+              if (t.kind === "entry") { var entry=newEntry(); entry.drawInDrawing=!!t.drawInDrawing; return entry; }
+              if (t.kind === "turn") return { kind: "turn",
+                       w: t.width === null || t.width === undefined ? "" : String(t.width),
+                       h: t.height === null || t.height === undefined ? "" : String(t.height),
+                       swing: "push", handle: "right" };
+              return { kind: "sash", sashType: t.sashType || (t.panels === "fix" ? "fix" : "normal"),
+                       w: t.width === null || t.width === undefined ? "" : String(t.width),
+                       h: t.height === null || t.height === undefined ? "" : String(t.height),
+                       panels: t.panels === "fix" ? "고정" : (t.panels ? t.panels + "짝" : "2짝"),
+                       primary: t.primary || "right",
+                       smallW:t.smallWindow&&t.smallWindow.width!==null&&t.smallWindow.width!==undefined?String(t.smallWindow.width):"0",
+                       smallSide:t.smallWindow&&t.smallWindow.side==="right"?"right":"left",
+                       addon:t.addon?normalizeAddon({w:t.addon.width,h:t.addon.height,sashType:t.addon.sashType,frame:t.addon.frame},m.frame||""):null };
+            });
+          } else if (m.width !== undefined || m.height !== undefined) {
+            parts = [{ kind: "sash", sashType:"normal",
+                       w: m.width === null || m.width === undefined ? "" : String(m.width),
+                       h: m.height === null || m.height === undefined ? "" : String(m.height),
+                       panels: "2짝", primary: "right", smallW:"0", addon:null }];
+          } else {
+            parts = [];
+          }
+          if (/현관/.test(m.name || "")) parts = parts.map(function (t) {
+            return t.kind === "turn" ? newEntry() : t;
+          });
+          var importedEntry=parts.filter(function(t){return t.kind==="entry";})[0];
+          return { name: m.name || "", frame: m.frame || "", notes: m.notes || "", composition: m.composition || "", drawInDrawing: typeof m.drawInDrawing==="boolean"?m.drawInDrawing:!!(importedEntry&&importedEntry.drawInDrawing), details: normalizedDetails(m.details), parts: parts,
+                   x: (m.plan && m.plan.x) || 0.5, y: (m.plan && m.plan.y) || 0.5,
+                   angle: (m.plan && m.plan.angle) || 0, outsideSign:m.plan&&typeof m.plan.outsideSign==="number"?m.plan.outsideSign:undefined,
+                   placementMode: (m.plan && m.plan.placementMode) || "free", wallLock: null };
+        });
+        $("site").value = state.site;
+        $("surveydate").value = state.surveyDate;
+        fillGlobalInputs();
+        fillSetup(!!state.site);
+        sel = null;
+        updateScaleHint();
+        if(state.planData) showPlan(state.planData,state.planName); else render();
+        toast(state.planData ? "평면도와 위치·축척 상태까지 불러왔습니다" : "불러왔습니다 — 이 파일에는 평면도 원본이 없습니다");
+      } catch (err) {
+        toast("읽을 수 없는 파일입니다: " + err.message);
+      }
+    };
+    r.readAsText(f);
+  });
+
+  /* ---------------- 시작 ---------------- */
+  restore();
+  state.siteSetup = normalizedSetup(state.siteSetup);
+  $("site").value = state.site;
+  $("surveydate").value = state.surveyDate || todayLocal();
+  fillGlobalInputs();
+  fillSetup(!!state.site);
+  updateScaleHint();
+  if (state.planData) showPlan(state.planData, state.planName);
+  render();
+  window.__DBG = {
+    get state(){return state;},
+    newPin: newPin,
+    newSash: newSash,
+    newMullion: newMullion,
+    buildDrawingCanvas: buildDrawingCanvas
+  };
+  (async function () {
+    var pin1 = newPin();
+    pin1.name = "1번 현관입구(근사, 통바 추가)"; pin1.frame = "B/F140";
+    var m1 = newMullion(); m1.layers = [{ spec: "100×100", count: 1 }];
+    var s1a = newSash(); s1a.w = "1000"; s1a.h = "2070";
+    var s1b = newSash(); s1b.w = "1000"; s1b.h = "2070";
+    pin1.parts = [s1a, m1, s1b];
+
+    var pin9 = newPin();
+    pin9.name = "9번 입구방확장(근사, 통바 추가)"; pin9.frame = "B/F250";
+    var m9 = newMullion(); m9.layers = [{ spec: "100×100", count: 1 }];
+    var s9 = newSash(); s9.sashType = "unbalanced"; s9.w = "2070"; s9.h = "2380"; s9.smallW = "1000"; s9.smallSide = "right";
+    pin9.parts = [m9, s9];
+
+    state.pins = [pin1, pin9];
+    var canvas = await buildDrawingCanvas();
+    document.body.innerHTML =
+      '<div style="font:16px sans-serif;padding:12px;background:#fffbe6;border-bottom:2px solid #d4b106">' +
+      '옵션2 테스트 — 평면도 본체의 통바 폭을 창 폭 축척이 아니라 깊이 축척으로 그려 정사각형/실비율에 가깝게 만든 버전입니다. ' +
+      '1번(현관입구)·9번(입구방확장) 창 실측값을 근사해 통바 1개(100×100)를 추가로 넣고 렌더링했습니다.</div>';
+    document.body.appendChild(canvas);
+    canvas.style.maxWidth = "100%";
+    canvas.style.border = "1px solid #ccc";
+    canvas.style.display = "block";
+    canvas.style.margin = "12px auto";
+  })();
+})();
+</script>
+</body>
+</html>
