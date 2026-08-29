@@ -1066,7 +1066,7 @@
   $("plan").addEventListener("dragstart",function(e){e.preventDefault();});
   installPanScroller(drop,function(){return planZoom>1;});
   installPlanPinch(drop);
-  installPanScroller($("drawingpreview").querySelector(".preview-zoom-wrap"),function(){return previewZoom>1;});
+  installPanScroller($("drawingpreview").querySelector(".preview-zoom-wrap"),function(){return true;});
   ["dragenter", "dragover"].forEach(function (ev) {
     drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
   });
