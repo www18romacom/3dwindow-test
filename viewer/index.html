@@ -4,41 +4,129 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3D 모델 보기</title>
-<script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 <style>
-  html, body { margin: 0; height: 100%; background: #eef1f3; font-family: "Gulim", sans-serif; }
-  #wrap { display: flex; flex-direction: column; height: 100%; }
-  model-viewer { flex: 1; width: 100%; background: #eef1f3; --poster-color: transparent; }
-  #msg { padding: 24px; text-align: center; color: #555; font-size: 15px; }
+  html, body { margin: 0; height: 100%; background: #eef1f3; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; overflow: hidden; }
+  #view3d { position: fixed; inset: 0; display: block; }
+  .chip { position: fixed; z-index: 10; background: rgba(255,255,255,.85); border: 1px solid rgba(43,43,48,.08);
+          border-radius: 10px; padding: 8px 12px; font-size: 13px; color: #2b2b30; backdrop-filter: blur(4px); }
+  #lt { top: 12px; right: 12px; cursor: pointer; user-select: none; display: none; }
+  #msg { top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; color: #555; max-width: 80%; }
+  input[type="checkbox"] { accent-color: #e04a2a; }
 </style>
 </head>
 <body>
-<div id="wrap">
-  <div id="msg">불러오는 중…</div>
-</div>
-<script>
-(function () {
-  var API_KEY = "AIzaSyA_Jf8v_iCUNHMNQwHHJWnia7XpsGmg8kg";
-  var params = new URLSearchParams(location.search);
-  var id = params.get("id");
-  var wrap = document.getElementById("wrap");
-  var msg = document.getElementById("msg");
-  if (!id) { msg.textContent = "잘못된 링크입니다 (파일 정보가 없습니다)."; return; }
-  var url = "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(id) + "?alt=media&key=" + API_KEY;
-  var mv = document.createElement("model-viewer");
-  mv.setAttribute("src", url);
-  mv.setAttribute("camera-controls", "");
-  mv.setAttribute("auto-rotate", "");
-  mv.setAttribute("shadow-intensity", "1");
-  mv.setAttribute("exposure", "1");
-  mv.addEventListener("error", function () {
-    msg.textContent = "모델을 불러오지 못했습니다 — 링크가 만료됐거나 삭제됐을 수 있습니다.";
-    msg.style.display = "block";
-    mv.style.display = "none";
+<div id="msg" class="chip">불러오는 중…</div>
+<label id="lt" class="chip"><input type="checkbox" id="lbltoggle" checked> 치수 라벨</label>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+var API_KEY = "AIzaSyA_Jf8v_iCUNHMNQwHHJWnia7XpsGmg8kg";
+var params = new URLSearchParams(location.search);
+var id = params.get("id");
+var msg = document.getElementById("msg");
+var lt = document.getElementById("lt");
+
+function utf8FromBase64(b64) { return decodeURIComponent(escape(atob(b64))); }
+
+var labels = [];
+var lbParam = params.get("lb");
+if (lbParam) {
+  try { labels = JSON.parse(utf8FromBase64(lbParam)); } catch (e) { labels = []; }
+}
+
+function makeLabelSprite(text) {
+  var c = document.createElement("canvas"), ctx = c.getContext("2d");
+  ctx.font = "700 34px system-ui, sans-serif";
+  var textW = Math.ceil(ctx.measureText(text).width), padX = 22;
+  c.width = Math.max(180, textW + padX * 2); c.height = 82;
+  ctx.font = "700 34px system-ui, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = "#4f5961"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+  ctx.fillStyle = "#20262b"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(text, c.width / 2, c.height / 2);
+  var mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true });
+  var s = new THREE.Sprite(mat); s.scale.set(c.width * .0051, .42, 1); s.renderOrder = 10; return s;
+}
+
+function showError() {
+  msg.textContent = "모델을 불러오지 못했습니다 — 링크가 만료됐거나 삭제됐을 수 있습니다.";
+  msg.style.display = "block";
+}
+
+if (!id) {
+  msg.textContent = "잘못된 링크입니다 (파일 정보가 없습니다).";
+} else {
+  init();
+}
+
+async function init() {
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.domElement.id = "view3d";
+  document.body.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xeef1f3);
+  var camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, .01, 200);
+  var controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x7a7a72, 1.25));
+  var light = new THREE.DirectionalLight(0xffffff, 1.4);
+  light.position.set(-4, 9, 6); scene.add(light);
+
+  var labelGroup = new THREE.Group();
+  scene.add(labelGroup);
+  labels.forEach(function (item) {
+    var sprite = makeLabelSprite(item[0]);
+    sprite.position.set(item[1][0], item[1][1], item[1][2]);
+    labelGroup.add(sprite);
   });
-  mv.addEventListener("load", function () { msg.style.display = "none"; });
-  wrap.appendChild(mv);
-})();
+  if (labels.length) {
+    lt.style.display = "block";
+    document.getElementById("lbltoggle").addEventListener("change", function (e) {
+      labelGroup.visible = e.target.checked;
+    });
+  }
+
+  window.addEventListener("resize", function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  renderer.setAnimationLoop(function () { controls.update(); renderer.render(scene, camera); });
+
+  try {
+    var url = "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(id) + "?alt=media&key=" + API_KEY;
+    var res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    var buf = await res.arrayBuffer();
+    var loader = new GLTFLoader();
+    loader.parse(buf, "", function (gltf) {
+      scene.add(gltf.scene);
+      var box = new THREE.Box3().setFromObject(gltf.scene);
+      var center = box.getCenter(new THREE.Vector3());
+      var size = box.getSize(new THREE.Vector3());
+      var span = Math.max(size.x, size.z, 1);
+      controls.target.copy(center);
+      camera.position.set(center.x - span * .75, span * .9, center.z + span * .75);
+      camera.lookAt(center);
+      msg.style.display = "none";
+    }, function () { showError(); });
+  } catch (e) {
+    showError();
+  }
+}
 </script>
 </body>
 </html>

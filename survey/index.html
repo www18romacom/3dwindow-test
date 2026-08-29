@@ -682,13 +682,16 @@
   // 공유한 뒤, 별도 뷰어 페이지 URL을 만든다. 이 폴더는 별도 Apps Script 예약 스크립트가
   // 매일 1회 오래된 파일을 지우도록 관리한다(하루 지나면 실제로 삭제됨).
   var DRIVE_3D_SHARE_FOLDER="3D_임시공유",VIEWER_BASE_URL="https://www18romacom.github.io/3dwindow-test/viewer/";
-  async function driveShare3DModel(glbArrayBuffer,siteName){
+  async function driveShare3DModel(shareData,siteName){
     var shareFolder=await driveFindOrCreateFolder(DRIVE_3D_SHARE_FOLDER,DRIVE_ROOT_FOLDER_ID);
-    var base64=arrayBufferToBase64(glbArrayBuffer);
+    var base64=arrayBufferToBase64(shareData.glb);
     var fileName=(siteName||"모델").replace(/[\\/:*?"<>|]/g,"_")+"_"+Date.now()+".glb";
     var uploaded=await driveUploadFile(fileName,"model/gltf-binary",base64,shareFolder.id,null);
     await driveShareFilePublic(uploaded.id);
-    return VIEWER_BASE_URL+"?id="+uploaded.id;
+    // 치수 라벨은 GLTFExporter가 Sprite를 지원하지 않아 GLB에 담기지 않으므로,
+    // 별도 텍스트 데이터로 URL에 실어 뷰어 쪽에서 다시 라벨 스프라이트를 만든다.
+    var lb=encodeURIComponent(utf8ToBase64(JSON.stringify(shareData.labels||[])));
+    return VIEWER_BASE_URL+"?id="+uploaded.id+"&lb="+lb;
   }
   function dataUrlToBase64(dataUrl){return String(dataUrl).split(",")[1]||"";}
   function dataUrlMime(dataUrl){return (String(dataUrl).match(/^data:([^;]+);/)||[])[1]||"image/png";}
@@ -2575,6 +2578,7 @@
       scene.add(walls);
     }
     var renderPins = state.pins.slice();
+    var labelData = [];
     renderPins.forEach(function (p, pinIndex) {
       var geo = opGeometryBoxes(p); if (!geo.boxes.length || !geo.width) return;
       var group = new THREE.Group();
@@ -2598,9 +2602,12 @@
       scene.add(group);
       var labelName = p.name || ((pinIndex + 1) + "번");
       var frameName = isEntryPin(p) ? "현관문" : (requiresFrame(p) ? (p.frame || "프레임 미선택") : "통바");
-      var label = makeLabelSprite(THREE, labelName + " · " + frameName + " · " + Math.round(geo.width) + "×" + Math.round(geo.height));
-      label.position.set(p.x * planWmm * mm, baseY + geo.height * mm + .95, p.y * planHmm * mm);
+      var labelText = labelName + " · " + frameName + " · " + Math.round(geo.width) + "×" + Math.round(geo.height);
+      var labelPos = [p.x * planWmm * mm, baseY + geo.height * mm + .95, p.y * planHmm * mm];
+      var label = makeLabelSprite(THREE, labelText);
+      label.position.set(labelPos[0], labelPos[1], labelPos[2]);
       scene.add(label);
+      labelData.push([labelText, labelPos]);
     });
     var floor = new THREE.Mesh(new THREE.PlaneGeometry(planWmm * mm, planHmm * mm),
       new THREE.MeshStandardMaterial({ color: 0xd9dde0, roughness: .95, transparent: true, opacity: .55 }));
@@ -2619,10 +2626,10 @@
     loop();
     return {
       cancel: function () { stopped = true; if (raf) cancelAnimationFrame(raf); controls.dispose(); renderer.dispose(); },
-      exportGLB: function () {
+      exportShareData: function () {
         return new Promise(function (resolve, reject) {
           var exporter = new (window.__GLTFExporter)();
-          exporter.parse(scene, function (result) { resolve(result); }, function (err) { reject(err); }, { binary: true });
+          exporter.parse(scene, function (glb) { resolve({ glb: glb, labels: labelData }); }, function (err) { reject(err); }, { binary: true });
         });
       }
     };
@@ -2969,13 +2976,13 @@
     $("adminresult").close();
   });
   $("share3d").addEventListener("click", async function () {
-    if (!activeProject3D || !activeProject3D.exportGLB) { toast("먼저 3D를 생성해주세요"); return; }
+    if (!activeProject3D || !activeProject3D.exportShareData) { toast("먼저 3D를 생성해주세요"); return; }
     var button = this, oldText = button.textContent;
     button.disabled = true; button.textContent = "업로드 중…";
     $("share3dresult").textContent = "";
     try {
-      var glb = await activeProject3D.exportGLB();
-      var url = await driveShare3DModel(glb, state.site || generatedSiteName());
+      var shareData = await activeProject3D.exportShareData();
+      var url = await driveShare3DModel(shareData, state.site || generatedSiteName());
       $("share3dresult").innerHTML = '<span class="share3d-row">공유 링크(오늘 자정 삭제): <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">열기</a><button type="button" class="tiny" id="copy3dlink">복사</button></span>';
       $("copy3dlink").addEventListener("click", function () { copyTextToClipboard(url, this); });
       toast("공유 링크를 만들었습니다");
