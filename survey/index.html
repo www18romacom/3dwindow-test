@@ -684,11 +684,12 @@
     }
     if(!siteFolder)siteFolder=await driveFindOrCreateFolder(targetName,DRIVE_ROOT_FOLDER_ID);
     var dataFolder=await driveFindOrCreateFolder("현장",siteFolder.id);
-    var jsonB64=utf8ToBase64(JSON.stringify(state));
-    var existingJson=await driveFindChild("실측데이터.json",dataFolder.id);
-    await driveUploadFile("실측데이터.json","application/json",jsonB64,dataFolder.id,existingJson?existingJson.id:null);
+    var filePrefix=targetName+"_";
+    var jsonB64=utf8ToBase64(JSON.stringify(state)),jsonName=filePrefix+"실측데이터.json";
+    var existingJson=await driveFindChild(jsonName,dataFolder.id);
+    await driveUploadFile(jsonName,"application/json",jsonB64,dataFolder.id,existingJson?existingJson.id:null);
     if(state.planData){
-      var mime=dataUrlMime(state.planData),ext=mime.indexOf("png")>=0?"png":(mime.indexOf("jpeg")>=0||mime.indexOf("jpg")>=0?"jpg":"png"),fileName="현장평면도."+ext;
+      var mime=dataUrlMime(state.planData),ext=mime.indexOf("png")>=0?"png":(mime.indexOf("jpeg")>=0||mime.indexOf("jpg")>=0?"jpg":"png"),fileName=filePrefix+"현장평면도."+ext;
       var existingImg=await driveFindChild(fileName,dataFolder.id);
       await driveUploadFile(fileName,mime,dataUrlToBase64(state.planData),dataFolder.id,existingImg?existingImg.id:null);
     }
@@ -698,14 +699,14 @@
   // 실측도면 페이지들을 저장한다. 현장 폴더가 아직 없으면 함께 만든다.
   async function driveSaveDrawing(pages){
     var siteName=state.site||generatedSiteName(),siteFolder=await driveFindOrCreateFolder(siteName,DRIVE_ROOT_FOLDER_ID);
-    var drawFolder=await driveFindOrCreateFolder("도면",siteFolder.id);
+    var drawFolder=await driveFindOrCreateFolder("도면",siteFolder.id),filePrefix=siteName+"_";
     try{
-      var sitePlanCanvas=await buildSitePlanCanvas(),sitePlanB64=dataUrlToBase64(sitePlanCanvas.toDataURL("image/png"));
-      var existingSitePlan=await driveFindChild("현장평면도.png",drawFolder.id);
-      await driveUploadFile("현장평면도.png","image/png",sitePlanB64,drawFolder.id,existingSitePlan?existingSitePlan.id:null);
+      var sitePlanCanvas=await buildSitePlanCanvas(),sitePlanB64=dataUrlToBase64(sitePlanCanvas.toDataURL("image/png")),sitePlanName=filePrefix+"현장평면도.png";
+      var existingSitePlan=await driveFindChild(sitePlanName,drawFolder.id);
+      await driveUploadFile(sitePlanName,"image/png",sitePlanB64,drawFolder.id,existingSitePlan?existingSitePlan.id:null);
     }catch(e){ /* 현장 평면도가 없으면 생략 */ }
     for(var pi=0;pi<pages.length;pi++){
-      var pageName=pages.length>1?("실측도면_"+(pi+1)+".png"):"실측도면.png";
+      var pageName=pages.length>1?(filePrefix+"실측도면_"+(pi+1)+".png"):(filePrefix+"실측도면.png");
       var pageB64=dataUrlToBase64(pages[pi].toDataURL("image/png"));
       var existingPage=await driveFindChild(pageName,drawFolder.id);
       await driveUploadFile(pageName,"image/png",pageB64,drawFolder.id,existingPage?existingPage.id:null);
@@ -2943,7 +2944,7 @@
         });
         div.appendChild(site); div.appendChild(date); div.appendChild(open); host.appendChild(div);
       });
-      var driveTitle=document.createElement("div");driveTitle.className="cap2";driveTitle.style.marginTop="14px";driveTitle.textContent="Google Drive";host.appendChild(driveTitle);try{var driveRows=await driveListFolders(DRIVE_ROOT_FOLDER_ID);if(!driveRows.length){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive에 저장된 현장이 없습니다.</div>');}driveRows.forEach(function(row){var rowName=row.name,div=document.createElement("div");div.className="saved-row";var site=document.createElement("b");site.textContent=rowName;var date=document.createElement("span");date.className="saved-date";date.textContent=row.modifiedTime?String(row.modifiedTime).slice(0,10):"Drive";var open=document.createElement("button");open.type="button";open.textContent="열기";open.addEventListener("click",async function(){open.disabled=true;try{var dataFolder=await driveFindFolder("현장",row.id);if(!dataFolder)throw new Error("현장 데이터 폴더를 찾을 수 없습니다");var jsonFile=await driveFindChild("실측데이터.json",dataFolder.id);if(!jsonFile)throw new Error("실측 데이터 파일을 찾을 수 없습니다");var text=await driveDownloadText(jsonFile.id),saved=JSON.parse(text);applySavedState(saved);$("savedialog").close();toast(rowName+" 현장을 Google Drive에서 불러왔습니다");}catch(e){toast("Drive 현장을 읽지 못했습니다: "+e.message);}finally{open.disabled=false;}});div.appendChild(site);div.appendChild(date);div.appendChild(open);host.appendChild(div);});}catch(e){host.insertAdjacentHTML("beforeend",'<div class="empty">Drive 연결 실패: '+e.message+'</div>');}
+      var driveTitle=document.createElement("div");driveTitle.className="cap2";driveTitle.style.marginTop="14px";driveTitle.textContent="Google Drive";host.appendChild(driveTitle);try{var driveRows=await driveListFolders(DRIVE_ROOT_FOLDER_ID);if(!driveRows.length){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive에 저장된 현장이 없습니다.</div>');}driveRows.forEach(function(row){var rowName=row.name,div=document.createElement("div");div.className="saved-row";var site=document.createElement("b");site.textContent=rowName;var date=document.createElement("span");date.className="saved-date";date.textContent=row.modifiedTime?String(row.modifiedTime).slice(0,10):"Drive";var open=document.createElement("button");open.type="button";open.textContent="열기";open.addEventListener("click",async function(){open.disabled=true;try{var dataFolder=await driveFindFolder("현장",row.id);if(!dataFolder)throw new Error("현장 데이터 폴더를 찾을 수 없습니다");var jsonFile=await driveFindChild(rowName+"_실측데이터.json",dataFolder.id);if(!jsonFile)throw new Error("실측 데이터 파일을 찾을 수 없습니다");var text=await driveDownloadText(jsonFile.id),saved=JSON.parse(text);applySavedState(saved);$("savedialog").close();toast(rowName+" 현장을 Google Drive에서 불러왔습니다");}catch(e){toast("Drive 현장을 읽지 못했습니다: "+e.message);}finally{open.disabled=false;}});div.appendChild(site);div.appendChild(date);div.appendChild(open);host.appendChild(div);});}catch(e){host.insertAdjacentHTML("beforeend",'<div class="empty">Drive 연결 실패: '+e.message+'</div>');}
     } catch (e) { host.innerHTML = '<div class="empty">저장 목록을 불러오지 못했습니다.</div>'; }
   }
   $("load").addEventListener("click", showSavedSurveys);
