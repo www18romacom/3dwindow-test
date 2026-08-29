@@ -79,6 +79,7 @@
       border-width: 1.5px; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
     .marker.sel { transform: scale(1.15); box-shadow: 0 0 0 2px var(--accent); }
     .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff; }
+    .marker.outer-marker { background: #2f6fbf; border-color: #1f4f8f; color: #fff; }
     .card { border-radius: 9px; }
     .body { padding: 10px; }
     input[type="text"], input[type="number"], select, textarea, button { min-height: 44px; }
@@ -180,6 +181,7 @@
   .marker.done { background: var(--accent-solid); color: var(--accent-ink); }
   .marker.sel { transform: scale(1.25); z-index: 5; box-shadow: 0 0 0 4px var(--accent); }
   .marker.entry-marker { background: #287a68; border-color: #287a68; color: #fff; }
+  .marker.outer-marker { background: #2f6fbf; border-color: #1f4f8f; color: #fff; }
   .zoom-tools { display:flex; gap:6px; align-items:center; }
   .page-tools { display:flex; gap:6px; align-items:center; margin-left:12px; }
   .page-tools button { min-width:38px; font-weight:700; }
@@ -752,7 +754,7 @@
     var points=new Map(),startDistance=0,startZoom=1,startScrollLeft=0,startScrollTop=0,centerX=0,centerY=0;
     function distance(){var a=Array.from(points.values());return a.length<2?0:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);}
     el.addEventListener("pointerdown",function(e){if(e.pointerType!=="touch")return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(points.size===2){var a=Array.from(points.values()),r=el.getBoundingClientRect();pinching=true;panMoved=true;startDistance=distance();startZoom=planZoom;startScrollLeft=el.scrollLeft;startScrollTop=el.scrollTop;centerX=(a[0].x+a[1].x)/2-r.left;centerY=(a[0].y+a[1].y)/2-r.top;}});
-    el.addEventListener("pointermove",function(e){if(!points.has(e.pointerId))return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(!pinching||points.size<2)return;e.preventDefault();var next=Math.max(.5,Math.min(3,startZoom*distance()/Math.max(1,startDistance))),ratio=next/startZoom;planZoom=Math.round(next*100)/100;applyPlanZoom();el.scrollLeft=(startScrollLeft+centerX)*ratio-centerX;el.scrollTop=(startScrollTop+centerY)*ratio-centerY;});
+    el.addEventListener("pointermove",function(e){if(!points.has(e.pointerId))return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(!pinching||points.size<2)return;e.preventDefault();var next=Math.max(1,Math.min(3,startZoom*distance()/Math.max(1,startDistance))),ratio=next/startZoom;planZoom=Math.round(next*100)/100;applyPlanZoom();el.scrollLeft=(startScrollLeft+centerX)*ratio-centerX;el.scrollTop=(startScrollTop+centerY)*ratio-centerY;});
     function end(e){points.delete(e.pointerId);if(points.size<2&&pinching){pinching=false;setTimeout(function(){panMoved=false;},0);}}
     el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
   }
@@ -918,6 +920,16 @@
   }
   function isEntryPin(p) {
     return !!(p && p.parts && p.parts.some(function (t) { return t.kind === "entry"; }));
+  }
+  function isTurnPin(p) {
+    return !!(p && p.parts && p.parts.some(function (t) { return t.kind === "turn" || (t.kind === "sash" && t.sashType === "turn"); }));
+  }
+  // 마커 색: 현관/터닝도어는 초록(자동 판별), 외창은 파랑(사용자가 직접 선택), 그 외엔
+  // 기존 노랑 그대로.
+  function markerColor(p) {
+    if (isEntryPin(p) || isTurnPin(p)) return { fill: "#287a68", stroke: "#287a68", text: "#fff", cls: "entry-marker" };
+    if (p && p.outer) return { fill: "#2f6fbf", stroke: "#1f4f8f", text: "#fff", cls: "outer-marker" };
+    return { fill: "#ffd66b", stroke: "#6d571d", text: "#111", cls: "" };
   }
   function requiresFrame(p) {
     return !!(p && p.parts && p.parts.some(function(t){ return t.kind === "sash" || t.kind === "turn"; }));
@@ -1207,7 +1219,7 @@
     if (!state.planData) { toast("현장 평면도를 먼저 올려주세요"); return; }
     state.flipH = !state.flipH; applyFlip(); persist(); render();
   });
-  $("planzoomout").addEventListener("click",function(){planZoom=Math.max(.5,Math.round((planZoom-.25)*100)/100);applyPlanZoom();});
+  $("planzoomout").addEventListener("click",function(){planZoom=Math.max(1,Math.round((planZoom-.25)*100)/100);applyPlanZoom();});
   $("planzoomreset").addEventListener("click",function(){planZoom=1;applyPlanZoom();drop.scrollLeft=0;drop.scrollTop=0;});
   $("planzoomin").addEventListener("click",function(){planZoom=Math.min(3,Math.round((planZoom+.25)*100)/100);applyPlanZoom();});
 
@@ -1559,7 +1571,7 @@
       m.style.top = (sy * 100) + "%";
       var pinLabel = visiblePinLabel(p, i);
       m.textContent = pinLabel;
-      if (isEntryPin(p)) m.classList.add("entry-marker");
+      var mColor = markerColor(p); if (mColor.cls) m.classList.add(mColor.cls);
       var markerSize = markerSizeForPin(p);
       if (markerSize) {
         m.style.width = markerSize + "px"; m.style.height = markerSize + "px";
@@ -1730,6 +1742,12 @@
       lockRow.appendChild(lockLabel2); lockRow.appendChild(lockBtn);
       body.appendChild(lockRow);
     }
+
+    // 내창/외창 — 자동 판별이 안 되니 직접 선택. 터닝도어/현관문은 이 선택과 무관하게
+    // 항상 초록 번호로 표시되므로 따로 고를 필요 없음.
+    body.appendChild(labeled("내/외창", sel1([["false", "내창"], ["true", "외창"]], String(!!p.outer), function (v) {
+      p.outer = v === "true"; persist(); render();
+    })));
 
     // 아직 구성이 없으면(새로 추가된 번호) 창/통바 중 무엇으로 시작할지 먼저 고른다
     // — 통바를 나중에 앞으로 옮길 필요 없이, 원하는 순서 그대로 쌓아갈 수 있다.
@@ -2585,9 +2603,9 @@
   function textFileData(text,name){var bytes=new TextEncoder().encode(text),binary="";for(var i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);return {name:name,mimeType:"application/json",data:btoa(binary)};}
   async function buildSitePlanCanvas(){
     var img=await loadPlanImage();if(!img)throw new Error("현장 평면도를 먼저 올려주세요");var maxW=1600,scale=Math.min(1,maxW/img.naturalWidth),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale)),planCanvas=document.createElement("canvas");planCanvas.width=w;planCanvas.height=h;var c=planCanvas.getContext("2d");c.fillStyle="#fff";c.fillRect(0,0,w,h);c.save();c.translate(state.flipH?w:0,state.flipV?h:0);c.scale(state.flipH?-1:1,state.flipV?-1:1);c.drawImage(img,0,0,w,h);c.restore();
-    state.pins.forEach(function(p,i){var x=dispX(p.x)*w,y=dispY(p.y)*h,entry=isEntryPin(p);drawPlanStructureCanvas(c,p,x,y,w,h,img);var radius=Math.max(8,Math.min(16,w/90));c.beginPath();c.arc(x,y,radius,0,Math.PI*2);c.fillStyle=entry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=entry?"#287a68":"#6d571d";c.lineWidth=Math.max(1,radius/8);c.stroke();c.fillStyle=entry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font='bold '+Math.max(8,radius)+ 'px "Gulim"';c.fillText(visiblePinLabel(p,i),x,y);});
+    state.pins.forEach(function(p,i){var x=dispX(p.x)*w,y=dispY(p.y)*h,mc=markerColor(p);drawPlanStructureCanvas(c,p,x,y,w,h,img);var radius=Math.max(8,Math.min(16,w/90));c.beginPath();c.arc(x,y,radius,0,Math.PI*2);c.fillStyle=mc.fill;c.fill();c.strokeStyle=mc.stroke;c.lineWidth=Math.max(1,radius/8);c.stroke();c.fillStyle=mc.text;c.textAlign="center";c.textBaseline="middle";c.font='bold '+Math.max(8,radius)+ 'px "Gulim"';c.fillText(visiblePinLabel(p,i),x,y);});
     // 평면도(왼쪽) + 번호별 위치 목록(오른쪽)을 한 이미지로 합쳐 balance 있게 중앙 배치한다.
-    var legendItems=state.pins.map(function(p,i){return {label:visiblePinLabel(p,i),name:p.name||(isEntryPin(p)?"현관":"위치 미입력"),entry:isEntryPin(p)};});
+    var legendItems=state.pins.map(function(p,i){return {label:visiblePinLabel(p,i),name:p.name||(isEntryPin(p)?"현관":"위치 미입력"),color:markerColor(p)};});
     var measure=document.createElement("canvas").getContext("2d"),legendFont=Math.max(16,Math.round(w/48)),lineH=Math.round(legendFont*1.7);
     measure.font=legendFont+'px "Gulim", sans-serif';
     var badgeR=Math.round(legendFont*.55),badgeSlot=badgeR*2+10;
@@ -2607,8 +2625,8 @@
       var legendX=startX+w+gap,legendY=titleH+pad+(blockH-legendH)/2;
       legendItems.forEach(function(item,idx){
         var cy=legendY+idx*lineH+lineH/2,cx=legendX+badgeR;
-        oc.beginPath();oc.arc(cx,cy,badgeR,0,Math.PI*2);oc.fillStyle=item.entry?"#287a68":"#ffd66b";oc.fill();oc.strokeStyle=item.entry?"#287a68":"#6d571d";oc.lineWidth=1;oc.stroke();
-        oc.fillStyle=item.entry?"#fff":"#111";oc.textAlign="center";oc.textBaseline="middle";oc.font='bold '+Math.round(badgeR)+'px "Gulim"';oc.fillText(item.label,cx,cy+1);
+        oc.beginPath();oc.arc(cx,cy,badgeR,0,Math.PI*2);oc.fillStyle=item.color.fill;oc.fill();oc.strokeStyle=item.color.stroke;oc.lineWidth=1;oc.stroke();
+        oc.fillStyle=item.color.text;oc.textAlign="center";oc.textBaseline="middle";oc.font='bold '+Math.round(badgeR)+'px "Gulim"';oc.fillText(item.label,cx,cy+1);
         oc.fillStyle="#111";oc.textAlign="left";oc.textBaseline="middle";oc.font=legendFont+'px "Gulim", sans-serif';oc.fillText(item.name,legendX+badgeSlot,cy);
       });
     }
@@ -2666,10 +2684,10 @@
     function drawPanel(p,i,x,y,panelH){
       var footerData=panelFooterData(p),headH=48,footH=0,stackExtra=mullionStackExtra(p),topViewH=190+Math.max(0,footerData.details.length-1)*20+stackExtra,drawTop=y+headH,drawH=panelH-headH-topViewH,sizes=drawingPartsGrouped(p).map(function(t){return partSize(t,p);}),layout=[];
       c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.stroke();
-      var titleEntry=isEntryPin(p),badgeR=16,badgeCx=x+14+badgeR,badgeCy=y+headH/2;
-      c.beginPath();c.arc(badgeCx,badgeCy,badgeR,0,Math.PI*2);c.fillStyle=titleEntry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=titleEntry?"#287a68":"#6d571d";c.lineWidth=1.5;c.stroke();
-      c.fillStyle=titleEntry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 15px "Gulim", sans-serif';c.fillText(visiblePinLabel(p,i),badgeCx,badgeCy+1);
-      c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Gulim", sans-serif';c.fillText(p.name||(titleEntry?"현관":"위치 미입력"),badgeCx+badgeR+10,y+headH/2);
+      var titleColor=markerColor(p),badgeR=16,badgeCx=x+14+badgeR,badgeCy=y+headH/2;
+      c.beginPath();c.arc(badgeCx,badgeCy,badgeR,0,Math.PI*2);c.fillStyle=titleColor.fill;c.fill();c.strokeStyle=titleColor.stroke;c.lineWidth=1.5;c.stroke();
+      c.fillStyle=titleColor.text;c.textAlign="center";c.textBaseline="middle";c.font='bold 15px "Gulim", sans-serif';c.fillText(visiblePinLabel(p,i),badgeCx,badgeCy+1);
+      c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Gulim", sans-serif';c.fillText(p.name||(isEntryPin(p)?"현관":"위치 미입력"),badgeCx+badgeR+10,y+headH/2);
       c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim", sans-serif';c.fillText("정면도 (실내에서 봄)",x+14,drawTop+8);
       var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0), sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1,maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}));if(!isFinite(maxH))maxH=1;
       sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
@@ -2795,7 +2813,7 @@
     catch(e){toast(e.message||"실측도면 미리보기를 만들지 못했습니다");}
     finally{button.disabled=false;}
   });
-  $("previewzoomout").addEventListener("click",function(){previewZoom=Math.max(.5,Math.round((previewZoom-.25)*100)/100);applyPreviewZoom();});
+  $("previewzoomout").addEventListener("click",function(){previewZoom=Math.max(1,Math.round((previewZoom-.25)*100)/100);applyPreviewZoom();});
   $("previewzoomreset").addEventListener("click",function(){previewZoom=1;applyPreviewZoom();var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap");viewport.scrollLeft=0;viewport.scrollTop=0;});
   $("previewzoomin").addEventListener("click",function(){previewZoom=Math.min(4,Math.round((previewZoom+.25)*100)/100);applyPreviewZoom();});
   $("previewprev").addEventListener("click",function(){showPreviewPage(previewPageIndex-1,true);});
