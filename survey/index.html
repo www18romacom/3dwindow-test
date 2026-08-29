@@ -684,14 +684,17 @@
   var DRIVE_3D_SHARE_FOLDER="3D_임시공유",VIEWER_BASE_URL="https://www18romacom.github.io/3dwindow-test/viewer/";
   async function driveShare3DModel(shareData,siteName){
     var shareFolder=await driveFindOrCreateFolder(DRIVE_3D_SHARE_FOLDER,DRIVE_ROOT_FOLDER_ID);
+    var stamp=Date.now(), baseName=(siteName||"모델").replace(/[\\/:*?"<>|]/g,"_")+"_"+stamp;
     var base64=arrayBufferToBase64(shareData.glb);
-    var fileName=(siteName||"모델").replace(/[\\/:*?"<>|]/g,"_")+"_"+Date.now()+".glb";
-    var uploaded=await driveUploadFile(fileName,"model/gltf-binary",base64,shareFolder.id,null);
+    var uploaded=await driveUploadFile(baseName+".glb","model/gltf-binary",base64,shareFolder.id,null);
     await driveShareFilePublic(uploaded.id);
-    // 치수 라벨은 GLTFExporter가 Sprite를 지원하지 않아 GLB에 담기지 않으므로,
-    // 별도 텍스트 데이터로 URL에 실어 뷰어 쪽에서 다시 라벨 스프라이트를 만든다.
-    var lb=encodeURIComponent(utf8ToBase64(JSON.stringify(shareData.labels||[])));
-    return VIEWER_BASE_URL+"?id="+uploaded.id+"&lb="+lb;
+    // 치수 라벨은 GLTFExporter가 Sprite를 지원하지 않아 GLB에 담기지 않으므로, 별도
+    // 작은 JSON 파일로 같은 폴더에 올려 뷰어 쪽에서 다시 라벨 스프라이트를 만든다.
+    // (URL에 직접 인코딩하면 링크가 너무 길어져서 별도 파일로 분리)
+    var labelsB64=utf8ToBase64(JSON.stringify(shareData.labels||[]));
+    var uploadedLabels=await driveUploadFile(baseName+"_labels.json","application/json",labelsB64,shareFolder.id,null);
+    await driveShareFilePublic(uploadedLabels.id);
+    return VIEWER_BASE_URL+"?id="+uploaded.id+"&lb="+uploadedLabels.id+"&site="+encodeURIComponent(siteName||"");
   }
   function dataUrlToBase64(dataUrl){return String(dataUrl).split(",")[1]||"";}
   function dataUrlMime(dataUrl){return (String(dataUrl).match(/^data:([^;]+);/)||[])[1]||"image/png";}

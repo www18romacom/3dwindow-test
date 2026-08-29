@@ -9,12 +9,15 @@
   #view3d { position: fixed; inset: 0; display: block; }
   .chip { position: fixed; z-index: 10; background: rgba(255,255,255,.85); border: 1px solid rgba(43,43,48,.08);
           border-radius: 10px; padding: 8px 12px; font-size: 13px; color: #2b2b30; backdrop-filter: blur(4px); }
+  #hud { top: 12px; left: 12px; display: none; }
+  #hud b { font-size: 15px; }
   #lt { top: 12px; right: 12px; cursor: pointer; user-select: none; display: none; }
   #msg { top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; color: #555; max-width: 80%; }
   input[type="checkbox"] { accent-color: #e04a2a; }
 </style>
 </head>
 <body>
+<div id="hud" class="chip"><b></b></div>
 <div id="msg" class="chip">불러오는 중…</div>
 <label id="lt" class="chip"><input type="checkbox" id="lbltoggle" checked> 치수 라벨</label>
 
@@ -32,15 +35,19 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 var API_KEY = "AIzaSyA_Jf8v_iCUNHMNQwHHJWnia7XpsGmg8kg";
 var params = new URLSearchParams(location.search);
 var id = params.get("id");
+var lbId = params.get("lb");
+var siteName = params.get("site");
 var msg = document.getElementById("msg");
 var lt = document.getElementById("lt");
+var hud = document.getElementById("hud");
 
-function utf8FromBase64(b64) { return decodeURIComponent(escape(atob(b64))); }
+if (siteName) {
+  hud.querySelector("b").textContent = siteName;
+  hud.style.display = "block";
+}
 
-var labels = [];
-var lbParam = params.get("lb");
-if (lbParam) {
-  try { labels = JSON.parse(utf8FromBase64(lbParam)); } catch (e) { labels = []; }
+function driveFileUrl(fileId) {
+  return "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media&key=" + API_KEY;
 }
 
 function makeLabelSprite(text) {
@@ -87,17 +94,6 @@ async function init() {
 
   var labelGroup = new THREE.Group();
   scene.add(labelGroup);
-  labels.forEach(function (item) {
-    var sprite = makeLabelSprite(item[0]);
-    sprite.position.set(item[1][0], item[1][1], item[1][2]);
-    labelGroup.add(sprite);
-  });
-  if (labels.length) {
-    lt.style.display = "block";
-    document.getElementById("lbltoggle").addEventListener("change", function (e) {
-      labelGroup.visible = e.target.checked;
-    });
-  }
 
   window.addEventListener("resize", function () {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -107,10 +103,28 @@ async function init() {
   renderer.setAnimationLoop(function () { controls.update(); renderer.render(scene, camera); });
 
   try {
-    var url = "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(id) + "?alt=media&key=" + API_KEY;
-    var res = await fetch(url);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    var buf = await res.arrayBuffer();
+    var glbPromise = fetch(driveFileUrl(id)).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.arrayBuffer();
+    });
+    var labelsPromise = lbId
+      ? fetch(driveFileUrl(lbId)).then(function (res) { return res.ok ? res.json() : []; }).catch(function () { return []; })
+      : Promise.resolve([]);
+    var results = await Promise.all([glbPromise, labelsPromise]);
+    var buf = results[0], labels = results[1] || [];
+
+    labels.forEach(function (item) {
+      var sprite = makeLabelSprite(item[0]);
+      sprite.position.set(item[1][0], item[1][1], item[1][2]);
+      labelGroup.add(sprite);
+    });
+    if (labels.length) {
+      lt.style.display = "block";
+      document.getElementById("lbltoggle").addEventListener("change", function (e) {
+        labelGroup.visible = e.target.checked;
+      });
+    }
+
     var loader = new GLTFLoader();
     loader.parse(buf, "", function (gltf) {
       scene.add(gltf.scene);
