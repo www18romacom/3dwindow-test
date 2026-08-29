@@ -2524,7 +2524,7 @@
     var candidates=state.pins.map(function(p,i){return {p:p,i:i};}).filter(function(x){var e=x.p.parts.filter(function(t){return t.kind==="entry";})[0];return !e||x.p.drawInDrawing===true||e.drawInDrawing===true;});
     function panelFooterData(p){measure.font='17px "Gulim", sans-serif';return {details:wrapCanvasText(measure,detailText(p)||"부가항목 미입력",panelW-28)};}
     function footerHeight(data){return 0;}
-    function panelHeightFor(p){var data=panelFooterData(p);return 570+Math.max(0,data.details.length-1)*20;}
+    function panelHeightFor(p){var data=panelFooterData(p);return 570+Math.max(0,data.details.length-1)*20+mullionStackExtra(p);}
     var rowHeights=[];for(var ri=0;ri<candidates.length;ri+=2){rowHeights.push(Math.max(panelHeightFor(candidates[ri].p),candidates[ri+1]?panelHeightFor(candidates[ri+1].p):0));}
     if(!rowHeights.length)rowHeights=[100];
     var panelsHeight=rowHeights.reduce(function(n,v){return n+v;},0)+Math.max(0,rowHeights.length-1)*panelGap;
@@ -2540,8 +2540,26 @@
       var isTurnPart=t.kind==="turn"||stype==="turn",swing=isTurnPart?(t.swing!=="pull"?"push":"pull"):null,handle=isTurnPart?(t.handle==="left"?"left":"right"):null;
       return {w:pw,h:ph,kind:t.kind,sashType:stype,primary:t.primary,smallW:Number(t.smallW)||0,smallSide:t.smallSide==="right"?"right":"left",addon:addon,dimsMissing:dimsMissing,swing:swing,handle:handle,label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+(dimsMissing?"치수 미입력":Math.round(pw)+"×"+Math.round(ph)),panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
     }
+    // 통바 층이 여러 개 쌓이면(적층) 프레임과 같은 좁은 띠 안에 욱여넣지 않고,
+    // 각 층을 실제 face:depth 비율 그대로 그릴 수 있도록 평면도 영역을 필요한
+    // 만큼 세로로 더 확보한다(적층이 없으면 기존과 동일, 추가 공간 0).
+    function mullionStackExtra(p){
+      var frameDepth=frameDepthMm(p.frame),drawDepth=frameDepth||115;
+      var sizes2=drawingPartsGrouped(p).map(function(t){return partSize(t,p);});
+      var maxAddonExtent=Math.max.apply(null,sizes2.filter(function(s){return s.addon;}).map(function(s){return drawDepth+20+(frameDepthMm(s.addon.frame)||drawDepth);}).concat([0]));
+      var depthScale=60/Math.max(1,drawDepth,maxAddonExtent);
+      var extra=0;
+      sizes2.forEach(function(s){
+        if(s.kind!=="mullion")return;
+        var layers=s.layers||[];
+        if(layers.length<=1)return;
+        var stackH=layers.reduce(function(n,v){return n+Math.max(2,v.depth*depthScale);},0);
+        if(stackH-60>extra)extra=stackH-60;
+      });
+      return extra;
+    }
     function drawPanel(p,i,x,y,panelH){
-      var footerData=panelFooterData(p),headH=48,footH=0,topViewH=190+Math.max(0,footerData.details.length-1)*20,drawTop=y+headH,drawH=panelH-headH-topViewH,sizes=drawingPartsGrouped(p).map(function(t){return partSize(t,p);}),layout=[];
+      var footerData=panelFooterData(p),headH=48,footH=0,stackExtra=mullionStackExtra(p),topViewH=190+Math.max(0,footerData.details.length-1)*20+stackExtra,drawTop=y+headH,drawH=panelH-headH-topViewH,sizes=drawingPartsGrouped(p).map(function(t){return partSize(t,p);}),layout=[];
       c.strokeStyle="#111";c.lineWidth=2;c.strokeRect(x,y,panelW,panelH);c.beginPath();c.moveTo(x,y+headH);c.lineTo(x+panelW,y+headH);c.stroke();
       c.fillStyle="#111";c.textAlign="left";c.textBaseline="middle";c.font='bold 23px "Gulim", sans-serif';c.fillText(visiblePinLabel(p,i)+"  "+(p.name||(isEntryPin(p)?"현관":"위치 미입력")),x+14,y+headH/2);
       c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim", sans-serif';c.fillText("정면도 (실내에서 봄)",x+14,drawTop+8);
@@ -2562,14 +2580,16 @@
       });
       var topY=y+headH+drawH, frameDepth=frameDepthMm(p.frame),drawDepth=frameDepth||115;
       c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(x,topY);c.lineTo(x+panelW,topY);c.stroke();c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='bold 16px "Gulim", sans-serif';c.fillText("평면도(위에서 봄) · 실외측 ↑",x+14,topY+8);
-      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,framePlanY=topY+90,leftTotals={},rightTotals={},specOrder=[],maxMullionDepth=Math.max.apply(null,sizes.filter(function(s){return s.kind==="mullion";}).map(function(s){return s.layers.reduce(function(n,v){return n+v.depth;},0);}).concat([0])),maxAddonExtent=Math.max.apply(null,sizes.filter(function(s){return s.addon;}).map(function(s){return drawDepth+20+(frameDepthMm(s.addon.frame)||drawDepth);}).concat([0])),depthScale=60/Math.max(1,drawDepth,maxMullionDepth,maxAddonExtent);
+      var geometryW=renderedW/2,geometryX=x+(panelW-geometryW)/2,framePlanY=topY+90,leftTotals={},rightTotals={},specOrder=[],maxAddonExtent=Math.max.apply(null,sizes.filter(function(s){return s.addon;}).map(function(s){return drawDepth+20+(frameDepthMm(s.addon.frame)||drawDepth);}).concat([0])),depthScale=60/Math.max(1,drawDepth,maxAddonExtent);
       // 평면도(위에서 봄)는 정면도의 표시 폭(통바 가독성 확대분 포함)을 그대로 재사용하지
       // 않고, 실제 mm 폭만으로 독립된 축척을 쓴다 — 위치와 폭이 서로 다른 축척을 쓰면
       // 연속된 통바가 다음 항목과 겹쳐 보이는 문제가 있었다.
       var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm;
       function addTotals(target,rows){rows.forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
       var plotX=geometryX;
-      sizes.forEach(function(s){var gx=plotX,gw=Math.max(4,s.w*planScale);plotX+=gw;if(s.kind==="mullion"){var layerAt=s.stackDirection==="inside-out"?drawDepth:0;s.layers.forEach(function(layer,li){if(s.stackDirection==="inside-out")layerAt-=layer.depth;var lh=Math.max(2,layer.depth*depthScale),layerY=framePlanY+layerAt*depthScale;c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);if(s.stackDirection!=="inside-out")layerAt+=layer.depth;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{var framePlanDepth=drawDepth*depthScale;c.fillStyle="#f6f6f6";c.fillRect(gx,framePlanY,gw,framePlanDepth);c.strokeStyle="#111";c.strokeRect(gx,framePlanY,gw,framePlanDepth);if(s.addon){var addonDepth=(frameDepthMm(s.addon.frame)||drawDepth)*depthScale,addonY=framePlanY+(drawDepth+20)*depthScale;c.fillStyle="#d9f1e9";c.fillRect(gx,addonY,gw,addonDepth);c.strokeStyle="#2f8577";c.strokeRect(gx,addonY,gw,addonDepth);}}});
+      // 통바는 창 폭 축척이 아니라 프레임 깊이와 같은 축척(depthScale)을 폭에도 써서
+      // 실제 face:depth 비율 그대로 그린다(정사각형 통바는 정사각형으로 보이게).
+      sizes.forEach(function(s){var gx=plotX,gw=s.kind==="mullion"?Math.max(4,s.w*depthScale):Math.max(4,s.w*planScale);plotX+=gw;if(s.kind==="mullion"){var layerAt=s.stackDirection==="inside-out"?drawDepth:0;s.layers.forEach(function(layer,li){if(s.stackDirection==="inside-out")layerAt-=layer.depth;var lh=Math.max(2,layer.depth*depthScale),layerY=framePlanY+layerAt*depthScale;c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);if(s.stackDirection!=="inside-out")layerAt+=layer.depth;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{var framePlanDepth=drawDepth*depthScale;c.fillStyle="#f6f6f6";c.fillRect(gx,framePlanY,gw,framePlanDepth);c.strokeStyle="#111";c.strokeRect(gx,framePlanY,gw,framePlanDepth);if(s.addon){var addonDepth=(frameDepthMm(s.addon.frame)||drawDepth)*depthScale,addonY=framePlanY+(drawDepth+20)*depthScale;c.fillStyle="#d9f1e9";c.fillRect(gx,addonY,gw,addonDepth);c.strokeStyle="#2f8577";c.strokeRect(gx,addonY,gw,addonDepth);}}});
       var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+leftTotals[spec]+"개"};}),rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+rightTotals[spec]+"개"};});
       // 규격 목록 앞뒤에 실제 face:depth 비율 그대로의 작은 도형을 붙여, 평면도
       // 본체(창 폭 축척이라 통바가 눌려 보임)와 별개로 실제 단면 비율을 보여준다.
@@ -2580,7 +2600,7 @@
       leftRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(x+14+iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="left";c.fillText(item.text,x+14+iconSlot,cy);});
       rightRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(x+panelW-14-iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="right";c.fillText(item.text,x+panelW-14-iconSlot,cy);});
       c.textAlign="left";c.textBaseline="top";c.font='17px "Gulim", sans-serif';
-      var footerY=topY+158;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});
+      var footerY=topY+158+stackExtra;footerData.details.forEach(function(line){c.fillText(line,x+14,footerY);footerY+=20;});
     }
     c.textBaseline="top";
     if(!candidates.length){c.strokeStyle="#333";c.strokeRect(pad,ty,W-pad*2,100);c.fillStyle="#777";c.font='26px "Gulim", sans-serif';c.textAlign="center";c.fillText("입력된 창호가 없습니다.",W/2,ty+34);} else {var rowY=ty;candidates.forEach(function(x,j){var row=Math.floor(j/2);drawPanel(x.p,x.i,pad+(j%2)*(panelW+panelGap),rowY,rowHeights[row]);if(j%2===1||j===candidates.length-1)rowY+=rowHeights[row]+panelGap;});}
