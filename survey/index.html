@@ -351,6 +351,7 @@
   .startchoice .cap2 { width: 100%; font-size: 12.5px; color: var(--ink-3); margin-bottom: 2px; }
 
   .share3d-row { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .share3d-line { align-items: center; }
 
   /* ---- 개소별 3D 미리보기 ---- */
   .mini3d-wrap { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
@@ -525,8 +526,7 @@
 <dialog class="admin-result" id="adminresult">
   <div class="dialog-head"><b>3D 생성 결과 <span class="admin-badge">관리자 전용</span></b><button type="button" class="x" id="close3d">×</button></div>
   <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div>
-    <div class="btnrow" style="margin-top:10px"><button type="button" id="share3d">외부 공유 링크 만들기 (오늘 하루만 유효)</button></div>
-    <div id="share3dresult" class="cap2" style="margin-top:8px"></div>
+    <div class="btnrow share3d-line" style="margin-top:10px"><button type="button" id="share3d">외부 공유 링크 만들기 (오늘 하루만 유효)</button><span id="share3dresult" class="cap2"></span></div>
   </div>
 </dialog>
 
