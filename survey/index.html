@@ -2491,10 +2491,11 @@
     var img=await loadPlanImage();if(!img)throw new Error("현장 평면도를 먼저 올려주세요");var maxW=1600,scale=Math.min(1,maxW/img.naturalWidth),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale)),planCanvas=document.createElement("canvas");planCanvas.width=w;planCanvas.height=h;var c=planCanvas.getContext("2d");c.fillStyle="#fff";c.fillRect(0,0,w,h);c.save();c.translate(state.flipH?w:0,state.flipV?h:0);c.scale(state.flipH?-1:1,state.flipV?-1:1);c.drawImage(img,0,0,w,h);c.restore();
     state.pins.forEach(function(p,i){var x=dispX(p.x)*w,y=dispY(p.y)*h,entry=isEntryPin(p);drawPlanStructureCanvas(c,p,x,y,w,h,img);var radius=Math.max(8,Math.min(16,w/90));c.beginPath();c.arc(x,y,radius,0,Math.PI*2);c.fillStyle=entry?"#287a68":"#ffd66b";c.fill();c.strokeStyle=entry?"#287a68":"#6d571d";c.lineWidth=Math.max(1,radius/8);c.stroke();c.fillStyle=entry?"#fff":"#111";c.textAlign="center";c.textBaseline="middle";c.font='bold '+Math.max(8,radius)+ 'px "Gulim"';c.fillText(visiblePinLabel(p,i),x,y);});
     // 평면도(왼쪽) + 번호별 위치 목록(오른쪽)을 한 이미지로 합쳐 balance 있게 중앙 배치한다.
-    var legendItems=state.pins.map(function(p,i){return visiblePinLabel(p,i)+". "+(p.name||(isEntryPin(p)?"현관":"위치 미입력"));});
+    var legendItems=state.pins.map(function(p,i){return {label:visiblePinLabel(p,i),name:p.name||(isEntryPin(p)?"현관":"위치 미입력"),entry:isEntryPin(p)};});
     var measure=document.createElement("canvas").getContext("2d"),legendFont=Math.max(16,Math.round(w/48)),lineH=Math.round(legendFont*1.7);
     measure.font=legendFont+'px "Gulim", sans-serif';
-    var legendW=legendItems.length?Math.max(160,Math.max.apply(null,legendItems.map(function(t){return measure.measureText(t).width;}))+40):0;
+    var badgeR=Math.round(legendFont*.55),badgeSlot=badgeR*2+10;
+    var legendW=legendItems.length?Math.max(160,Math.max.apply(null,legendItems.map(function(t){return measure.measureText(t.name).width;}))+badgeSlot+40):0;
     var legendH=Math.max(1,legendItems.length*lineH);
     var titleText=siteTitleText(),titleFont=Math.max(24,Math.round(w/28));
     measure.font='bold '+titleFont+'px "Gulim", sans-serif';
@@ -2508,8 +2509,12 @@
     oc.drawImage(planCanvas,startX,planY);oc.strokeStyle="#ccc";oc.lineWidth=1;oc.strokeRect(startX,planY,w,h);
     if(legendItems.length){
       var legendX=startX+w+gap,legendY=titleH+pad+(blockH-legendH)/2;
-      oc.textAlign="left";oc.textBaseline="top";oc.font=legendFont+'px "Gulim", sans-serif';oc.fillStyle="#111";
-      legendItems.forEach(function(text,idx){oc.fillText(text,legendX,legendY+idx*lineH);});
+      legendItems.forEach(function(item,idx){
+        var cy=legendY+idx*lineH+lineH/2,cx=legendX+badgeR;
+        oc.beginPath();oc.arc(cx,cy,badgeR,0,Math.PI*2);oc.fillStyle=item.entry?"#287a68":"#ffd66b";oc.fill();oc.strokeStyle=item.entry?"#287a68":"#6d571d";oc.lineWidth=1;oc.stroke();
+        oc.fillStyle=item.entry?"#fff":"#111";oc.textAlign="center";oc.textBaseline="middle";oc.font='bold '+Math.round(badgeR)+'px "Gulim"';oc.fillText(item.label,cx,cy+1);
+        oc.fillStyle="#111";oc.textAlign="left";oc.textBaseline="middle";oc.font=legendFont+'px "Gulim", sans-serif';oc.fillText(item.name,legendX+badgeSlot,cy);
+      });
     }
     return out;
   }
