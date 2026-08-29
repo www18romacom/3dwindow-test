@@ -430,14 +430,14 @@
       <div class="site-setup" id="sitesetup">
         <div class="site-setup-head"><b>기초입력</b><button type="button" class="tiny" id="editsitesetup" hidden>기초입력 확인/수정</button></div>
         <label class="field" for="basetext" style="margin-top:8px">일정 내용을 붙여넣으면 가능한 항목을 자동으로 채웁니다</label>
-        <textarea id="basetext" autocomplete="off" placeholder="예: 실측(박) | 10년 보증 체크 / 가상시 가상동 가상아파트 101동 202호 / 010-0000-0000"></textarea>
+        <textarea id="basetext" autocomplete="off" placeholder="예: 실측(박) | 10년 보증 체크 / 와이시 케이동 와이케이아파트 1004동 1004호 / 010-0000-0000"></textarea>
         <div class="site-fields">
           <label class="field">실측 날짜<input type="date" id="setupdate"></label>
           <label class="field">담당자<input type="text" id="setupmanager" value="박" placeholder="예: 박" autocomplete="off"></label>
           <label class="field">브랜드<select id="setupvendor"><option>LX</option><option>KCC</option><option>홈CC</option><option value="custom">직접입력</option></select></label>
           <label class="field" id="setupvendorcustomwrap" hidden>브랜드 직접입력<input type="text" id="setupvendorcustom" autocomplete="off"></label>
           <label class="field">거래처명<input type="text" id="setupvendorname" value="와이케이" placeholder="예: 와이케이" autocomplete="off"></label>
-          <label class="field wide">현장주소<input type="text" id="setupaddress" placeholder="예: 가상시 가상동 가상아파트 101동 202호" autocomplete="off"></label>
+          <label class="field wide">현장주소<input type="text" id="setupaddress" placeholder="예: 와이시 케이동 와이케이아파트 1004동 1004호" autocomplete="off"></label>
           <label class="field wide">비고<input type="text" id="setupnote" placeholder="예: 10년 보증 체크, 49평형" autocomplete="off"></label>
         </div>
         <div class="site-preview" id="sitepreview" aria-live="polite"></div>
@@ -480,6 +480,7 @@
         </div>
         <div class="tool-group tool-group-danger">
           <button type="button" id="clearpins" class="danger-tool" title="창호 번호 전체 삭제" aria-label="창호 번호 전체 삭제"><span class="full-label">번호 전체 삭제</span><span class="compact-label">번호 전체 삭제</span></button>
+          <button type="button" id="resetall" class="danger-tool" title="기초입력·현장 평면도·번호·벽 보정을 모두 초기화하고 새 현장을 시작합니다" aria-label="전체 초기화(새 현장 시작)"><span class="full-label">전체 초기화 (새 현장)</span><span class="compact-label">전체 초기화</span></button>
         </div>
       </div>
     </div>
@@ -808,7 +809,19 @@
     if (!out.vendorName) out.vendorName = "와이케이";
     return out;
   }
-  function siteTitleText() { return (normalizedSetup(state.siteSetup).address || "현장주소 미입력") + " -(주)와이케이이엔씨-"; }
+  function siteTitleText() { return normalizedSetup(state.siteSetup).address || "현장주소 미입력"; }
+  var COMPANY_BADGE_TEXT = "-(주)와이케이이엔씨-", COMPANY_BADGE_COLOR = "#2f6fbf";
+  // 우측 상단에 회사명 배지를 그린다(파란 글씨 + 파란 사각 테두리). right/top은 배지의
+  // 오른쪽 끝·위쪽 끝 좌표(캔버스 기준), fontSize는 배지 글자 크기.
+  function drawCompanyBadge(ctx, right, top, fontSize) {
+    ctx.font = 'bold ' + fontSize + 'px "Gulim", sans-serif';
+    var textW = ctx.measureText(COMPANY_BADGE_TEXT).width, padX = Math.round(fontSize * .6), padY = Math.round(fontSize * .4);
+    var boxW = textW + padX * 2, boxH = fontSize + padY * 2, x = right - boxW, y = top;
+    ctx.strokeStyle = COMPANY_BADGE_COLOR; ctx.lineWidth = Math.max(1.5, fontSize * .06); ctx.strokeRect(x, y, boxW, boxH);
+    ctx.fillStyle = COMPANY_BADGE_COLOR; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(COMPANY_BADGE_TEXT, x + boxW / 2, y + boxH / 2 + 1);
+    return { x: x, y: y, w: boxW, h: boxH };
+  }
   function compactDate(v) { return String(v || todayLocal()).replace(/-/g, "").slice(2); }
   function generatedSiteName() {
     var s = normalizedSetup(state.siteSetup), vendor = s.vendor === "custom" ? s.vendorCustom : s.vendor;
@@ -1410,6 +1423,31 @@
     state.pins = []; sel = null; persist(); render(); refreshDone();
     showUndo("번호 " + backup.length + "개를 지웠습니다", function () {
       state.pins = backup; sel = backupSel; persist(); render(); refreshDone();
+      toast("복구했습니다");
+    });
+  });
+
+  $("resetall").addEventListener("click", function () {
+    if (!confirm("기초입력·현장 평면도·번호·벽 보정을 모두 초기화하고 새 현장을 시작할까요? 저장하지 않은 내용은 되돌릴 수 없습니다.")) return;
+    var backup = JSON.parse(JSON.stringify(state)), backupSel = sel;
+    state.site = ""; state.surveyDate = todayLocal(); state.siteSetup = {}; state.overallNotes = "";
+    state.lifting = { method: "", other: "" }; state.planName = ""; state.planData = ""; state.pins = [];
+    state.scale = null; state.flipV = false; state.flipH = false; state.wallEdits = { add: [], remove: [] };
+    sel = null; planPixels = null; planZoom = 1;
+    $("plan").src = ""; $("stage").hidden = true; $("planviewtools").hidden = true; $("ph").hidden = false; $("drop").classList.remove("hasimg");
+    $("site").value = state.site; $("surveydate").value = state.surveyDate;
+    fillGlobalInputs(); fillSetup(false); updateScaleHint();
+    persist(); render(); refreshDone();
+    showUndo("전체 초기화했습니다", function () {
+      state.site = backup.site; state.surveyDate = backup.surveyDate; state.siteSetup = backup.siteSetup;
+      state.overallNotes = backup.overallNotes; state.lifting = backup.lifting; state.planName = backup.planName;
+      state.planData = backup.planData; state.pins = backup.pins; state.scale = backup.scale;
+      state.flipV = backup.flipV; state.flipH = backup.flipH; state.wallEdits = backup.wallEdits;
+      sel = backupSel;
+      $("site").value = state.site; $("surveydate").value = state.surveyDate;
+      fillGlobalInputs(); fillSetup(!!state.site); updateScaleHint();
+      if (state.planData) showPlan(state.planData, state.planName);
+      persist(); render(); refreshDone();
       toast("복구했습니다");
     });
   });
@@ -2705,12 +2743,20 @@
     var legendH=Math.max(1,legendItems.length*lineH);
     var titleText=siteTitleText(),titleFont=Math.max(24,Math.round(w/28));
     measure.font='bold '+titleFont+'px "Gulim", sans-serif';
+    var titleTextW=measure.measureText(titleText).width;
+    var badgeFont=Math.max(13,Math.round(titleFont*.42));
+    measure.font='bold '+badgeFont+'px "Gulim", sans-serif';
+    var badgeBoxW=measure.measureText(COMPANY_BADGE_TEXT).width+Math.round(badgeFont*.6)*2;
     var gap=legendItems.length?Math.round(w*.05):0,pad=Math.round(w*.05),titleH=titleFont+pad;
     var contentW=w+gap+legendW,blockH=Math.max(h,legendH);
-    var totalW=Math.max(contentW,measure.measureText(titleText).width)+pad*2,totalH=titleH+blockH+pad*2;
+    // 주소(왼쪽 정렬)와 회사명 배지(오른쪽 정렬)가 겹치지 않도록 제목 줄 폭을 둘 다 담을
+    // 만큼 넉넉히 확보한다.
+    var titleRowW=titleTextW+pad+badgeBoxW;
+    var totalW=Math.max(contentW,titleRowW)+pad*2,totalH=titleH+blockH+pad*2;
     var out=document.createElement("canvas");out.width=totalW;out.height=totalH;var oc=out.getContext("2d");
     oc.fillStyle="#fff";oc.fillRect(0,0,totalW,totalH);
-    oc.fillStyle="#111";oc.textAlign="center";oc.textBaseline="top";oc.font='bold '+titleFont+'px "Gulim", sans-serif';oc.fillText(titleText,totalW/2,pad/2);
+    oc.fillStyle="#111";oc.textAlign="left";oc.textBaseline="top";oc.font='bold '+titleFont+'px "Gulim", sans-serif';oc.fillText(titleText,pad,pad/2);
+    drawCompanyBadge(oc,totalW-pad*.3,pad*.1,badgeFont);
     var startX=(totalW-contentW)/2,planY=titleH+pad+(blockH-h)/2;
     oc.drawImage(planCanvas,startX,planY);oc.strokeStyle="#ccc";oc.lineWidth=1;oc.strokeRect(startX,planY,w,h);
     if(legendItems.length){
@@ -2746,6 +2792,7 @@
     var H=ty+panelsHeight+60;
     var canvas=document.createElement("canvas"); canvas.width=W; canvas.height=H; var c=canvas.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.fillStyle="#111";
     c.textAlign="center";c.font='bold 40px "Gulim", sans-serif'; siteLines.forEach(function(line, i){ c.fillText(line, W/2, 58 + i * 46); });
+    drawCompanyBadge(c,W-pad*.5,18,20);
     c.textAlign="left";c.font='22px "Gulim", sans-serif'; globalLines.forEach(function(line,i){c.fillText(line,pad,78+siteLines.length*46+i*30);});
     function partSize(t,p){
       if(t.kind==="mullion"){var layers=mullionLayers(t),rows=mullionLayerRows(t),mw=Math.max.apply(null,layers.map(function(v){return v.face;})),specLabel=rows.map(function(r){return r.spec+(r.count>1?" "+r.count+"개":"");}).join("+");return {w:mw,h:100,kind:t.kind,layers:layers,rows:rows,stackDirection:t.stackDirection,fixedW:mw<=40?12:28,label:"통바 "+specLabel};}
