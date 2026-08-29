@@ -682,7 +682,7 @@
   // 공유한 뒤, 별도 뷰어 페이지 URL을 만든다. 이 폴더는 별도 Apps Script 예약 스크립트가
   // 매일 1회 오래된 파일을 지우도록 관리한다(하루 지나면 실제로 삭제됨).
   var DRIVE_3D_SHARE_FOLDER="3D_임시공유",VIEWER_BASE_URL="https://www18romacom.github.io/3dwindow-test/viewer/";
-  async function driveShare3DModel(shareData,siteName){
+  async function driveShare3DModel(shareData,siteName,displayName){
     var shareFolder=await driveFindOrCreateFolder(DRIVE_3D_SHARE_FOLDER,DRIVE_ROOT_FOLDER_ID);
     var stamp=Date.now(), baseName=(siteName||"모델").replace(/[\\/:*?"<>|]/g,"_")+"_"+stamp;
     var base64=arrayBufferToBase64(shareData.glb);
@@ -694,7 +694,8 @@
     var labelsB64=utf8ToBase64(JSON.stringify(shareData.labels||[]));
     var uploadedLabels=await driveUploadFile(baseName+"_labels.json","application/json",labelsB64,shareFolder.id,null);
     await driveShareFilePublic(uploadedLabels.id);
-    return VIEWER_BASE_URL+"?id="+uploaded.id+"&lb="+uploadedLabels.id+"&site="+encodeURIComponent(siteName||"");
+    // 뷰어 상단 표시용 이름은 폴더명(날짜·구분·담당자·비고 포함)이 아니라 순수 주소만.
+    return VIEWER_BASE_URL+"?id="+uploaded.id+"&lb="+uploadedLabels.id+"&site="+encodeURIComponent(displayName||siteName||"");
   }
   function dataUrlToBase64(dataUrl){return String(dataUrl).split(",")[1]||"";}
   function dataUrlMime(dataUrl){return (String(dataUrl).match(/^data:([^;]+);/)||[])[1]||"image/png";}
@@ -2985,7 +2986,8 @@
     $("share3dresult").textContent = "";
     try {
       var shareData = await activeProject3D.exportShareData();
-      var url = await driveShare3DModel(shareData, state.site || generatedSiteName());
+      var addressOnly = normalizedSetup(state.siteSetup).address || "";
+      var url = await driveShare3DModel(shareData, state.site || generatedSiteName(), addressOnly);
       $("share3dresult").innerHTML = '<span class="share3d-row">공유 링크(오늘 자정 삭제): <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">열기</a><button type="button" class="tiny" id="copy3dlink">복사</button></span>';
       $("copy3dlink").addEventListener("click", function () { copyTextToClipboard(url, this); });
       toast("공유 링크를 만들었습니다");
