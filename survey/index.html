@@ -700,16 +700,19 @@
   async function driveSaveDrawing(pages){
     var siteName=state.site||generatedSiteName(),siteFolder=await driveFindOrCreateFolder(siteName,DRIVE_ROOT_FOLDER_ID);
     var drawFolder=await driveFindOrCreateFolder("도면",siteFolder.id),filePrefix=siteName+"_";
+    var sitePlanName=filePrefix+"현장평면도.png";
+    var pageNames=pages.map(function(_,pi){return pages.length>1?(filePrefix+"실측도면_"+(pi+1)+".png"):(filePrefix+"실측도면.png");});
+    var existingSitePlan=await driveFindChild(sitePlanName,drawFolder.id);
+    var existingPages=[];for(var epi=0;epi<pageNames.length;epi++)existingPages.push(await driveFindChild(pageNames[epi],drawFolder.id));
+    var anyExisting=existingSitePlan||existingPages.some(function(f){return f;});
+    if(anyExisting&&!window.confirm("Google Drive에 같은 이름의 실측도면 파일이 이미 있습니다. 덮어쓸까요?"))return {cancelled:true};
     try{
-      var sitePlanCanvas=await buildSitePlanCanvas(),sitePlanB64=dataUrlToBase64(sitePlanCanvas.toDataURL("image/png")),sitePlanName=filePrefix+"현장평면도.png";
-      var existingSitePlan=await driveFindChild(sitePlanName,drawFolder.id);
+      var sitePlanCanvas=await buildSitePlanCanvas(),sitePlanB64=dataUrlToBase64(sitePlanCanvas.toDataURL("image/png"));
       await driveUploadFile(sitePlanName,"image/png",sitePlanB64,drawFolder.id,existingSitePlan?existingSitePlan.id:null);
     }catch(e){ /* 현장 평면도가 없으면 생략 */ }
     for(var pi=0;pi<pages.length;pi++){
-      var pageName=pages.length>1?(filePrefix+"실측도면_"+(pi+1)+".png"):(filePrefix+"실측도면.png");
       var pageB64=dataUrlToBase64(pages[pi].toDataURL("image/png"));
-      var existingPage=await driveFindChild(pageName,drawFolder.id);
-      await driveUploadFile(pageName,"image/png",pageB64,drawFolder.id,existingPage?existingPage.id:null);
+      await driveUploadFile(pageNames[pi],"image/png",pageB64,drawFolder.id,existingPages[pi]?existingPages[pi].id:null);
     }
     return {siteFolderName:siteName};
   }
@@ -2752,7 +2755,7 @@
       var sitePlanBlob=await new Promise(function(resolve){sitePlanCanvas.toBlob(resolve,"image/png");});
       if(sitePlanBlob){await new Promise(function(r){setTimeout(r,400);});downloadFile(sitePlanBlob,base+"_현장도면.png");sitePlanSaved=true;}
     }catch(e){ /* 현장 평면도가 없으면 현장도면 파일은 생략 */ }
-    var driveSaved=false,driveError="";try{await driveSaveDrawing(pages);driveSaved=true;}catch(e){driveError=e.message||String(e);}return {count:pages.length,driveSaved:driveSaved,driveError:driveError,driveCancelled:false,sitePlanSaved:sitePlanSaved};
+    var driveSaved=false,driveError="",driveCancelled=false;try{var dr=await driveSaveDrawing(pages);driveCancelled=!!(dr&&dr.cancelled);driveSaved=!driveCancelled;}catch(e){driveError=e.message||String(e);}return {count:pages.length,driveSaved:driveSaved,driveError:driveError,driveCancelled:driveCancelled,sitePlanSaved:sitePlanSaved};
   }
 
   function buildJSON() {
