@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D 모델 보기</title>
+<script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #eef1f3; font-family: "Gulim", sans-serif; }
+  #wrap { display: flex; flex-direction: column; height: 100%; }
+  model-viewer { flex: 1; width: 100%; background: #eef1f3; --poster-color: transparent; }
+  #msg { padding: 24px; text-align: center; color: #555; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="msg">불러오는 중…</div>
+</div>
+<script>
+(function () {
+  var API_KEY = "AIzaSyA_Jf8v_iCUNHMNQwHHJWnia7XpsGmg8kg";
+  var params = new URLSearchParams(location.search);
+  var id = params.get("id");
+  var wrap = document.getElementById("wrap");
+  var msg = document.getElementById("msg");
+  if (!id) { msg.textContent = "잘못된 링크입니다 (파일 정보가 없습니다)."; return; }
+  var url = "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(id) + "?alt=media&key=" + API_KEY;
+  var mv = document.createElement("model-viewer");
+  mv.setAttribute("src", url);
+  mv.setAttribute("camera-controls", "");
+  mv.setAttribute("auto-rotate", "");
+  mv.setAttribute("shadow-intensity", "1");
+  mv.setAttribute("exposure", "1");
+  mv.addEventListener("error", function () {
+    msg.textContent = "모델을 불러오지 못했습니다 — 링크가 만료됐거나 삭제됐을 수 있습니다.";
+    msg.style.display = "block";
+    mv.style.display = "none";
+  });
+  mv.addEventListener("load", function () { msg.style.display = "none"; });
+  wrap.appendChild(mv);
+})();
+</script>
+</body>
+</html>

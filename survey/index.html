@@ -517,7 +517,10 @@
 
 <dialog class="admin-result" id="adminresult">
   <div class="dialog-head"><b>3D 생성 결과 <span class="admin-badge">관리자 전용</span></b><button type="button" class="x" id="close3d">×</button></div>
-  <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div></div>
+  <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div>
+    <div class="btnrow" style="margin-top:10px"><button type="button" id="share3d">외부 공유 링크 만들기 (오늘 하루만 유효)</button></div>
+    <div id="share3dresult" class="cap2" style="margin-top:8px"></div>
+  </div>
 </dialog>
 
 <dialog id="drawingpreview"><div class="dialog-head"><b>실측도면 미리보기</b><div class="page-tools"><button type="button" id="previewprev" aria-label="이전 페이지">‹</button><span id="previewpage">1 / 1페이지</span><button type="button" id="previewnext" aria-label="다음 페이지">›</button></div><span class="sp"></span><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomreset" aria-label="미리보기 100%">100%</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><div id="drawingpreviewcontent"><img id="drawingpreviewimage" draggable="false" alt="실측도면 출력본 미리보기" style="display:block;width:100%;height:auto"></div></div></dialog>
@@ -553,8 +556,10 @@
 <script type="module">
   import * as THREE from 'three';
   import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
   window.__THREE = THREE;
   window.__OrbitControls = OrbitControls;
+  window.__GLTFExporter = GLTFExporter;
   window.dispatchEvent(new Event('mini3d-ready'));
 </script>
 
@@ -657,6 +662,26 @@
     var res=await driveApiFetch("https://www.googleapis.com/drive/v3/files/"+fileId+"?alt=media&supportsAllDrives=true");
     if(!res.ok)throw new Error("Drive 파일을 읽지 못했습니다("+res.status+")");
     return res.text();
+  }
+  async function driveShareFilePublic(fileId){
+    return driveApiJson("https://www.googleapis.com/drive/v3/files/"+fileId+"/permissions?supportsAllDrives=true",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({role:"reader",type:"anyone"})});
+  }
+  function arrayBufferToBase64(buffer){
+    var bytes=new Uint8Array(buffer),binary="",chunk=0x8000;
+    for(var i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
+    return btoa(binary);
+  }
+  // 3D 모델을 Drive의 전용 임시공유 폴더에 올리고 "링크가 있는 사람은 볼 수 있음"으로
+  // 공유한 뒤, 별도 뷰어 페이지 URL을 만든다. 이 폴더는 별도 Apps Script 예약 스크립트가
+  // 매일 1회 오래된 파일을 지우도록 관리한다(하루 지나면 실제로 삭제됨).
+  var DRIVE_3D_SHARE_FOLDER="3D_임시공유",VIEWER_BASE_URL="https://www18romacom.github.io/3dwindow-test/viewer/";
+  async function driveShare3DModel(glbArrayBuffer,siteName){
+    var shareFolder=await driveFindOrCreateFolder(DRIVE_3D_SHARE_FOLDER,DRIVE_ROOT_FOLDER_ID);
+    var base64=arrayBufferToBase64(glbArrayBuffer);
+    var fileName=(siteName||"모델").replace(/[\\/:*?"<>|]/g,"_")+"_"+Date.now()+".glb";
+    var uploaded=await driveUploadFile(fileName,"model/gltf-binary",base64,shareFolder.id,null);
+    await driveShareFilePublic(uploaded.id);
+    return VIEWER_BASE_URL+"?id="+uploaded.id;
   }
   function dataUrlToBase64(dataUrl){return String(dataUrl).split(",")[1]||"";}
   function dataUrlMime(dataUrl){return (String(dataUrl).match(/^data:([^;]+);/)||[])[1]||"image/png";}
@@ -2545,7 +2570,15 @@
     var stopped = false, raf;
     function loop() { if (stopped) return; controls.update(); renderer.render(scene, cam); raf = requestAnimationFrame(loop); }
     loop();
-    return { cancel: function () { stopped = true; if (raf) cancelAnimationFrame(raf); controls.dispose(); renderer.dispose(); } };
+    return {
+      cancel: function () { stopped = true; if (raf) cancelAnimationFrame(raf); controls.dispose(); renderer.dispose(); },
+      exportGLB: function () {
+        return new Promise(function (resolve, reject) {
+          var exporter = new (window.__GLTFExporter)();
+          exporter.parse(scene, function (result) { resolve(result); }, function (err) { reject(err); }, { binary: true });
+        });
+      }
+    };
   }
 
   /* ---------------- 내보내기 / 불러오기 ---------------- */
@@ -2850,7 +2883,7 @@
     else dialog.setAttribute("open", "");
   }
   function waitFor3DEngine(timeoutMs) {
-    if (window.__THREE && window.__OrbitControls) return Promise.resolve(true);
+    if (window.__THREE && window.__OrbitControls && window.__GLTFExporter) return Promise.resolve(true);
     return new Promise(function (resolve) {
       var finished = false;
       function done(ok) {
@@ -2858,7 +2891,7 @@
         window.removeEventListener("mini3d-ready", ready);
         clearTimeout(timer); resolve(ok);
       }
-      function ready() { done(!!(window.__THREE && window.__OrbitControls)); }
+      function ready() { done(!!(window.__THREE && window.__OrbitControls && window.__GLTFExporter)); }
       var timer = setTimeout(function () { done(false); }, timeoutMs);
       window.addEventListener("mini3d-ready", ready);
     });
@@ -2871,6 +2904,7 @@
     $("project3d").innerHTML = '<div class="mini3d-empty">3D 엔진을 불러오는 중입니다…</div>';
     var button = this, oldText = button.textContent;
     button.disabled = true; button.textContent = "3D 준비 중…";
+    $("share3dresult").textContent = "";
     try {
       var ready = await waitFor3DEngine(15000);
       if (!ready) throw new Error("3D 엔진을 불러오지 못했습니다. 인터넷 연결을 확인해주세요.");
@@ -2886,6 +2920,23 @@
   $("close3d").addEventListener("click", function () {
     if (activeProject3D) { activeProject3D.cancel(); activeProject3D = null; }
     $("adminresult").close();
+  });
+  $("share3d").addEventListener("click", async function () {
+    if (!activeProject3D || !activeProject3D.exportGLB) { toast("먼저 3D를 생성해주세요"); return; }
+    var button = this, oldText = button.textContent;
+    button.disabled = true; button.textContent = "업로드 중…";
+    $("share3dresult").textContent = "";
+    try {
+      var glb = await activeProject3D.exportGLB();
+      var url = await driveShare3DModel(glb, state.site || generatedSiteName());
+      $("share3dresult").innerHTML = '공유 링크(오늘 자정 이후 삭제 예정): <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a>';
+      toast("공유 링크를 만들었습니다");
+    } catch (e) {
+      $("share3dresult").textContent = "공유 링크 생성 실패: " + (e.message || e);
+      toast("공유 링크 생성에 실패했습니다");
+    } finally {
+      button.disabled = false; button.textContent = oldText;
+    }
   });
 
   function openSurveyDB() {
