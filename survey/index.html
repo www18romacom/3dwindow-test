@@ -690,12 +690,13 @@
     await driveShareFilePublic(uploaded.id);
     // 치수 라벨은 GLTFExporter가 Sprite를 지원하지 않아 GLB에 담기지 않으므로, 별도
     // 작은 JSON 파일로 같은 폴더에 올려 뷰어 쪽에서 다시 라벨 스프라이트를 만든다.
-    // (URL에 직접 인코딩하면 링크가 너무 길어져서 별도 파일로 분리)
-    var labelsB64=utf8ToBase64(JSON.stringify(shareData.labels||[]));
-    var uploadedLabels=await driveUploadFile(baseName+"_labels.json","application/json",labelsB64,shareFolder.id,null);
-    await driveShareFilePublic(uploadedLabels.id);
-    // 뷰어 상단 표시용 이름은 폴더명(날짜·구분·담당자·비고 포함)이 아니라 순수 주소만.
-    return VIEWER_BASE_URL+"?id="+uploaded.id+"&lb="+uploadedLabels.id+"&site="+encodeURIComponent(displayName||siteName||"");
+    // (URL에 직접 인코딩하면 링크가 너무 길어져서 별도 파일로 분리) 현장 표시명(순수
+    // 주소만, 날짜·구분·담당자·비고 제외)도 같은 파일에 담아 URL 길이를 줄인다.
+    var meta={site:displayName||siteName||"",labels:shareData.labels||[]};
+    var metaB64=utf8ToBase64(JSON.stringify(meta));
+    var uploadedMeta=await driveUploadFile(baseName+"_labels.json","application/json",metaB64,shareFolder.id,null);
+    await driveShareFilePublic(uploadedMeta.id);
+    return VIEWER_BASE_URL+"?id="+uploaded.id+"&lb="+uploadedMeta.id;
   }
   function dataUrlToBase64(dataUrl){return String(dataUrl).split(",")[1]||"";}
   function dataUrlMime(dataUrl){return (String(dataUrl).match(/^data:([^;]+);/)||[])[1]||"image/png";}
@@ -2144,7 +2145,7 @@
         var mlayers=placedMullionLayers(t,selectedFrameDepth),mw=Math.max.apply(null,mlayers.map(function(v){return v.face;}).concat([40]));
         mlayers.forEach(function(layer){var mullionMat=layer.label==="100×100"?"mullion100":"mullion40105",mz=-selectedFrameDepth/2+layer.y;boxes.push({mat:mullionMat,pos:[x+mw/2,maxH/2,mz+layer.depth/2],size:[layer.face,maxH,layer.depth]});});
         x += mw;
-      } else if (t.kind === "turn" || t.kind === "entry") {
+      } else if (t.kind === "turn" || (t.kind === "sash" && t.sashType === "turn") || t.kind === "entry") {
         var isEntry = t.kind === "entry";
         var tw = Number(t.w) || (isEntry ? 900 : 0), th = Number(t.h) || (isEntry ? 2100 : maxH);
         if (!tw || !th) { return; }
@@ -2172,7 +2173,7 @@
         boxes.push({ mat: isEntry ? "entry" : "turn",
                      pos: [leafCx, T_OUTER + innerH / 2, leafCz],
                      size: [innerW, innerH, leafT], rotY: rotY });
-        if (isEntry || t.kind === "turn") {
+        if (isEntry || t.kind === "turn" || (t.kind === "sash" && t.sashType === "turn")) {
           var hxv = signX * innerW * .84;
           boxes.push({ mat: "handle",
             pos: [hingeX + hxv * Math.cos(rotY), T_OUTER + innerH * .52, -hxv * Math.sin(rotY)],
@@ -2540,7 +2541,7 @@
       var wallOpenings = state.pins.map(function (p) {
         var geo = opGeometryBoxes(p);
         return { p: p, width: geo.width, height: geo.height,
-          hasDoor: p.parts.some(function (t) { return t.kind === "turn" || t.kind === "entry"; }) };
+          hasDoor: p.parts.some(function (t) { return t.kind === "turn" || (t.kind === "sash" && t.sashType === "turn") || t.kind === "entry"; }) };
       });
       function openingAt(n) {
         var cellXn = ((n % structure.gw) + .5) / structure.gw;
@@ -2593,7 +2594,7 @@
         if (b.rotY) mesh.rotation.y = b.rotY;
         group.add(mesh);
       });
-      var hasDoor = p.parts.some(function (t) { return t.kind === "turn" || t.kind === "entry"; });
+      var hasDoor = p.parts.some(function (t) { return t.kind === "turn" || (t.kind === "sash" && t.sashType === "turn") || t.kind === "entry"; });
       var baseY = hasDoor ? 0 : Math.max(0, 2.4 - geo.height * mm);
       group.position.set(p.x * planWmm * mm, baseY, p.y * planHmm * mm);
       if ((p.angle || 0) === 90) group.rotation.y = -Math.PI / 2;

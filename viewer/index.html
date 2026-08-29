@@ -36,15 +36,9 @@ var API_KEY = "AIzaSyA_Jf8v_iCUNHMNQwHHJWnia7XpsGmg8kg";
 var params = new URLSearchParams(location.search);
 var id = params.get("id");
 var lbId = params.get("lb");
-var siteName = params.get("site");
 var msg = document.getElementById("msg");
 var lt = document.getElementById("lt");
 var hud = document.getElementById("hud");
-
-if (siteName) {
-  hud.querySelector("b").textContent = siteName;
-  hud.style.display = "block";
-}
 
 function driveFileUrl(fileId) {
   return "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media&key=" + API_KEY;
@@ -107,11 +101,16 @@ async function init() {
       if (!res.ok) throw new Error("HTTP " + res.status);
       return res.arrayBuffer();
     });
-    var labelsPromise = lbId
-      ? fetch(driveFileUrl(lbId)).then(function (res) { return res.ok ? res.json() : []; }).catch(function () { return []; })
-      : Promise.resolve([]);
-    var results = await Promise.all([glbPromise, labelsPromise]);
-    var buf = results[0], labels = results[1] || [];
+    var metaPromise = lbId
+      ? fetch(driveFileUrl(lbId)).then(function (res) { return res.ok ? res.json() : {}; }).catch(function () { return {}; })
+      : Promise.resolve({});
+    var results = await Promise.all([glbPromise, metaPromise]);
+    var buf = results[0], meta = results[1] || {}, labels = meta.labels || [];
+
+    if (meta.site) {
+      hud.querySelector("b").textContent = meta.site;
+      hud.style.display = "block";
+    }
 
     labels.forEach(function (item) {
       var sprite = makeLabelSprite(item[0]);
