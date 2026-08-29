@@ -350,6 +350,8 @@
   .startchoice button { flex: 1; min-width: 120px; padding: 12px; font-weight: 700; }
   .startchoice .cap2 { width: 100%; font-size: 12.5px; color: var(--ink-3); margin-bottom: 2px; }
 
+  .share3d-row { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+
   /* ---- 개소별 3D 미리보기 ---- */
   .mini3d-wrap { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
   .mini3d-wrap > .cap { font-size: 11.5px; color: var(--ink-3); margin-bottom: 7px; }
@@ -2974,7 +2976,7 @@
     try {
       var glb = await activeProject3D.exportGLB();
       var url = await driveShare3DModel(glb, state.site || generatedSiteName());
-      $("share3dresult").innerHTML = '공유 링크(오늘 자정 이후 삭제 예정): <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a> <button type="button" class="tiny" id="copy3dlink">복사</button>';
+      $("share3dresult").innerHTML = '<span class="share3d-row">공유 링크(오늘 자정 삭제): <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">열기</a><button type="button" class="tiny" id="copy3dlink">복사</button></span>';
       $("copy3dlink").addEventListener("click", function () { copyTextToClipboard(url, this); });
       toast("공유 링크를 만들었습니다");
     } catch (e) {
