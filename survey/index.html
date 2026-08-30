@@ -21,6 +21,8 @@
     --mullion-soft: #52565c1f;
     --turn: #2f8577;
     --turn-soft: #2f85771f;
+    --group: #2f6fbf;
+    --group-soft: #2f6fbf1f;
     --ok: #2f7d5a;
     --shadow: 0 1px 2px rgba(35,35,42,.06), 0 8px 24px rgba(35,35,42,.06);
     --r: 12px;
@@ -32,6 +34,7 @@
       --accent: #ff6a4520; --accent-solid: #ff6a45; --accent-ink: #1a1a1e;
       --mullion: #9a9fa8; --mullion-soft: #9a9fa826;
       --turn: #5fb8a8; --turn-soft: #5fb8a826; --ok: #62c398;
+      --group: #6fa8e0; --group-soft: #6fa8e026;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
     }
   }
@@ -41,6 +44,7 @@
     --accent: #ff6a4520; --accent-solid: #ff6a45; --accent-ink: #1a1a1e;
     --mullion: #9a9fa8; --mullion-soft: #9a9fa826;
     --turn: #5fb8a8; --turn-soft: #5fb8a826; --ok: #62c398;
+    --group: #6fa8e0; --group-soft: #6fa8e026;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
   }
 
@@ -83,8 +87,6 @@
     .card { border-radius: 9px; }
     .body { padding: 10px; }
     input[type="text"], input[type="number"], select, textarea, button { min-height: 44px; }
-    .part-top { min-height: 48px; }
-    .part-top .x { min-width: 44px; }
   }
   @media (min-width: 1001px) {
     .floorplan-card { position: sticky; top: 12px; }
@@ -134,8 +136,8 @@
   .plan-tools .tool-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .plan-tools .tool-group:first-child { margin-top: 0; }
   .plan-tools .tool-group-danger { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); }
-  .plan-tools .danger-tool { color: #b52d26; border-color: #d8aaa5; background: #fff7f6; }
-  .plan-tools .danger-tool:hover { border-color: #b52d26; }
+  .danger-tool { color: #b52d26; border-color: #d8aaa5; background: #fff7f6; }
+  .danger-tool:hover { border-color: #b52d26; }
   .compact-label { display: none; }
   @media (max-width: 600px) {
     .plan-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -222,13 +224,6 @@
   .addon-box { margin-top:10px; padding:10px; border:1px solid #7aaea5; border-radius:8px; background:var(--turn-soft); }
   .addon-box .addon-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
   .addon-box .addon-head b { flex:1; }
-  .part-drag-handle { display:inline-grid; place-items:center; min-width:34px; min-height:34px;
-    border:1px solid var(--line); border-radius:7px; color:var(--ink-2); cursor:grab;
-    touch-action:none; user-select:none; font-weight:700; }
-  .part-dragging .part-drag-handle { cursor:grabbing; color:var(--accent-solid); border-color:var(--accent-solid); }
-  .part-dragging { opacity:.68; box-shadow:0 8px 20px rgba(20,20,25,.18); }
-  .part-drop-before { box-shadow:inset 0 4px 0 var(--accent-solid); }
-  .part-drop-after { box-shadow:inset 0 -4px 0 var(--accent-solid); }
   @media (max-width: 600px) {
     .site-fields { grid-template-columns:1fr; }
     .site-fields .wide { grid-column:auto; }
@@ -331,24 +326,34 @@
     margin-bottom: 10px; background: var(--panel);
     box-shadow: 0 1px 2px rgba(20,20,25,.05);
   }
-  .part.part-dragging { opacity:.72; box-shadow:0 8px 20px rgba(20,20,25,.2); touch-action:none; }
   .part.mullion { border-color: var(--mullion); background: var(--mullion-soft); }
   .part.turn { border-color: var(--turn); background: var(--turn-soft); }
-  .part-top { display: flex; align-items: center; gap: 7px; }
-  .part-top .pno { flex: none; width: 16px; color: var(--ink-3); font-size: 11.5px;
-                    font-variant-numeric: tabular-nums; }
-  .part-top .tag { flex: none; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-  .part.mullion .tag { background: var(--mullion); color: #fff; }
-  .part.turn .tag { background: var(--turn); color: #fff; }
-  .part.sash .tag { background: var(--accent-solid); color: var(--accent-ink); }
-  .part-top .sp { margin-left: auto; }
-  .part-top select.spec { max-width: 140px; }
 
   .part.sash .grid2, .part.turn .grid2 { grid-template-columns: 1fr 1fr; }
 
   .startchoice { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
   .startchoice button { flex: 1; min-width: 120px; padding: 12px; font-weight: 700; }
   .startchoice .cap2 { width: 100%; font-size: 12.5px; color: var(--ink-3); margin-bottom: 2px; }
+
+  /* ---- 구성 블록(가로 스크롤) — 통바/그룹(적층)/창 블록을 탭하면 세부입력 다이얼로그가 뜬다 ---- */
+  .part-blocks { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; -webkit-overflow-scrolling: touch; }
+  .part-block {
+    flex: none; width: 84px; min-height: 64px; border-radius: 10px; border: 1.5px solid var(--line);
+    background: var(--panel); padding: 8px 6px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px; text-align: center; cursor: pointer;
+    box-shadow: 0 1px 2px rgba(20,20,25,.05); touch-action: pan-y;
+  }
+  .part-block .pb-label { font-size: 11.5px; font-weight: 700; line-height: 1.25; word-break: keep-all; }
+  .part-block .pb-sub { font-size: 10.5px; color: var(--ink-3); }
+  .part-block.pb-mullion-single { border-color: var(--mullion); background: var(--mullion-soft); }
+  .part-block.pb-mullion-group { border-color: var(--group); background: var(--group-soft); border-width: 2px; }
+  .part-block.pb-sash { border-color: var(--accent-solid); background: var(--accent); }
+  .part-block.pb-entry { border-color: var(--turn); background: var(--turn-soft); }
+  .part-block.add { border-style: dashed; color: var(--ink-3); font-size: 22px; font-weight: 700; background: none; }
+  .part-block.dragging { opacity: .68; box-shadow: 0 8px 20px rgba(20,20,25,.18); touch-action: none; }
+  .part-block.drop-left { box-shadow: inset 4px 0 0 var(--accent-solid); }
+  .part-block.drop-right { box-shadow: inset -4px 0 0 var(--accent-solid); }
+  .part-blocks-hint { font-size: 11.5px; color: var(--ink-3); margin: 2px 2px 8px; }
 
   .share3d-row { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
   .share3d-line { align-items: center; }
@@ -542,6 +547,7 @@
   </div>
 </dialog>
 <dialog id="driveconflict"><div class="dialog-head"><b>Google Drive에 같은 이름의 현장이 있습니다</b></div><div class="dialog-body"><div id="driveconflictfiles" class="cap2"></div><label>새로 만들 경우 폴더 이름<input type="text" id="driveversionname"></label><p>저장 방법을 선택해주세요.</p><div class="btnrow"><button type="button" class="primary" id="driveoverwrite">덮어쓰기</button><button type="button" id="driveversion">새로 만들기</button><button type="button" id="drivecancel">취소</button></div></div></dialog>
+<dialog id="partdetail"><div class="dialog-head"><b id="partdetailtitle">구성 세부입력</b><button type="button" class="primary" id="partdetaildone">완료</button></div><div class="dialog-body" id="partdetailbody"></div></dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="undobar" role="status" aria-live="assertive" hidden>
@@ -598,6 +604,7 @@
   var state = { site: "", surveyDate: todayLocal(), siteSetup: {}, overallNotes: "", lifting: { method: "", other: "" }, planName: "", planData: "", pins: [], scale: null,
                 flipV: false, flipH: false, wallEdits: { add: [], remove: [] } };
   var sel = null;
+  var openPartDetailState = null;
   var pickMode = null;
   var activeMini3D = null;   // 현재 열린 카드의 3D 프리뷰 정리 함수 보관(WebGL 컨텍스트 누수 방지)
   var activeProject3D = null;
@@ -1720,6 +1727,8 @@
       var openBody = openCardEl && openCardEl.querySelector(".mini3d");
       if (openBody) activeMini3D = mountMini3D(openBody, state.pins[sel]);
     }
+
+    if (openPartDetailState && $("partdetail").open) refreshPartDetail();
   }
 
   function appendPickDot(stage, pt) {
@@ -1894,21 +1903,28 @@
     wrap.className = "parts";
     var cap = document.createElement("div");
     cap.className = "cap";
-    cap.textContent = "구성 — 실내에서 볼 때 왼쪽부터. 카드의 빈 곳을 길게 눌러 순서를 바꿀 수 있습니다.";
+    cap.textContent = "구성 — 실내에서 볼 때 왼쪽부터. 블록을 탭하면 세부입력이, 길게 누르면 순서 변경이 됩니다.";
     wrap.appendChild(cap);
 
-    p.parts.forEach(function (t, k) { wrap.appendChild(buildPart(p, t, k, i, makeFrameField)); });
+    var blockRow = document.createElement("div");
+    blockRow.className = "part-blocks";
+    p.parts.forEach(function (t, k) { blockRow.appendChild(buildPartBlock(p, t, k, i, makeFrameField)); });
 
-    var prow = document.createElement("div");
-    prow.className = "btnrow";
-    var bm = document.createElement("button");
-    bm.type = "button"; bm.className = "tiny"; bm.textContent = "+ 통바";
-    bm.addEventListener("click", function () { p.parts.push(newMullion()); render(); });
-    var bs = document.createElement("button");
-    bs.type = "button"; bs.className = "tiny"; bs.textContent = "+ 창";
-    bs.addEventListener("click", function () { p.parts.push(newSash()); render(); });
-    prow.appendChild(bm); prow.appendChild(bs);
-    wrap.appendChild(prow);
+    var addBlock = document.createElement("div");
+    addBlock.className = "part-block add";
+    addBlock.textContent = "+";
+    addBlock.title = "새 위치(통바/창) 추가";
+    addBlock.addEventListener("click", function (e) {
+      e.stopPropagation();
+      openAddPartChoice(addBlock, function (t) {
+        p.parts.push(t);
+        var newIndex = p.parts.length - 1;
+        render();
+        openPartDetail(p, p.parts[newIndex], newIndex, i, makeFrameField);
+      });
+    });
+    blockRow.appendChild(addBlock);
+    wrap.appendChild(blockRow);
     body.appendChild(wrap);
 
     if (!isEntryPin(p)) {
@@ -1963,41 +1979,93 @@
     return card;
   }
 
-  var PART_TAGS = { mullion: "통바", turn: "터닝도어", entry: "현관문", sash: "창" };
-  function installPartDrag(el,p,t,k,pinIndex){
-    var timer=null,dragging=false,dragTarget=k,pointerId=null;
-    function clearDropFeedback(){Array.from(el.parentNode.querySelectorAll(".part")).forEach(function(card){card.classList.remove("part-drop-before","part-drop-after");});}
-    function blocked(target){return !!target.closest("input,select,button,textarea,label,a")&&!target.closest(".part-drag-handle");}
-    function begin(e){dragging=true;pointerId=e.pointerId;dragTarget=p.parts.indexOf(t);el.classList.add("part-dragging");el.setPointerCapture(e.pointerId);}
-    el.addEventListener("pointerdown",function(e){if(blocked(e.target))return;if(e.target.closest(".part-drag-handle")){e.preventDefault();begin(e);}else timer=setTimeout(function(){begin(e);},380);});
-    el.addEventListener("pointermove",function(e){if(!dragging)return;e.preventDefault();var cards=Array.from(el.parentNode.querySelectorAll(".part")),target=cards.findIndex(function(card){var r=card.getBoundingClientRect();return e.clientY<r.top+r.height/2;});dragTarget=target<0?cards.length-1:target;clearDropFeedback();var targetCard=cards[Math.max(0,Math.min(cards.length-1,dragTarget))];if(targetCard&&targetCard!==el)targetCard.classList.add(dragTarget>=cards.indexOf(el)?"part-drop-after":"part-drop-before");});
-    function end(){if(timer)clearTimeout(timer);timer=null;clearDropFeedback();if(dragging){var current=p.parts.indexOf(t),target=Math.max(0,Math.min(p.parts.length-1,dragTarget));if(target!==current){var moved=p.parts.splice(current,1)[0];p.parts.splice(target,0,moved);syncComposition(p);persist();sel=pinIndex;}dragging=false;el.classList.remove("part-dragging");render();}pointerId=null;}
-    el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
+  var SASH_TYPE_NAMES = { normal: "창", unbalanced: "언발란스 창", turn: "터닝도어", fix: "FIX창", pj: "PJ창", tt: "T/T창" };
+  function partBlockInfo(t) {
+    if (t.kind === "mullion") {
+      normalizeMullionPart(t);
+      if (t.layers.length > 1) return { cls: "pb-mullion-group", label: "그룹(적층)", sub: Math.round(mullionDepth(t)) + "mm" };
+      return { cls: "pb-mullion-single", label: "통바", sub: t.layers[0].spec };
+    }
+    if (t.kind === "entry") return { cls: "pb-entry", label: "현관문", sub: "" };
+    var stype = t.kind === "turn" ? "turn" : (t.sashType || "normal");
+    return { cls: "pb-sash", label: SASH_TYPE_NAMES[stype] || "창", sub: (t.w && t.h) ? (t.w + "×" + t.h) : "" };
   }
+  function installBlockDrag(el, p, t, k, pinIndex) {
+    var timer = null, dragging = false, dragTarget = k, pointerId = null;
+    function blocks() { return Array.from(el.parentNode.querySelectorAll(".part-block:not(.add)")); }
+    function clearDropFeedback() { blocks().forEach(function (b) { b.classList.remove("drop-left", "drop-right"); }); }
+    function begin(e) { dragging = true; pointerId = e.pointerId; dragTarget = p.parts.indexOf(t); el.classList.add("dragging"); el.setPointerCapture(e.pointerId); }
+    el.addEventListener("pointerdown", function (e) { timer = setTimeout(function () { begin(e); }, 380); });
+    el.addEventListener("pointermove", function (e) {
+      if (!dragging) return; e.preventDefault();
+      var items = blocks(), target = items.findIndex(function (b) { var r = b.getBoundingClientRect(); return e.clientX < r.left + r.width / 2; });
+      dragTarget = target < 0 ? items.length - 1 : target;
+      clearDropFeedback();
+      var targetBlock = items[Math.max(0, Math.min(items.length - 1, dragTarget))];
+      if (targetBlock && targetBlock !== el) targetBlock.classList.add(dragTarget >= items.indexOf(el) ? "drop-right" : "drop-left");
+    });
+    function end() {
+      if (timer) clearTimeout(timer); timer = null; clearDropFeedback();
+      if (dragging) {
+        var current = p.parts.indexOf(t), target = Math.max(0, Math.min(p.parts.length - 1, dragTarget));
+        if (target !== current) { var moved = p.parts.splice(current, 1)[0]; p.parts.splice(target, 0, moved); syncComposition(p); persist(); sel = pinIndex; }
+        dragging = false; el.classList.remove("dragging"); render();
+      }
+      pointerId = null;
+    }
+    el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+  }
+  function buildPartBlock(p, t, k, pinIndex, makeFrameField) {
+    var info = partBlockInfo(t);
+    var b = document.createElement("div");
+    b.className = "part-block " + info.cls;
+    var label = document.createElement("div"); label.className = "pb-label"; label.textContent = info.label;
+    b.appendChild(label);
+    if (info.sub) { var sub = document.createElement("div"); sub.className = "pb-sub"; sub.textContent = info.sub; b.appendChild(sub); }
+    installBlockDrag(b, p, t, k, pinIndex);
+    b.addEventListener("click", function () { if (b.classList.contains("dragging")) return; openPartDetail(p, t, k, pinIndex, makeFrameField); });
+    return b;
+  }
+  function openAddPartChoice(anchorEl, onChoose) {
+    var old = document.getElementById("addpartchoice"); if (old) old.remove();
+    var menu = document.createElement("div");
+    menu.id = "addpartchoice"; menu.className = "startchoice";
+    menu.style.cssText = "position:fixed;z-index:50;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;box-shadow:var(--shadow);width:200px;";
+    var r = anchorEl.getBoundingClientRect();
+    menu.style.top = (r.bottom + 6) + "px"; menu.style.left = Math.max(8, r.right - 200) + "px";
+    var bs = document.createElement("button"); bs.type = "button"; bs.textContent = "＋ 창";
+    bs.addEventListener("click", function (e) { e.stopPropagation(); menu.remove(); onChoose(newSash()); });
+    var bm = document.createElement("button"); bm.type = "button"; bm.textContent = "＋ 통바";
+    bm.addEventListener("click", function (e) { e.stopPropagation(); menu.remove(); onChoose(newMullion()); });
+    menu.appendChild(bs); menu.appendChild(bm);
+    document.body.appendChild(menu);
+    setTimeout(function () {
+      document.addEventListener("click", function dismiss(e) { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("click", dismiss); } });
+    }, 0);
+  }
+  function refreshPartDetail() {
+    var st = openPartDetailState; if (!st) return;
+    var info = partBlockInfo(st.t);
+    $("partdetailtitle").textContent = info.label + " 세부입력";
+    var bodyEl = $("partdetailbody"); bodyEl.innerHTML = "";
+    bodyEl.appendChild(buildPart(st.p, st.t, st.k, st.pinIndex, st.makeFrameField));
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "danger-tool"; del.style.marginTop = "12px";
+    del.textContent = "이 구성 삭제";
+    del.addEventListener("click", function () { $("partdetail").close(); openPartDetailState = null; removePart(st.p, st.k); });
+    bodyEl.appendChild(del);
+  }
+  function openPartDetail(p, t, k, pinIndex, makeFrameField) {
+    openPartDetailState = { p: p, t: t, k: k, pinIndex: pinIndex, makeFrameField: makeFrameField };
+    refreshPartDetail();
+    showDialogSafe($("partdetail"));
+  }
+  $("partdetaildone").addEventListener("click", function () { $("partdetail").close(); openPartDetailState = null; render(); });
+  $("partdetail").addEventListener("close", function () { openPartDetailState = null; });
 
   function buildPart(p, t, k, pinIndex, makeFrameField) {
     var d = document.createElement("div");
     d.className = "part " + t.kind;
-    installPartDrag(d,p,t,k,pinIndex);
-
-    var top = document.createElement("div");
-    top.className = "part-top";
-    var no = document.createElement("span");
-    no.className = "pno"; no.textContent = (k + 1) + ".";
-    top.appendChild(no);
-    var tag = document.createElement("span");
-    tag.className = "tag"; tag.textContent = PART_TAGS[t.kind] || t.kind;
-    top.appendChild(tag);
-    if(t.kind==="mullion"){var handle=document.createElement("span");handle.className="part-drag-handle";handle.textContent="↕";handle.title="통바 위치를 드래그해 좌우 순서 변경";handle.setAttribute("role","button");handle.setAttribute("aria-label","통바 위치 좌우 순서 드래그");top.appendChild(handle);}
-
-    var sp = document.createElement("span"); sp.className = "sp"; top.appendChild(sp);
-    var x = document.createElement("button");
-    x.type = "button"; x.className = "x"; x.textContent = "×";
-    x.title = "이 구성 삭제";
-    x.setAttribute("aria-label", "구성 " + (k + 1) + " 삭제");
-    x.addEventListener("click", function () { removePart(p, k); });
-    top.appendChild(x);
-    d.appendChild(top);
 
     if (t.kind === "mullion") {
       normalizeMullionPart(t);
