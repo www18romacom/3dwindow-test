@@ -314,6 +314,10 @@
   .survey-detail-grid .chk { padding:8px 0; }
   input.memo-missing { border-color:#c0392b; }
   input.memo-missing::placeholder { color:#c0392b; }
+  .seg { display: flex; gap: 4px; flex-wrap: wrap; }
+  .seg-btn { flex: 1; min-width: 0; min-height: 44px; padding: 7px 4px; font-size: 12.5px;
+             border: 1.5px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink-2); }
+  .seg-btn.sel { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--accent-ink); font-weight: 700; }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
   .grid2 .lab { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; display: block; }
@@ -1257,8 +1261,9 @@
       planPixels = { w: c.width, h: c.height, data: ctx.getImageData(0, 0, c.width, c.height).data };
       // 이미 배치·저장된 핀(placementMode가 있는 핀)은 다시 분석하지 않는다 — 여기서
       // 매번 다시 돌리면 저장 당시와 다른 벽 분석 결과로 좌표가 밀려버리는 문제가 있었다.
-      // placementMode가 없는(과거 형식 등) 핀만 최초 1회 분석한다.
-      var unplaced = state.pins.filter(function (p) { return !p.placementMode; });
+      // placementMode가 없는(과거 형식 등) 핀만 최초 1회 분석한다. 터닝도어는 벽이 아니라
+      // 방 중간(개구부)에 있는 경우가 많아 이 자동 벽 스냅 대상에서 항상 제외한다.
+      var unplaced = state.pins.filter(function (p) { return !p.placementMode && !isTurnPin(p); });
       unplaced.forEach(applyPlacement);
       persist(); render();
       if (unplaced.length) toast("기존 번호 " + unplaced.length + "곳의 방향을 자동 적용했습니다");
@@ -1609,6 +1614,26 @@
     wrap.appendChild(cb); wrap.appendChild(txt);
     return wrap;
   }
+  // 드롭다운(select) 대신 버튼 여러 개를 나란히 두고 하나만 선택하는 방식(라디오 버튼 스타일).
+  // 반환된 요소에 setValue(v)를 붙여, 코드에서 선택값을 강제로 바꿔야 할 때(예: 짝수에
+  // 따라 주 사용문을 자동으로 맞추는 applyPanelRule) select.value=... 대신 쓸 수 있게 한다.
+  function segButtons(options, value, onChange, cls) {
+    var wrap = document.createElement("div");
+    wrap.className = "seg" + (cls ? " " + cls : "");
+    function paint(v) {
+      Array.from(wrap.children).forEach(function (b) { b.classList.toggle("sel", b.dataset.val === String(v)); });
+    }
+    options.forEach(function (o) {
+      var val = Array.isArray(o) ? o[0] : o, txt = Array.isArray(o) ? o[1] : o;
+      var btn = document.createElement("button");
+      btn.type = "button"; btn.className = "seg-btn"; btn.textContent = txt; btn.dataset.val = val;
+      btn.addEventListener("click", function () { if (val === wrap.currentValue) return; wrap.currentValue = val; paint(val); onChange(val, wrap); });
+      wrap.appendChild(btn);
+    });
+    wrap.setValue = function (v) { wrap.currentValue = v; paint(v); };
+    wrap.setValue(value);
+    return wrap;
+  }
   function numInput(val, ph, onInput, cls) {
     var i = document.createElement("input");
     i.type = "number"; i.value = val; i.placeholder = ph; i.autocomplete = "off";
@@ -1655,13 +1680,13 @@
     w.appendChild(up); w.appendChild(down);
     return w;
   }
-  function applyPanelRule(sash, primarySelect) {
+  function applyPanelRule(sash, primaryControl) {
     if (sash.panels === "3짝") {
       sash.primary = "both";
-      if (primarySelect) primarySelect.value = "both";
+      if (primaryControl) primaryControl.setValue("both");
     } else if (sash.panels === "고정") {
       sash.primary = "none";
-      if (primarySelect) primarySelect.value = "none";
+      if (primaryControl) primaryControl.setValue("none");
     }
   }
 
@@ -2113,8 +2138,8 @@
       g.appendChild(labeled("폭 (mm)", numInput(t.w, "4170", function (v) { t.w = v; syncComposition(p); persist(); refreshSpanBar(pinIndex); })));
       g.appendChild(labeled("높이 (mm)", numInput(t.h, "2250", function (v) { t.h = v; syncComposition(p); persist(); })));
       if ((t.sashType||"normal") === "normal") {
-        var pr = sel1(PRIMARY_TYPES, t.primary, function (v) { t.primary = v; persist(); refreshDone(); });
-        g.appendChild(labeled("짝수", sel1(PANEL_TYPES.filter(function(v){return v!=="고정";}), t.panels, function (v) { t.panels = v; applyPanelRule(t, pr); syncComposition(p); persist(); refreshDone(); })));
+        var pr = segButtons(PRIMARY_TYPES, t.primary, function (v) { t.primary = v; persist(); refreshDone(); });
+        g.appendChild(labeled("짝수", segButtons(PANEL_TYPES.filter(function(v){return v!=="고정";}), t.panels, function (v) { t.panels = v; applyPanelRule(t, pr); syncComposition(p); persist(); refreshDone(); })));
         g.appendChild(labeled("주 사용문", pr));
       }
       if ((t.sashType||"normal") === "unbalanced") {
