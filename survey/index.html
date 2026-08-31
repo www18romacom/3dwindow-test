@@ -2063,7 +2063,16 @@
     var del = document.createElement("button");
     del.type = "button"; del.className = "danger-tool"; del.style.marginTop = "12px";
     del.textContent = "이 구성 삭제";
-    del.addEventListener("click", function () { $("partdetail").close(); openPartDetailState = null; removePart(st.p, st.k); });
+    del.addEventListener("click", function () {
+      var backupPart = st.t, backupIndex = st.k, backupPin = st.p, label = info.label;
+      $("partdetail").close(); openPartDetailState = null;
+      removePart(backupPin, backupIndex);
+      showUndo(label + " 구성을 삭제했습니다", function () {
+        backupPin.parts.splice(backupIndex, 0, backupPart);
+        syncComposition(backupPin); persist(); render();
+        toast("복구했습니다");
+      });
+    });
     bodyEl.appendChild(del);
   }
   function openPartDetail(p, t, k, pinIndex, makeFrameField) {
