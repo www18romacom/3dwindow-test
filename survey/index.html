@@ -338,13 +338,18 @@
   /* ---- 구성 블록(가로 스크롤) — 통바/그룹(적층)/창 블록을 탭하면 세부입력 다이얼로그가 뜬다 ---- */
   .part-blocks { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; -webkit-overflow-scrolling: touch; }
   .part-block {
-    flex: none; width: 84px; min-height: 64px; border-radius: 10px; border: 1.5px solid var(--line);
+    position: relative; flex: none; width: 84px; min-height: 64px; border-radius: 10px; border: 1.5px solid var(--line);
     background: var(--panel); padding: 8px 6px; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 4px; text-align: center; cursor: pointer;
-    box-shadow: 0 1px 2px rgba(20,20,25,.05); touch-action: pan-y;
+    box-shadow: 0 1px 2px rgba(20,20,25,.05); touch-action: manipulation;
   }
   .part-block .pb-label { font-size: 11.5px; font-weight: 700; line-height: 1.25; word-break: keep-all; }
   .part-block .pb-sub { font-size: 10.5px; color: var(--ink-3); }
+  .part-block .pb-handle {
+    position: absolute; top: 0; right: 0; width: 30px; height: 26px; display: grid; place-items: center;
+    color: var(--ink-3); font-size: 13px; touch-action: none; cursor: grab; border-radius: 0 9px 0 8px;
+  }
+  .part-block .pb-handle:active { cursor: grabbing; }
   .part-block.pb-mullion-single { border-color: var(--mullion); background: var(--mullion-soft); }
   .part-block.pb-mullion-group { border-color: var(--group); background: var(--group-soft); border-width: 2px; }
   .part-block.pb-sash { border-color: var(--accent-solid); background: var(--accent); }
@@ -1990,12 +1995,13 @@
     var stype = t.kind === "turn" ? "turn" : (t.sashType || "normal");
     return { cls: "pb-sash", label: SASH_TYPE_NAMES[stype] || "창", sub: (t.w && t.h) ? (t.w + "×" + t.h) : "" };
   }
-  function installBlockDrag(el, p, t, k, pinIndex) {
+  function installBlockDrag(el, p, t, k, pinIndex, handle) {
     var timer = null, dragging = false, dragTarget = k, pointerId = null;
     function blocks() { return Array.from(el.parentNode.querySelectorAll(".part-block:not(.add)")); }
     function clearDropFeedback() { blocks().forEach(function (b) { b.classList.remove("drop-left", "drop-right"); }); }
     function begin(e) { dragging = true; pointerId = e.pointerId; dragTarget = p.parts.indexOf(t); el.classList.add("dragging"); el.setPointerCapture(e.pointerId); }
-    el.addEventListener("pointerdown", function (e) { timer = setTimeout(function () { begin(e); }, 380); });
+    handle.addEventListener("pointerdown", function (e) { e.preventDefault(); e.stopPropagation(); begin(e); });
+    el.addEventListener("pointerdown", function (e) { if (handle.contains(e.target)) return; timer = setTimeout(function () { begin(e); }, 380); });
     el.addEventListener("pointermove", function (e) {
       if (!dragging) return; e.preventDefault();
       var items = blocks(), target = items.findIndex(function (b) { var r = b.getBoundingClientRect(); return e.clientX < r.left + r.width / 2; });
@@ -2022,8 +2028,13 @@
     var label = document.createElement("div"); label.className = "pb-label"; label.textContent = info.label;
     b.appendChild(label);
     if (info.sub) { var sub = document.createElement("div"); sub.className = "pb-sub"; sub.textContent = info.sub; b.appendChild(sub); }
-    installBlockDrag(b, p, t, k, pinIndex);
-    b.addEventListener("click", function () { if (b.classList.contains("dragging")) return; openPartDetail(p, t, k, pinIndex, makeFrameField); });
+    var handle = document.createElement("div");
+    handle.className = "pb-handle"; handle.textContent = "⠿";
+    handle.title = "길게 누르지 않아도 여기를 잡고 바로 드래그하면 순서가 바뀝니다";
+    handle.setAttribute("role", "button"); handle.setAttribute("aria-label", "구성 순서 드래그");
+    b.appendChild(handle);
+    installBlockDrag(b, p, t, k, pinIndex, handle);
+    b.addEventListener("click", function (e) { if (b.classList.contains("dragging") || e.target.closest(".pb-handle")) return; openPartDetail(p, t, k, pinIndex, makeFrameField); });
     return b;
   }
   function openAddPartChoice(anchorEl, onChoose) {
