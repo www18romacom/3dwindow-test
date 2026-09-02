@@ -344,27 +344,39 @@ function drawSinglePanel(p){
   sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
   var frontScale=Math.min((panelW-pad*2-fixedW)/sashTotal,(drawH-70)/maxH);
   var renderedW=fixedW+sashTotal*frontScale;
-  // 좌우 여백에 목록을 끼워 넣는 대신(자꾸 좁아서 겹침), 통바 개수는 평면도
-  // 위쪽에 "좌:"/"우:" 글줄로 따로 적고 평면도 본체는 그 아래 중앙에
-  // 넉넉한 폭으로 그린다(사용자 요청 — 줄을 바꿔서 안 겹치게).
-  var geometryW=Math.min(renderedW,panelW-pad*2), geometryX=(panelW-geometryW)/2;
-  var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm;
+  // 평면도(위에서 봄) 폭: 통바는 face:depth 비율을 살리려고 depthScale,
+  // 창/현관은 실제 mm 비율을 살리려고 별도 planScale을 쓰는데, 이 둘을 섞어
+  // 더한 실제 합산 폭이 화면 폭보다 커질 수 있었다(사용자 제보 — 평면도
+  // 오른쪽이 잘림). 합산 폭을 먼저 계산해두고 넘치는 만큼만 균일 축소
+  // (drawShrink)해서 항상 폭 안에 들어오도록 만든다("사이즈조절").
+  var availW=panelW-pad*2;
+  var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=availW/planTotalMm;
+  var rawGw=sizes.map(function(s){return s.kind==="mullion"?Math.max(3,s.w*depthScale):Math.max(3,s.w*planScale);});
+  var totalGw=rawGw.reduce(function(a,b){return a+b;},0)||1;
+  var drawShrink=totalGw>availW?availW/totalGw:1;
+  var geometryW=totalGw*drawShrink, geometryX=(panelW-geometryW)/2;
 
   var leftTotals={},rightTotals={},specOrder=[],dryX=geometryX;
   function addTotals(target,rows){(rows||[]).forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
-  sizes.forEach(function(s){
-    var gw=s.kind==="mullion"?Math.max(3,s.w*depthScale):Math.max(3,s.w*planScale);
+  sizes.forEach(function(s,idx){
+    var gw=rawGw[idx]*drawShrink;
     if(s.kind==="mullion")addTotals((dryX+gw/2)<panelW/2?leftTotals:rightTotals,s.rows);
     dryX+=gw;
   });
   var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+leftTotals[spec]+"개"};});
   var rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+rightTotals[spec]+"개"};});
 
+  // 좌측 통바 목록은 좌측 정렬, 우측 통바 목록은 우측 정렬로 같은 줄
+  // 구간에 나란히 적고(사용자 요청), 평면도 본체는 그 아래 새 줄에 중앙
+  // 배치한다. 절반 폭 안에서 각자 독립적으로 줄바꿈해 서로 겹치지 않는다.
   var measure=document.createElement("canvas").getContext("2d");measure.font='12px "Malgun Gothic",sans-serif';
+  var halfW=panelW/2-pad-6;
   var leftText=leftRows.length?("좌: "+leftRows.map(function(r){return r.text;}).join(", ")):"";
   var rightText=rightRows.length?("우: "+rightRows.map(function(r){return r.text;}).join(", ")):"";
-  var countLines=(leftText?wrapCanvasText(measure,leftText,panelW-pad*2):[]).concat(rightText?wrapCanvasText(measure,rightText,panelW-pad*2):[]);
-  var countH=countLines.length?countLines.length*16+6:0;
+  var leftLines=leftText?wrapCanvasText(measure,leftText,halfW):[];
+  var rightLines=rightText?wrapCanvasText(measure,rightText,halfW):[];
+  var countRowN=Math.max(leftLines.length,rightLines.length);
+  var countH=countRowN?countRowN*16+6:0;
   // 평면도 내용 높이 = 좌우 개수 글줄 높이 + 프레임 깊이 표시 영역(적층
   // 있으면 더 큼) — 목록이 길어지면(사용자 요청대로) 여기서 세로가 늘어난다.
   var planBodyH=countH+60+stackExtra;
@@ -420,14 +432,16 @@ function drawSinglePanel(p){
   c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(0,topY);c.lineTo(panelW,topY);c.stroke();
   c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 13px "Malgun Gothic"';
   c.fillText("평면도(위에서 봄) · 실외측 ↑",pad,topY+8);
-  // 통바 개수는 좌우 여백에 끼워 넣지 않고 평면도 위에 "좌:"/"우:" 글줄로
-  // 먼저 적고, 평면도 본체는 그 아래 넉넉한 폭으로 가운데 그린다.
+  // 통바 개수는 좌측 목록은 좌측 정렬, 우측 목록은 우측 정렬로 같은 줄
+  // 구간에 나란히 적고, 평면도 본체는 그 아래 새 줄에 가운데로 그린다.
   var countY=topY+28;
-  c.font='12px "Malgun Gothic"';c.textAlign="left";c.textBaseline="top";c.fillStyle="#333";
-  countLines.forEach(function(line,li){c.fillText(line,pad,countY+li*16);});
+  c.font='12px "Malgun Gothic"';c.textBaseline="top";c.fillStyle="#333";
+  if(leftLines.length){c.textAlign="left";leftLines.forEach(function(line,li){c.fillText(line,pad,countY+li*16);});}
+  if(rightLines.length){c.textAlign="right";rightLines.forEach(function(line,li){c.fillText(line,panelW-pad,countY+li*16);});}
+  c.textAlign="left";
   var framePlanY=countY+countH, plotX=geometryX;
-  sizes.forEach(function(s){
-    var gw=s.kind==="mullion"?Math.max(3,s.w*depthScale):Math.max(3,s.w*planScale);
+  sizes.forEach(function(s,idx){
+    var gw=rawGw[idx]*drawShrink;
     if(s.kind==="mullion"){
       var layerAt=s.stackDirection==="inside-out"?drawDepth:0;
       s.layers.forEach(function(layer,li){
