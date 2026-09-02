@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>창호 실측 간편입력</title>
+<style>
+:root{--bg:#0f1115;--panel:#1a1d24;--panel2:#232733;--ink:#eef1f5;--ink2:#9aa3b2;--line:#2c313d;--accent:#3fb6e0;--accent-ink:#04202a;--danger:#e05a5a;}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,"Malgun Gothic",sans-serif;}
+body{padding-bottom:92px;}
+header{position:sticky;top:0;background:var(--panel);padding:14px 16px;border-bottom:1px solid var(--line);z-index:5;display:flex;justify-content:space-between;align-items:center;}
+header b{font-size:17px}
+header .who{font-size:12px;color:var(--ink2)}
+main{padding:14px 16px;max-width:520px;margin:0 auto;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
+.card h3{margin:0 0 10px;font-size:15px}
+label{display:block;font-size:13px;color:var(--ink2);margin-bottom:4px;}
+input[type=text],input[type=tel],input[type=number]{width:100%;min-height:46px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);padding:0 12px;font-size:16px;}
+button{min-height:46px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:15px;font-weight:600;padding:0 14px;}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+button.danger{color:var(--danger);border-color:var(--danger);}
+button.ghost{background:transparent;}
+.row{display:flex;gap:8px;}
+.row>*{flex:1;}
+.field{margin-bottom:12px;}
+.seg{display:flex;gap:6px;flex-wrap:wrap;}
+.seg button{flex:1;min-width:76px;}
+.seg button.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+.pinlist{display:flex;flex-direction:column;gap:10px;margin:10px 0;}
+.pinrow{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;}
+.pinrow .top{display:flex;justify-content:space-between;align-items:center;}
+.pinrow b{font-size:15px}
+.pinrow .sub{font-size:12px;color:var(--ink2);margin-top:4px;}
+.partchip{display:inline-block;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;margin:2px 4px 0 0;}
+.addbar{display:flex;gap:8px;margin-top:8px;}
+.addbar button{flex:1;font-size:13px;}
+.partlist{display:flex;flex-direction:column;gap:8px;margin:10px 0;}
+.partitem{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+.partitem .sub{font-size:12px;color:var(--ink2)}
+.partitem button{min-height:36px;padding:0 10px;font-size:13px;}
+footer{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:8px;max-width:520px;margin:0 auto;box-sizing:border-box;}
+footer button{flex:1;}
+dialog{border:none;border-radius:14px;padding:0;width:min(94vw,480px);background:var(--panel);color:var(--ink);max-height:88vh;}
+dialog::backdrop{background:rgba(0,0,0,.55);}
+.dhead{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);}
+.dbody{padding:14px 16px;max-height:70vh;overflow:auto;}
+.toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:#000;color:#fff;padding:10px 16px;border-radius:8px;font-size:14px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center;}
+.toast.show{opacity:.94;}
+.hint{font-size:12px;color:var(--ink2);margin-top:6px;}
+.empty{color:var(--ink2);font-size:13px;text-align:center;padding:18px 0;}
+</style>
+</head>
+<body>
+<header><b>창호 실측 간편입력</b><span class="who" id="whoLabel"></span></header>
+<main id="app"></main>
+<div class="toast" id="toast"></div>
+
+<dialog id="partdialog">
+  <div class="dhead"><b id="partdialogtitle">구성 입력</b><button type="button" id="partclose">×</button></div>
+  <div class="dbody" id="partdialogbody"></div>
+</dialog>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+
+// ---- 표시/토스트 ----
+var toastTimer=null;
+function toast(msg){var t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(function(){t.classList.remove("show");},2400);}
+
+// ---- 저장 서버(Apps Script) 설정 ----
+// 배포 후 이 값에 새 Apps Script 웹앱의 /exec 주소를 넣는다. 비어있으면
+// 이 기기 로컬 저장만 동작한다(모바일 실사용 전 반드시 채워야 함).
+var SAVE_URL = "";
+
+function callApi(action, payload){
+  if(!SAVE_URL) return Promise.reject(new Error("NO_URL"));
+  var body=Object.assign({action:action}, payload);
+  // Content-Type을 text/plain으로 보내야 Apps Script가 CORS 프리플라이트
+  // 없이 바로 받는다(JSON 프리플라이트는 Apps Script가 처리 못 함).
+  return fetch(SAVE_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(body)})
+    .then(function(r){return r.json();});
+}
+
+// ---- 관리자 실측입력.html과 호환되는 최소 데이터 모델 ----
+var FRAME_TYPES=["B/F115","B/F140","B/F235","B/F250","B/FWA"];
+var MULLION_SPECS=["100×100","40×105","105×40"];
+var SASH_TYPES=[["normal","일반 창"],["unbalanced","언발란스 창"],["turn","터닝도어"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"]];
+var SASH_TYPE_NAMES={normal:"창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
+var PANEL_TYPES=["2짝","3짝","4짝","고정"];
+var PRIMARY_TYPES=[["left","왼쪽"],["right","오른쪽"],["both","양쪽"],["none","없음"]];
+
+function todayLocal(){var d=new Date();function p(n){return n<10?"0"+n:""+n;}return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());}
+function normalizedDetails(v){var d=v||{};return {molding:d.molding||"",filling:!!d.filling,tile:!!d.tile,drainHole:d.drainHole!==false,screen:d.screen!==false,brick:d.brick||""};}
+function newState(){return {site:"",surveyDate:todayLocal(),siteSetup:{},overallNotes:"",lifting:{method:"",other:""},planName:"",planData:"",pins:[],scale:null,flipV:false,flipH:false,wallEdits:{add:[],remove:[]}};}
+function newPin(){return {name:"",frame:"",notes:"",composition:"",details:normalizedDetails(),parts:[],x:0.5,y:0.5,angle:0,placementMode:"free",wallLock:null};}
+function newSash(type){return {kind:"sash",sashType:type||"normal",w:"0",h:"0",panels:"2짝",primary:"right",smallW:"0",smallSide:"left",addon:null};}
+function newMullion(){return {kind:"mullion",spec:MULLION_SPECS[0],count:1,stackDirection:"outside-in",layers:[{spec:MULLION_SPECS[0],count:1}]};}
+function newEntry(){return {kind:"entry",w:"900",h:"2100",drawInDrawing:false};}
+function requiresFrame(p){return !!(p&&p.parts&&p.parts.some(function(t){return t.kind==="sash"||t.kind==="turn";}));}
+
+// ---- 로컬 저장(이 기기 임시 작업본) ----
+var LS_STATE="yk-simple-state-v1", LS_IDENTITY="yk-simple-identity-v1";
+function saveDraftLocal(){try{localStorage.setItem(LS_STATE, JSON.stringify(state));}catch(e){}}
+function loadDraftLocal(){try{var v=localStorage.getItem(LS_STATE);return v?JSON.parse(v):null;}catch(e){return null;}}
+function saveIdentityLocal(){try{localStorage.setItem(LS_IDENTITY, JSON.stringify(identity));}catch(e){}}
+function loadIdentityLocal(){try{var v=localStorage.getItem(LS_IDENTITY);return v?JSON.parse(v):null;}catch(e){return null;}}
+
+// ---- 상태 ----
+var state=newState();
+var identity={phone:"",pin:""};
+
+// ---- 화면 전환 ----
+var screen="identity"; // identity | main
+function render(){
+  if(screen==="identity") renderIdentityScreen();
+  else renderMainScreen();
+}
+
+function el(tag,cls,html){var e=document.createElement(tag);if(cls)e.className=cls;if(html!==undefined)e.innerHTML=html;return e;}
+
+function digitsOnly(v,max){return String(v||"").replace(/[^0-9]/g,"").slice(0,max||30);}
+
+// ---- 화면 1: 전화번호+확인번호 ----
+function renderIdentityScreen(){
+  $("whoLabel").textContent="";
+  var app=$("app");app.innerHTML="";
+  var card=el("div","card");
+  card.appendChild(el("h3","","현장 실측 시작"));
+  card.appendChild(el("div","hint","전화번호와 4자리 확인번호로 저장·불러오기를 합니다. 회원가입은 필요 없습니다 — 번호는 나중에 이 실측을 다시 열어볼 때 씁니다."));
+
+  var f1=el("div","field");
+  f1.appendChild(el("label","","전화번호"));
+  var phoneInput=document.createElement("input");phoneInput.type="tel";phoneInput.placeholder="01012345678";phoneInput.value=identity.phone;
+  phoneInput.addEventListener("input",function(){phoneInput.value=digitsOnly(phoneInput.value,11);});
+  f1.appendChild(phoneInput);
+  card.appendChild(f1);
+
+  var f2=el("div","field");
+  f2.appendChild(el("label","","확인번호 (4자리, 본인이 정함 — 택배 조회처럼 기억하기 쉬운 걸로)"));
+  var pinInput=document.createElement("input");pinInput.type="tel";pinInput.placeholder="0000";pinInput.value=identity.pin;
+  pinInput.addEventListener("input",function(){pinInput.value=digitsOnly(pinInput.value,4);});
+  f2.appendChild(pinInput);
+  card.appendChild(f2);
+
+  var row=el("div","row");
+  var startBtn=document.createElement("button");startBtn.className="primary";startBtn.textContent="새 현장 시작";
+  startBtn.addEventListener("click",function(){
+    if(!phoneInput.value||pinInput.value.length!==4){toast("전화번호와 4자리 확인번호를 입력해주세요");return;}
+    identity={phone:phoneInput.value,pin:pinInput.value};saveIdentityLocal();
+    state=newState();saveDraftLocal();
+    screen="main";render();
+  });
+  var loadBtn=document.createElement("button");loadBtn.textContent="이전 저장 불러오기";
+  loadBtn.addEventListener("click",function(){
+    if(!phoneInput.value||pinInput.value.length!==4){toast("전화번호와 4자리 확인번호를 입력해주세요");return;}
+    identity={phone:phoneInput.value,pin:pinInput.value};
+    loadBtn.disabled=true;
+    callApi("load",{phone:identity.phone,pin:identity.pin}).then(function(res){
+      loadBtn.disabled=false;
+      if(res&&res.ok&&res.items&&res.items.length){
+        state=res.items[0].state||newState();
+        saveIdentityLocal();saveDraftLocal();
+        screen="main";render();
+        toast("불러왔습니다 — "+(res.items[0].siteName||""));
+      }else{
+        toast((res&&res.error)||"일치하는 저장 내용이 없습니다");
+      }
+    }).catch(function(e){
+      loadBtn.disabled=false;
+      toast(e.message==="NO_URL"?"아직 서버가 설정되지 않았습니다 — 이 기기에서 새로 시작해주세요":"불러오기 실패: "+(e.message||e));
+    });
+  });
+  row.appendChild(startBtn);row.appendChild(loadBtn);
+  card.appendChild(row);
+  app.appendChild(card);
+}
+
+// ---- 화면 2: 현장명 + 번호 목록 ----
+function renderMainScreen(){
+  $("whoLabel").textContent=identity.phone?("연락처 "+identity.phone):"";
+  var app=$("app");app.innerHTML="";
+
+  var siteCard=el("div","card");
+  siteCard.appendChild(el("label","","현장명 / 주소 (선택)"));
+  var siteInput=document.createElement("input");siteInput.type="text";siteInput.placeholder="예: 강남 일원동 101동 202호";siteInput.value=state.site||"";
+  siteInput.addEventListener("input",function(){state.site=siteInput.value;saveDraftLocal();});
+  siteCard.appendChild(siteInput);
+  app.appendChild(siteCard);
+
+  var listCard=el("div","card");
+  listCard.appendChild(el("h3","","번호별 실측"));
+  var list=el("div","pinlist");
+  if(!state.pins.length) list.appendChild(el("div","empty","아직 입력한 번호가 없습니다. 아래 버튼으로 추가하세요."));
+  state.pins.forEach(function(p,i){ list.appendChild(renderPinRow(p,i)); });
+  listCard.appendChild(list);
+
+  var addBtn=document.createElement("button");addBtn.className="primary";addBtn.style.width="100%";addBtn.textContent="+ "+(state.pins.length+1)+"번 추가";
+  addBtn.addEventListener("click",function(){
+    state.pins.push(newPin());saveDraftLocal();render();
+    openPinDetail(state.pins.length-1);
+  });
+  listCard.appendChild(addBtn);
+  app.appendChild(listCard);
+
+  var footer=document.createElement("footer");
+  var newSiteBtn=document.createElement("button");newSiteBtn.className="ghost";newSiteBtn.textContent="새 현장 시작";
+  newSiteBtn.addEventListener("click",function(){
+    if(!confirm("현재 입력을 지우고 새 현장을 시작할까요? (저장 안 한 내용은 사라집니다)"))return;
+    state=newState();saveDraftLocal();render();
+  });
+  var saveBtn=document.createElement("button");saveBtn.className="primary";saveBtn.textContent="저장";
+  saveBtn.addEventListener("click",function(){ doSave(saveBtn); });
+  footer.appendChild(newSiteBtn);footer.appendChild(saveBtn);
+  app.appendChild(footer);
+}
+
+function pinSummary(p){
+  if(!p.parts.length) return "구성 없음";
+  return p.parts.map(function(t){
+    if(t.kind==="mullion") return "통바 "+t.layers.map(function(l){return l.spec+(l.count>1?"×"+l.count:"");}).join("+");
+    if(t.kind==="entry") return "현관 900×2100";
+    if(t.kind==="turn") return "터닝도어 "+t.w+"×"+t.h;
+    return (SASH_TYPE_NAMES[t.sashType]||"창")+" "+t.w+"×"+t.h;
+  }).join(", ");
+}
+
+function renderPinRow(p,i){
+  var row=el("div","pinrow");
+  var top=el("div","top");
+  var label=el("b","",(i+1)+"번"+(p.name?(" · "+escapeHTML(p.name)):""));
+  top.appendChild(label);
+  var openBtn=document.createElement("button");openBtn.textContent="편집";openBtn.addEventListener("click",function(){openPinDetail(i);});
+  top.appendChild(openBtn);
+  row.appendChild(top);
+  row.appendChild(el("div","sub",escapeHTML(pinSummary(p))+(requiresFrame(p)?(" · 프레임 "+(p.frame||"미선택")):"")));
+  return row;
+}
+
+function escapeHTML(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+
+// ---- 저장 ----
+function doSave(btn){
+  if(!state.pins.length){toast("최소 1개 이상 번호를 입력해주세요");return;}
+  btn.disabled=true;
+  saveDraftLocal();
+  callApi("save",{phone:identity.phone,pin:identity.pin,siteName:state.site||"현장",state:state}).then(function(res){
+    btn.disabled=false;
+    if(res&&res.ok){toast("저장 완료 — 이 기기와 서버 양쪽에 저장됐습니다");}
+    else{toast("서버 저장 실패("+((res&&res.error)||"오류")+") — 이 기기에는 저장돼 있습니다");}
+  }).catch(function(e){
+    btn.disabled=false;
+    toast(e.message==="NO_URL"?"서버가 아직 설정되지 않아 이 기기에만 저장했습니다":"서버 저장 실패 — 이 기기에는 저장돼 있습니다");
+  });
+}
+
+// ---- 번호(핀) 상세: 이름/프레임 + 구성 목록 ----
+var currentPinIndex=-1;
+function openPinDetail(i){
+  currentPinIndex=i;
+  var p=state.pins[i];
+  var body=$("partdialogbody");body.innerHTML="";
+  $("partdialogtitle").textContent=(i+1)+"번 실측";
+
+  var nameField=el("div","field");
+  nameField.appendChild(el("label","","이름 (선택, 예: 거실 발코니)"));
+  var nameInput=document.createElement("input");nameInput.type="text";nameInput.value=p.name||"";
+  nameInput.addEventListener("input",function(){p.name=nameInput.value;saveDraftLocal();});
+  nameField.appendChild(nameInput);
+  body.appendChild(nameField);
+
+  var frameHost=el("div","field");
+  body.appendChild(frameHost);
+  function refreshFrame(){
+    frameHost.innerHTML="";
+    if(!requiresFrame(p))return;
+    frameHost.appendChild(el("label","","프레임 규격"));
+    frameHost.appendChild(segButtons(FRAME_TYPES.map(function(v){return [v,v];}),p.frame,function(v){p.frame=v;saveDraftLocal();}));
+  }
+  refreshFrame();
+
+  var partsHost=el("div","");
+  body.appendChild(partsHost);
+  function refreshParts(){
+    partsHost.innerHTML="";
+    var list=el("div","partlist");
+    if(!p.parts.length) list.appendChild(el("div","empty","아래 버튼으로 창/통바/현관을 추가하세요."));
+    p.parts.forEach(function(t,k){
+      var item=el("div","partitem");
+      var info=el("div","");
+      var label=t.kind==="mullion"?"통바":(t.kind==="entry"?"현관":(SASH_TYPE_NAMES[t.sashType]||"창"));
+      info.appendChild(el("b","",label));
+      info.appendChild(el("div","sub",partSubText(t)));
+      item.appendChild(info);
+      var btnRow=el("div","row");
+      if(t.kind!=="entry"){
+        var editBtn=document.createElement("button");editBtn.textContent="수정";
+        editBtn.addEventListener("click",function(){openPartEditor(p,t,k);});
+        btnRow.appendChild(editBtn);
+      }
+      var delBtn=document.createElement("button");delBtn.className="danger";delBtn.textContent="삭제";
+      delBtn.addEventListener("click",function(){
+        if(!confirm("이 구성을 삭제할까요?"))return;
+        p.parts.splice(k,1);saveDraftLocal();refreshParts();refreshFrame();
+      });
+      btnRow.appendChild(delBtn);
+      item.appendChild(btnRow);
+      list.appendChild(item);
+    });
+    partsHost.appendChild(list);
+    var addBar=el("div","addbar");
+    var addSash=document.createElement("button");addSash.textContent="+ 창";
+    addSash.addEventListener("click",function(){var t=newSash("normal");p.parts.push(t);saveDraftLocal();refreshParts();refreshFrame();openPartEditor(p,t,p.parts.length-1);});
+    var addMullion=document.createElement("button");addMullion.textContent="+ 통바";
+    addMullion.addEventListener("click",function(){var t=newMullion();p.parts.push(t);saveDraftLocal();refreshParts();openPartEditor(p,t,p.parts.length-1);});
+    var addEntry=document.createElement("button");addEntry.textContent="+ 현관";
+    addEntry.addEventListener("click",function(){p.parts.push(newEntry());saveDraftLocal();refreshParts();});
+    addBar.appendChild(addSash);addBar.appendChild(addMullion);addBar.appendChild(addEntry);
+    partsHost.appendChild(addBar);
+  }
+  refreshParts();
+
+  var delPinBtn=document.createElement("button");delPinBtn.className="danger";delPinBtn.style.width="100%";delPinBtn.style.marginTop="14px";delPinBtn.textContent="이 번호 전체 삭제";
+  delPinBtn.addEventListener("click",function(){
+    if(!confirm((i+1)+"번을 통째로 삭제할까요?"))return;
+    state.pins.splice(i,1);saveDraftLocal();$("partdialog").close();
+  });
+  body.appendChild(delPinBtn);
+
+  showDialog($("partdialog"));
+  $("partdialog").onclose=function(){ render(); };
+}
+
+function partSubText(t){
+  if(t.kind==="mullion") return t.layers.map(function(l){return l.spec+(l.count>1?"×"+l.count:"");}).join("+")+" · "+(t.stackDirection==="outside-in"?"실외→실내":"실내→실외");
+  if(t.kind==="entry") return "900×2100 (고정)";
+  var base=(t.w||0)+"×"+(t.h||0)+"mm";
+  if(t.kind==="turn") return base+" · "+(t.swing==="pull"?"당기기":"밀기")+" · 손잡이 "+(t.handle==="left"?"좌":"우");
+  if(t.sashType==="unbalanced") return base+" · 소형창 "+(t.smallW||0)+"mm("+(t.smallSide==="right"?"우":"좌")+")";
+  if(t.sashType==="normal") return base+" · "+t.panels+" · 주사용문 "+(PRIMARY_TYPES.filter(function(o){return o[0]===t.primary;})[0]||["","-"])[1];
+  return base;
+}
+
+// ---- 구성 세부 입력 다이얼로그(창/통바) ----
+function openPartEditor(p,t,k){
+  var body=$("partdialogbody");
+  $("partdialogtitle").textContent=(t.kind==="mullion"?"통바":"창")+" 세부입력";
+  body.innerHTML="";
+
+  if(t.kind==="mullion"){
+    var specField=el("div","field");
+    specField.appendChild(el("label","","규격"));
+    specField.appendChild(segButtons(MULLION_SPECS.map(function(v){return [v,v];}),t.layers[0].spec,function(v){t.layers[0].spec=v;t.spec=v;saveDraftLocal();}));
+    body.appendChild(specField);
+    var countField=el("div","field");
+    countField.appendChild(el("label","","수량"));
+    var countInput=document.createElement("input");countInput.type="number";countInput.min="1";countInput.value=t.layers[0].count;
+    countInput.addEventListener("input",function(){var v=parseInt(countInput.value,10)||1;t.layers[0].count=v;t.count=v;saveDraftLocal();});
+    countField.appendChild(countInput);
+    body.appendChild(countField);
+    var dirField=el("div","field");
+    dirField.appendChild(el("label","","적층 방향"));
+    dirField.appendChild(segButtons([["outside-in","실외 → 실내"],["inside-out","실내 → 실외"]],t.stackDirection,function(v){t.stackDirection=v;saveDraftLocal();}));
+    body.appendChild(dirField);
+  } else {
+    var typeField=el("div","field");
+    typeField.appendChild(el("label","","종류"));
+    typeField.appendChild(segButtons(SASH_TYPES,t.sashType,function(v){t.sashType=v;saveDraftLocal();rebuild();}));
+    body.appendChild(typeField);
+
+    var dimsRow=el("div","row field");
+    var wf=el("div","");wf.appendChild(el("label","","폭(mm)"));
+    var wi=document.createElement("input");wi.type="number";wi.value=t.w;wi.addEventListener("input",function(){t.w=wi.value;saveDraftLocal();});
+    wf.appendChild(wi);
+    var hf=el("div","");hf.appendChild(el("label","","높이(mm)"));
+    var hi=document.createElement("input");hi.type="number";hi.value=t.h;hi.addEventListener("input",function(){t.h=hi.value;saveDraftLocal();});
+    hf.appendChild(hi);
+    dimsRow.appendChild(wf);dimsRow.appendChild(hf);
+    body.appendChild(dimsRow);
+
+    var extraHost=el("div","");
+    body.appendChild(extraHost);
+    function rebuildExtra(){
+      extraHost.innerHTML="";
+      if(t.sashType==="normal"){
+        var panelField=el("div","field");
+        panelField.appendChild(el("label","","짝수"));
+        panelField.appendChild(segButtons(PANEL_TYPES.map(function(v){return [v,v];}),t.panels,function(v){t.panels=v;saveDraftLocal();}));
+        extraHost.appendChild(panelField);
+        var primField=el("div","field");
+        primField.appendChild(el("label","","주 사용문"));
+        primField.appendChild(segButtons(PRIMARY_TYPES,t.primary,function(v){t.primary=v;saveDraftLocal();}));
+        extraHost.appendChild(primField);
+      } else if(t.sashType==="unbalanced"){
+        var swf=el("div","field");
+        swf.appendChild(el("label","","소형창 폭(mm)"));
+        var swi=document.createElement("input");swi.type="number";swi.value=t.smallW;swi.addEventListener("input",function(){t.smallW=swi.value;saveDraftLocal();});
+        swf.appendChild(swi);
+        extraHost.appendChild(swf);
+        var ssf=el("div","field");
+        ssf.appendChild(el("label","","소형창 위치"));
+        ssf.appendChild(segButtons([["left","왼쪽"],["right","오른쪽"]],t.smallSide,function(v){t.smallSide=v;saveDraftLocal();}));
+        extraHost.appendChild(ssf);
+      } else if(t.sashType==="turn"){
+        var swingF=el("div","field");
+        swingF.appendChild(el("label","","여닫이 방향"));
+        swingF.appendChild(segButtons([["push","밀기"],["pull","당기기"]],t.swing,function(v){t.swing=v;saveDraftLocal();}));
+        extraHost.appendChild(swingF);
+        var handleF=el("div","field");
+        handleF.appendChild(el("label","","손잡이 위치"));
+        handleF.appendChild(segButtons([["left","왼쪽"],["right","오른쪽"]],t.handle,function(v){t.handle=v;saveDraftLocal();}));
+        extraHost.appendChild(handleF);
+      }
+    }
+    function rebuild(){ rebuildExtra(); }
+    rebuildExtra();
+  }
+
+  var doneBtn=document.createElement("button");doneBtn.className="primary";doneBtn.style.width="100%";doneBtn.style.marginTop="10px";doneBtn.textContent="완료";
+  doneBtn.addEventListener("click",function(){
+    saveDraftLocal();
+    // 구성 편집을 마치면 번호 상세 다이얼로그를 처음부터 다시 그려서(이름/프레임/
+    // 구성목록 전부) 방금 바뀐 내용을 정확히 반영한다 — DOM을 문자열로 백업/복원하면
+    // 이벤트 리스너가 끊긴 채로 남는 문제가 있어 이 방식으로 통일한다.
+    openPinDetail(currentPinIndex);
+  });
+  body.appendChild(doneBtn);
+}
+
+function segButtons(options,value,onChange){
+  var wrap=el("div","seg");
+  var buttons=[];
+  options.forEach(function(opt){
+    var v=Array.isArray(opt)?opt[0]:opt, label=Array.isArray(opt)?opt[1]:opt;
+    var b=document.createElement("button");b.type="button";b.textContent=label;
+    if(v===value)b.classList.add("sel");
+    b.addEventListener("click",function(){
+      buttons.forEach(function(bb){bb.classList.remove("sel");});
+      b.classList.add("sel");
+      onChange(v);
+    });
+    buttons.push(b);wrap.appendChild(b);
+  });
+  return wrap;
+}
+
+function showDialog(dlg){ if(dlg.open)return; if(typeof dlg.showModal==="function") dlg.showModal(); else dlg.setAttribute("open",""); }
+
+$("partclose").addEventListener("click",function(){ $("partdialog").close(); });
+
+// ---- 시작 ----
+(function boot(){
+  var savedIdentity=loadIdentityLocal();
+  var savedState=loadDraftLocal();
+  if(savedIdentity&&savedIdentity.phone&&savedState){
+    identity=savedIdentity;state=savedState;screen="main";
+  } else {
+    screen="identity";
+  }
+  render();
+})();
+
+})();
+</script>
+</body>
+</html>
