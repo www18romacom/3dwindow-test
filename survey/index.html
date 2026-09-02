@@ -196,7 +196,8 @@
     #drop.hasimg { cursor:grab; scrollbar-width:none; }
     #drop.hasimg::-webkit-scrollbar { display:none; }
   }
-  #drawingpreview { width:min(94vw,1100px); max-width:94vw; display:flex; flex-direction:column; overflow:hidden; }
+  #drawingpreview { width:min(94vw,1100px); max-width:94vw; }
+  #drawingpreview[open] { display:flex; flex-direction:column; overflow:hidden; }
   #drawingpreview .dialog-head { flex:0 0 auto; }
   .preview-zoom-wrap { overflow:auto; width:100%; max-height:75vh; background:var(--panel-2); touch-action:none; cursor:grab; }
   #drawingpreview .preview-zoom-wrap { flex:1 1 auto; min-height:0; }
