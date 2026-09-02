@@ -653,7 +653,7 @@
   // 이 값과 simple.html의 SAVE_URL에 똑같이 붙여넣는다(간편입력 설정 다이얼로그와
   // simple.html이 같은 엔드포인트를 함께 쓴다). 비어있으면 설정 다이얼로그가
   // 안내 메시지만 보여주고 동작하지 않는다.
-  var SIMPLE_ADMIN_URL="";
+  var SIMPLE_ADMIN_URL="https://script.google.com/macros/s/AKfycbydAxNYz-DS0zlU1Jfe_WpnlRyqKeKcRLBw9rhjkbjfJGfmhdW0_j45XCAQZdZS_uBFFg/exec";
   function ensureDriveToken(forceConsent){
     return new Promise(function(resolve,reject){
       if(driveAccessToken&&!forceConsent){resolve(driveAccessToken);return;}
