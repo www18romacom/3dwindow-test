@@ -196,8 +196,10 @@
     #drop.hasimg { cursor:grab; scrollbar-width:none; }
     #drop.hasimg::-webkit-scrollbar { display:none; }
   }
-  #drawingpreview { width:min(94vw,1100px); max-width:94vw; }
+  #drawingpreview { width:min(94vw,1100px); max-width:94vw; display:flex; flex-direction:column; overflow:hidden; }
+  #drawingpreview .dialog-head { flex:0 0 auto; }
   .preview-zoom-wrap { overflow:auto; width:100%; max-height:75vh; background:var(--panel-2); touch-action:none; cursor:grab; }
+  #drawingpreview .preview-zoom-wrap { flex:1 1 auto; min-height:0; }
   #drawingpreviewcontent { transform-origin:0 0; }
   @media (max-width:600px) {
     #drawingpreview .dialog-head { flex-wrap:wrap; }
@@ -807,11 +809,11 @@
     function end(e){if(!tracking||e.pointerId!==activeId)return;tracking=false;activeId=null;if(engaged){el.classList.remove("panning");try{el.releasePointerCapture(e.pointerId);}catch(_){ }}engaged=false;setTimeout(function(){panMoved=false;},0);}
     el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
   }
-  function installPlanPinch(el) {
+  function installPinchZoom(el,opts) {
     var points=new Map(),startDistance=0,startZoom=1,startScrollLeft=0,startScrollTop=0,centerX=0,centerY=0;
     function distance(){var a=Array.from(points.values());return a.length<2?0:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);}
-    el.addEventListener("pointerdown",function(e){if(e.pointerType!=="touch")return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(points.size===2){var a=Array.from(points.values()),r=el.getBoundingClientRect();pinching=true;panMoved=true;startDistance=distance();startZoom=planZoom;startScrollLeft=el.scrollLeft;startScrollTop=el.scrollTop;centerX=(a[0].x+a[1].x)/2-r.left;centerY=(a[0].y+a[1].y)/2-r.top;}});
-    el.addEventListener("pointermove",function(e){if(!points.has(e.pointerId))return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(!pinching||points.size<2)return;e.preventDefault();var next=Math.max(1,Math.min(3,startZoom*distance()/Math.max(1,startDistance))),ratio=next/startZoom;planZoom=Math.round(next*100)/100;applyPlanZoom();el.scrollLeft=(startScrollLeft+centerX)*ratio-centerX;el.scrollTop=(startScrollTop+centerY)*ratio-centerY;});
+    el.addEventListener("pointerdown",function(e){if(e.pointerType!=="touch")return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(points.size===2){var a=Array.from(points.values()),r=el.getBoundingClientRect();pinching=true;panMoved=true;startDistance=distance();startZoom=opts.getZoom();startScrollLeft=el.scrollLeft;startScrollTop=el.scrollTop;centerX=(a[0].x+a[1].x)/2-r.left;centerY=(a[0].y+a[1].y)/2-r.top;}});
+    el.addEventListener("pointermove",function(e){if(!points.has(e.pointerId))return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});if(!pinching||points.size<2)return;e.preventDefault();var next=Math.max(opts.min,Math.min(opts.max,startZoom*distance()/Math.max(1,startDistance))),ratio=next/startZoom;opts.setZoom(Math.round(next*100)/100);opts.apply();el.scrollLeft=(startScrollLeft+centerX)*ratio-centerX;el.scrollTop=(startScrollTop+centerY)*ratio-centerY;});
     function end(e){points.delete(e.pointerId);if(points.size<2&&pinching){pinching=false;setTimeout(function(){panMoved=false;},0);}}
     el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
   }
@@ -1291,8 +1293,10 @@
   var drop = $("drop");
   $("plan").addEventListener("dragstart",function(e){e.preventDefault();});
   installPanScroller(drop,function(){return planZoom>1;});
-  installPlanPinch(drop);
-  installPanScroller($("drawingpreview").querySelector(".preview-zoom-wrap"),function(){return true;});
+  installPinchZoom(drop,{getZoom:function(){return planZoom;},setZoom:function(v){planZoom=v;},apply:applyPlanZoom,min:1,max:3});
+  var previewViewport=$("drawingpreview").querySelector(".preview-zoom-wrap");
+  installPanScroller(previewViewport,function(){return true;});
+  installPinchZoom(previewViewport,{getZoom:function(){return previewZoom;},setZoom:function(v){previewZoom=v;},apply:applyPreviewZoom,min:1,max:4});
   ["dragenter", "dragover"].forEach(function (ev) {
     drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
   });
