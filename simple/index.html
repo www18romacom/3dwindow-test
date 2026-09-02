@@ -28,15 +28,20 @@ button.ghost{background:transparent;}
 .seg button{flex:1;min-width:76px;}
 .seg button.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
 .pinlist{display:flex;flex-direction:column;gap:10px;margin:10px 0;}
-.pinrow{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;}
+.pinrow{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;align-items:center;gap:8px;}
+.pinrow.dragging{opacity:.55;}
+.pinrow .body{flex:1;min-width:0;}
 .pinrow .top{display:flex;justify-content:space-between;align-items:center;}
 .pinrow b{font-size:15px}
 .pinrow .sub{font-size:12px;color:var(--ink2);margin-top:4px;}
+.draghandle{touch-action:none;cursor:grab;color:var(--ink2);font-size:20px;line-height:1;padding:6px 4px;user-select:none;flex:0 0 auto;}
+.draghandle:active{cursor:grabbing;}
 .partchip{display:inline-block;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;margin:2px 4px 0 0;}
 .addbar{display:flex;gap:8px;margin-top:8px;}
 .addbar button{flex:1;font-size:13px;}
 .partlist{display:flex;flex-direction:column;gap:8px;margin:10px 0;}
-.partitem{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+.partitem{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+.partitem.dragging{opacity:.55;}
 .partitem .sub{font-size:12px;color:var(--ink2)}
 .partitem button{min-height:36px;padding:0 10px;font-size:13px;}
 footer{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:8px;max-width:520px;margin:0 auto;box-sizing:border-box;}
@@ -206,6 +211,7 @@ function renderMainScreen(){
   if(!state.pins.length) list.appendChild(el("div","empty","아직 입력한 번호가 없습니다. 아래 버튼으로 추가하세요."));
   state.pins.forEach(function(p,i){ list.appendChild(renderPinRow(p,i)); });
   listCard.appendChild(list);
+  makeDraggableList(list,state.pins,function(){saveDraftLocal();render();});
 
   var addBtn=document.createElement("button");addBtn.className="primary";addBtn.style.width="100%";addBtn.textContent="+ "+(state.pins.length+1)+"번 추가";
   addBtn.addEventListener("click",function(){
@@ -357,13 +363,16 @@ function pinSummary(p){
 
 function renderPinRow(p,i){
   var row=el("div","pinrow");
+  row.appendChild(dragHandle());
+  var bodyEl=el("div","body");
   var top=el("div","top");
   var label=el("b","",(i+1)+"번"+(p.name?(" · "+escapeHTML(p.name)):""));
   top.appendChild(label);
   var openBtn=document.createElement("button");openBtn.textContent="편집";openBtn.addEventListener("click",function(){openPinDetail(i);});
   top.appendChild(openBtn);
-  row.appendChild(top);
-  row.appendChild(el("div","sub",escapeHTML(pinSummary(p))+(requiresFrame(p)?(" · 프레임 "+(p.frame||"미선택")):"")));
+  bodyEl.appendChild(top);
+  bodyEl.appendChild(el("div","sub",escapeHTML(pinSummary(p))+(requiresFrame(p)?(" · 프레임 "+(p.frame||"미선택")):"")));
+  row.appendChild(bodyEl);
   return row;
 }
 
@@ -424,7 +433,8 @@ function openPinDetail(i){
     if(!p.parts.length) list.appendChild(el("div","empty","아래 버튼으로 창/통바/현관을 추가하세요."));
     p.parts.forEach(function(t,k){
       var item=el("div","partitem");
-      var info=el("div","");
+      item.appendChild(dragHandle());
+      var info=el("div","");info.style.flex="1";info.style.minWidth="0";
       var label=t.kind==="mullion"?"통바":(t.kind==="entry"?"현관":(SASH_TYPE_NAMES[t.sashType]||"창"));
       info.appendChild(el("b","",label));
       info.appendChild(el("div","sub",partSubText(t)));
@@ -445,6 +455,7 @@ function openPinDetail(i){
       list.appendChild(item);
     });
     partsHost.appendChild(list);
+    makeDraggableList(list,p.parts,function(){saveDraftLocal();refreshParts();refreshFrame();});
     var addBar=el("div","addbar");
     var addSash=document.createElement("button");addSash.textContent="+ 창";
     addSash.addEventListener("click",function(){var t=newSash("normal");p.parts.push(t);saveDraftLocal();refreshParts();refreshFrame();openPartEditor(p,t,p.parts.length-1);});
@@ -480,7 +491,14 @@ function openPinDetail(i){
   detailsCard.appendChild(checksField);
   body.appendChild(detailsCard);
 
-  var delPinBtn=document.createElement("button");delPinBtn.className="danger";delPinBtn.style.width="100%";delPinBtn.style.marginTop="14px";delPinBtn.textContent="이 번호 전체 삭제";
+  // 입력값은 이미 매번 자동저장되지만, "×"만 있으면 저장됐는지 알기 어렵다는
+  // 지적으로 명확한 완료 버튼을 따로 둔다 — 동작은 닫기와 같다(자동저장이라
+  // 별도로 커밋할 데이터가 없음).
+  var doneBtn=document.createElement("button");doneBtn.className="primary";doneBtn.style.width="100%";doneBtn.style.marginTop="14px";doneBtn.textContent="완료";
+  doneBtn.addEventListener("click",function(){ $("partdialog").close(); });
+  body.appendChild(doneBtn);
+
+  var delPinBtn=document.createElement("button");delPinBtn.className="danger";delPinBtn.style.width="100%";delPinBtn.style.marginTop="10px";delPinBtn.textContent="이 번호 전체 삭제";
   delPinBtn.addEventListener("click",function(){
     if(!confirm((i+1)+"번을 통째로 삭제할까요?"))return;
     state.pins.splice(i,1);saveDraftLocal();$("partdialog").close();
@@ -612,6 +630,52 @@ function checkField(checked,labelText,onChange){
   wrap.appendChild(cb);
   wrap.appendChild(document.createTextNode(labelText));
   return wrap;
+}
+
+function dragHandle(){
+  var h=document.createElement("span");h.className="draghandle";h.textContent="⠿";
+  return h;
+}
+
+// 목록 재정렬. 각 행의 드래그 손잡이(.draghandle)를 눌러야 시작된다 — 손잡이
+// 없이 행 아무 곳이나 길게 눌러 드래그하는 방식은 실제 터치기기에서 브라우저
+// 세로 스크롤 제스처에 뺏겨 잘 안 먹히는 문제가 있어(관리자 화면에서 이미
+// 겪은 문제) 전용 손잡이 방식으로 통일한다. rebuild가 반환한 rows(현재
+// container의 자식 목록)를 기준으로, 매번 렌더링 직후 새로 호출해서 최신
+// DOM/배열에 연결한다.
+function makeDraggableList(container,array,onReordered){
+  Array.prototype.slice.call(container.children).forEach(function(row,startIndex){
+    var handle=row.querySelector(".draghandle");
+    if(!handle)return;
+    handle.addEventListener("pointerdown",function(e){
+      e.preventDefault();
+      row.classList.add("dragging");
+      function move(ev){
+        ev.preventDefault();
+        var cur=Array.prototype.slice.call(container.children);
+        var curIdx=cur.indexOf(row), y=ev.clientY;
+        for(var i=0;i<cur.length;i++){
+          if(cur[i]===row)continue;
+          var r=cur[i].getBoundingClientRect(), mid=r.top+r.height/2;
+          if(y<mid&&curIdx>i){container.insertBefore(row,cur[i]);break;}
+          if(y>mid&&curIdx<i){container.insertBefore(row,cur[i].nextSibling);break;}
+        }
+      }
+      function up(){
+        window.removeEventListener("pointermove",move);
+        window.removeEventListener("pointerup",up);
+        row.classList.remove("dragging");
+        var finalIdx=Array.prototype.slice.call(container.children).indexOf(row);
+        if(finalIdx!==startIndex){
+          var item=array.splice(startIndex,1)[0];
+          array.splice(finalIdx,0,item);
+          onReordered();
+        }
+      }
+      window.addEventListener("pointermove",move);
+      window.addEventListener("pointerup",up);
+    });
+  });
 }
 
 function showDialog(dlg){ if(dlg.open)return; if(typeof dlg.showModal==="function") dlg.showModal(); else dlg.setAttribute("open",""); }
