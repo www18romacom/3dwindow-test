@@ -289,7 +289,7 @@ function partSize(t,p){
   if(t.kind==="mullion"){
     var layers=mullionLayersFor(t), mw=Math.max.apply(null,layers.map(function(v){return v.face;}));
     var specLabel=t.layers.map(function(r){return r.spec+(r.count>1?" "+r.count+"개":"");}).join("+");
-    return {kind:"mullion",w:mw,h:100,layers:layers,stackDirection:t.stackDirection,fixedW:mw<=40?12:28,label:"통바 "+specLabel};
+    return {kind:"mullion",w:mw,h:100,layers:layers,rows:t.layers,stackDirection:t.stackDirection,fixedW:mw<=40?12:28,label:"통바 "+specLabel};
   }
   var dimsMissing=t.kind!=="entry"&&(!parseFloat(t.w)||!parseFloat(t.h));
   var pw=parseFloat(t.w)||(t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
@@ -379,8 +379,13 @@ function drawSinglePanel(p){
       c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 17px "Malgun Gothic"';
       primaryPanels.forEach(function(pi){var before=markRatios.slice(0,pi).reduce(function(a,b){return a+b;},0);c.fillText("#",dx+sw*(before+markRatios[pi]/2)/markTotal,sy+sh/2);});
     }
-    c.fillStyle=s.dimsMissing?"#c0392b":"#111";c.textAlign="center";c.textBaseline="bottom";c.font=(s.kind==="mullion"?'10px':'12px')+' "Malgun Gothic"';
-    c.fillText(s.label,dx+sw/2,sy-4);
+    // 통바 규격 글자는 막대 폭(12~28px)보다 훨씬 넓어서 옆 라벨과 겹쳐
+    // 지저분해지므로(사용자 지적), 정면도에는 창 치수만 표시하고 통바
+    // 규격·개수는 아래 평면도 좌우 목록으로만 보여준다.
+    if(s.kind!=="mullion"){
+      c.fillStyle=s.dimsMissing?"#c0392b":"#111";c.textAlign="center";c.textBaseline="bottom";c.font='12px "Malgun Gothic"';
+      c.fillText(s.label,dx+sw/2,sy-4);
+    }
     dx+=sw;
   });
 
@@ -391,6 +396,8 @@ function drawSinglePanel(p){
   c.fillText("평면도(위에서 봄) · 실외측 ↑",pad,topY+8);
   var geometryW=renderedW*0.9, geometryX=(panelW-geometryW)/2, framePlanY=topY+34;
   var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm, plotX=geometryX;
+  var leftTotals={},rightTotals={},specOrder=[];
+  function addTotals(target,rows){(rows||[]).forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
   sizes.forEach(function(s){
     var gw=s.kind==="mullion"?Math.max(3,s.w*depthScale):Math.max(3,s.w*planScale);
     if(s.kind==="mullion"){
@@ -402,6 +409,10 @@ function drawSinglePanel(p){
         c.strokeStyle="#14748a";c.lineWidth=1;c.strokeRect(plotX,layerY,gw,lh);
         if(s.stackDirection!=="inside-out")layerAt+=layer.depth;
       });
+      // 통바 규격·개수는 정면도가 아니라 평면도 좌우 목록에서만 보여준다
+      // (사용자 요청) — 이 통바가 패널 가운데 기준 왼쪽/오른쪽 어디 있는지로
+      // 나눠 담는다. 관리자 화면과 동일한 규칙.
+      addTotals((plotX+gw/2)<panelW/2?leftTotals:rightTotals,s.rows);
     } else {
       var fpDepth=drawDepth*depthScale;
       c.fillStyle="#f6f6f6";c.fillRect(plotX,framePlanY,gw,fpDepth);
@@ -409,6 +420,16 @@ function drawSinglePanel(p){
     }
     plotX+=gw;
   });
+  // 규격 옆에 실제 face:depth 비율 그대로의 작은 도형을 붙여 단면 비율도
+  // 같이 보여준다(관리자 화면과 동일).
+  function mullionIconWH(spec){var m=String(spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=m?Number(m[1]):100,depth=m?Number(m[2]):100,longer=Math.max(face,depth)||1,maxDim=12;return {w:Math.max(3,Math.round(maxDim*face/longer)),h:Math.max(3,Math.round(maxDim*depth/longer))};}
+  function drawMullionIcon(cx,cy,spec){var icon=mullionIconWH(spec);c.fillStyle="#ccecf2";c.strokeStyle="#14748a";c.lineWidth=1;c.fillRect(cx-icon.w/2,cy-icon.h/2,icon.w,icon.h);c.strokeRect(cx-icon.w/2,cy-icon.h/2,icon.w,icon.h);}
+  var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+leftTotals[spec]+"개"};});
+  var rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+rightTotals[spec]+"개"};});
+  c.font='11px "Malgun Gothic"';c.textBaseline="middle";
+  var specRowH=15,iconSlot=14,specRowY=framePlanY+10;
+  leftRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(pad+iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="left";c.fillText(item.text,pad+iconSlot+2,cy);});
+  rightRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(panelW-pad-iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="right";c.fillText(item.text,panelW-pad-iconSlot-2,cy);});
 
   // 하단: 프레임/부가옵션 텍스트
   var footY=topY+34+60+stackExtra+10;
