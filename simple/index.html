@@ -90,6 +90,9 @@ function toast(msg){var t=$("toast");t.textContent=msg;t.classList.add("show");c
 // ---- 저장 서버(Apps Script) 설정 ----
 // 배포 후 이 값에 새 Apps Script 웹앱의 /exec 주소를 넣는다. 비어있으면
 // 이 기기 로컬 저장만 동작한다(모바일 실사용 전 반드시 채워야 함).
+// 같은 주소를 실측입력.html(관리자 화면)의 SIMPLE_ADMIN_URL에도 똑같이
+// 넣어야 "간편입력 설정"에서 허용 전화번호를 등록할 수 있다 — 등록 전까지는
+// 저장/조회가 전부 거부된다(simple_webapp_Code.gs 상단 주석 참고).
 var SAVE_URL = "";
 
 function callApi(action, payload){

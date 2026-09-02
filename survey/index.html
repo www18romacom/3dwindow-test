@@ -531,6 +531,7 @@
         <button type="button" id="previewdrawing">실측도면 미리보기</button>
         <button type="button" id="printdrawing">실측도면 출력</button>
         <button type="button" id="generate3d">3D 생성 (관리자 전용)</button>
+        <button type="button" id="opensimplesettings">간편입력 설정 (관리자 전용)</button>
       </div>
     </div>
     <div class="status">
@@ -545,6 +546,23 @@
   <div class="dialog-head"><b>3D 생성 결과 <span class="admin-badge">관리자 전용</span></b><button type="button" class="x" id="close3d">×</button></div>
   <div class="dialog-body"><div id="project3d"><div class="mini3d-empty">3D 생성 버튼을 누르면 결과가 표시됩니다</div></div>
     <div class="btnrow share3d-line" style="margin-top:10px"><button type="button" id="share3d">외부 공유 링크 만들기 (오늘 하루만 유효)</button><span id="share3dresult" class="cap2"></span></div>
+  </div>
+</dialog>
+
+<dialog class="admin-result" id="simplesettings">
+  <div class="dialog-head"><b>간편입력 설정 <span class="admin-badge">관리자 전용</span></b><button type="button" class="x" id="closesimplesettings">×</button></div>
+  <div class="dialog-body">
+    <p class="cap2">모바일 간편입력(simple.html)에 접속·저장·조회할 수 있는 전화번호를
+      직접 등록합니다. 목록에 없는 번호는 저장·조회가 모두 거부됩니다.</p>
+    <div id="simplephonelist"></div>
+    <div class="btnrow" style="margin-top:10px">
+      <input type="tel" id="simplephoneadd" placeholder="01012345678" autocomplete="off" style="flex:1">
+      <button type="button" id="simplephoneaddbtn">+ 추가</button>
+    </div>
+    <div class="btnrow" style="margin-top:14px">
+      <button type="button" class="primary" id="simplephonesave">저장</button>
+      <span id="simplephonestatus" class="cap2"></span>
+    </div>
   </div>
 </dialog>
 
@@ -626,8 +644,16 @@
   // 직접 fetch()로 호출한다(Apps Script 브릿지 팝업/iframe 방식 완전히 대체).
   var GOOGLE_CLIENT_ID="737327898192-or5i1ofmvef50hga9mrj58v8cjvaopjp.apps.googleusercontent.com",
       DRIVE_ROOT_FOLDER_ID="11QxmRfYpim3rhtDSI1mFTsmTLeLKpyBu",
-      DRIVE_SCOPE="https://www.googleapis.com/auth/drive",
+      // userinfo.email은 "간편입력 설정"에서 이 계정이 관리자 도메인 소속인지
+      // simple_webapp_Code.gs 쪽에서 검증(hd 클레임)할 때만 쓰인다 — Drive 기능
+      // 자체는 기존과 동일하게 동작.
+      DRIVE_SCOPE="https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email",
       driveAccessToken=null,driveTokenClient=null;
+  // 간편입력(simple.html)과 완전히 별개인 Apps Script 웹앱 /exec 주소 — 배포 후
+  // 이 값과 simple.html의 SAVE_URL에 똑같이 붙여넣는다(간편입력 설정 다이얼로그와
+  // simple.html이 같은 엔드포인트를 함께 쓴다). 비어있으면 설정 다이얼로그가
+  // 안내 메시지만 보여주고 동작하지 않는다.
+  var SIMPLE_ADMIN_URL="";
   function ensureDriveToken(forceConsent){
     return new Promise(function(resolve,reject){
       if(driveAccessToken&&!forceConsent){resolve(driveAccessToken);return;}
@@ -3129,6 +3155,7 @@
   var IS_ADMIN = location.protocol === "file:" || window.YK_CURRENT_USER_ROLE === "admin" ||
     new URLSearchParams(location.search).get("testAdmin") === "1";
   $("generate3d").hidden = !IS_ADMIN;
+  $("opensimplesettings").hidden = !IS_ADMIN;
   function showDialogSafe(dialog) {
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
@@ -3171,6 +3198,60 @@
   $("close3d").addEventListener("click", function () {
     if (activeProject3D) { activeProject3D.cancel(); activeProject3D = null; }
     $("adminresult").close();
+  });
+
+  // ---- 간편입력(simple.html) 설정: 허용 전화번호 관리 ----
+  // simple_webapp_Code.gs의 admin_listPhones/admin_setPhones를 호출한다. 인증은
+  // 이미 확보된 Drive access token(email 스코프 포함)을 그대로 실어 보내고,
+  // 서버가 hd 클레임으로 관리자 도메인인지 검증한다 — 새 로그인 절차 없음.
+  var simplePhones = [];
+  function renderSimplePhoneList() {
+    var host = $("simplephonelist");
+    if (!simplePhones.length) { host.innerHTML = '<div class="cap2">등록된 번호가 없습니다 — 등록 전까지는 간편입력 저장·조회가 전부 차단됩니다.</div>'; return; }
+    host.innerHTML = "";
+    simplePhones.forEach(function (p, i) {
+      var row = document.createElement("div"); row.className = "btnrow"; row.style.marginTop = "6px";
+      var span = document.createElement("span"); span.textContent = p; span.style.flex = "1";
+      var del = document.createElement("button"); del.type = "button"; del.textContent = "삭제";
+      del.addEventListener("click", function () { simplePhones.splice(i, 1); renderSimplePhoneList(); });
+      row.appendChild(span); row.appendChild(del); host.appendChild(row);
+    });
+  }
+  async function simpleAdminApi(action, payload) {
+    if (!SIMPLE_ADMIN_URL) throw new Error("SIMPLE_ADMIN_URL이 아직 설정되지 않았습니다(코드 상단 주석 참고)");
+    var token = await ensureDriveToken(false);
+    var body = Object.assign({ action: action, accessToken: token }, payload || {});
+    var res = await fetch(SIMPLE_ADMIN_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
+    return res.json();
+  }
+  $("opensimplesettings").addEventListener("click", async function () {
+    if (!IS_ADMIN) return;
+    showDialogSafe($("simplesettings"));
+    $("simplephonestatus").textContent = "불러오는 중…";
+    try {
+      var res = await simpleAdminApi("admin_listPhones");
+      if (res && res.ok) { simplePhones = res.phones || []; renderSimplePhoneList(); $("simplephonestatus").textContent = ""; }
+      else { $("simplephonestatus").textContent = (res && res.error) || "불러오기 실패"; }
+    } catch (err) { $("simplephonestatus").textContent = String(err.message || err); }
+  });
+  $("closesimplesettings").addEventListener("click", function () { $("simplesettings").close(); });
+  $("simplephoneaddbtn").addEventListener("click", function () {
+    var v = $("simplephoneadd").value.replace(/[^0-9]/g, "");
+    if (!v) { toast("전화번호를 입력해주세요"); return; }
+    if (simplePhones.indexOf(v) === -1) simplePhones.push(v);
+    $("simplephoneadd").value = "";
+    renderSimplePhoneList();
+  });
+  $("simplephonesave").addEventListener("click", async function () {
+    var button = this, oldText = button.textContent;
+    button.disabled = true; button.textContent = "저장 중…";
+    $("simplephonestatus").textContent = "";
+    try {
+      var res = await simpleAdminApi("admin_setPhones", { phones: simplePhones });
+      if (res && res.ok) { simplePhones = res.phones || []; renderSimplePhoneList(); $("simplephonestatus").textContent = "저장 완료"; }
+      else { $("simplephonestatus").textContent = (res && res.error) || "저장 실패"; }
+    } catch (err) { $("simplephonestatus").textContent = String(err.message || err); }
+    finally { button.disabled = false; button.textContent = oldText; }
   });
   $("share3d").addEventListener("click", async function () {
     if (!activeProject3D || !activeProject3D.exportShareData) { toast("먼저 3D를 생성해주세요"); return; }
