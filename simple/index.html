@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>창호 실측 간편입력</title>
 <style>
 :root{--bg:#0f1115;--panel:#1a1d24;--panel2:#232733;--ink:#eef1f5;--ink2:#9aa3b2;--line:#2c313d;--accent:#3fb6e0;--accent-ink:#04202a;--danger:#e05a5a;}
@@ -256,147 +256,166 @@ function openPreview(){
     if(!p.parts.length){
       block.appendChild(el("div","empty","구성 없음"));
     } else {
-      var row=document.createElement("div");row.style.cssText="display:flex;flex-wrap:wrap;align-items:flex-end;";
-      var refH=pinHeightScale(p);
-      p.parts.forEach(function(t){ row.appendChild(drawPartThumb(t,refH)); });
-      block.appendChild(row);
+      var canvas=drawSinglePanel(p);
+      canvas.style.cssText="width:100%;height:auto;display:block;border-radius:6px;";
+      block.appendChild(canvas);
     }
-    var optText=[p.details.molding?("몰딩 "+p.details.molding):"",p.details.brick?("벽돌 "+p.details.brick):"",p.details.filling?"사춤":"",p.details.tile?"타일":"",p.details.drainHole===false?"물구멍 없음":"",p.details.screen===false?"방충망 없음":""].filter(Boolean).join(" · ");
-    if(optText) block.appendChild(el("div","sub",escapeHTML(optText)));
     body.appendChild(block);
   });
   showDialog($("previewdialog"));
 }
 
-// 관리자 화면의 buildDrawingCanvas() 전체를 옮기면 150줄 넘게 커지고, 관리자
-// 쪽 도면 디자인이 바뀔 때마다 여기도 매번 맞춰 고쳐야 하는 부담이 생긴다.
-// 최종 정식 도면은 관리자가 이 데이터를 불러온 뒤 그 함수로 다시 만드므로,
-// 여기서는 가볍게 비율만 맞춘 사각형+치수 텍스트로 확인용 미리보기만 그린다.
-// 다만 짝수 분할, 주 사용문 #, 통바-창 높이 정렬은 관리자 화면과 같은
-// 규칙을 따르게 해서 헷갈리지 않게 한다.
-var PANEL_RATIOS={"2짝":[1,1],"3짝":[1,2,1],"4짝":[1,1,1,1],"고정":[1]};
+// 관리자 화면(실측입력.html)의 실제 정면도/평면도 렌더링 함수 drawPanel()을
+// 그대로 옮겨온 것 — "관리자 미리보기와 같게 해달라"는 요청에 따라 가벼운
+// 자체 도식 대신 진짜 같은 로직을 쓴다. 캔버스는 내부 해상도를 2배로 그려서
+// (실측입력.html의 DRAWING_EXPORT_SCALE과 같은 방식) 화면(뷰포트)을 손가락
+// 으로 확대해도 흐려지지 않게 한다 — 그래서 viewport meta의 maximum-scale
+// 제한도 같이 풀었다.
+var DRAWING_PREVIEW_SCALE=2;
 
-// 한 번호(핀) 안의 창/통바가 전부 같은 높이 기준(가장 큰 창 높이, 관리자
-// 화면의 "공통 상단선" 규칙과 동일한 발상)을 공유하도록 기준 높이(mm)를 구한다.
-function pinHeightScale(p){
-  var maxH=0;
-  p.parts.forEach(function(t){
-    if(t.kind==="mullion")return;
-    var h=parseFloat(t.h)||(t.kind==="entry"?2100:0);
-    if(h>maxH)maxH=h;
-  });
-  return maxH||2000;
-}
+function frameDepthMm(v){var s=String(v||""),special=s.match(/40\s*[xX×]\s*105/),m=s.match(/(115|140|235|250)/);return special?105:(m?Number(m[1]):(/FWA/i.test(s)?230:null));}
 
-// spec 문자열("100×100","40×105","105×40")을 face(정면에서 보이는 폭)와
-// depth(프레임 깊이 방향 두께)로 분해 — 관리자 화면의 mullionLayers()와
-// 정확히 같은 규칙(첫 숫자=face, 둘째 숫자=depth)을 그대로 따른다. 예를 들어
-// "40×105"와 "105×40"은 face/depth가 서로 바뀐 별개 규격이라 겉보기엔
-// 숫자가 같아도 실제 폭은 다르다.
-function mullionUnits(t){
-  var units=[];
+function mullionLayersFor(t){
+  var layers=[];
   (t.layers||[]).forEach(function(row){
     var m=String(row.spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/);
     var face=m?Number(m[1]):100, depth=m?Number(m[2]):100;
-    for(var i=0;i<(row.count||1);i++) units.push({face:face,depth:depth});
+    for(var i=0;i<(row.count||1);i++) layers.push({face:face,depth:depth,label:Math.round(face)+"×"+Math.round(depth)});
   });
-  return t.stackDirection==="inside-out" ? units.slice().reverse() : units;
+  return t.stackDirection==="inside-out" ? layers.slice().reverse() : layers;
 }
 
-// 통바 적층(같은/다른 규격이 프레임 깊이 방향으로 여러 겹)은 정면에서는
-// 원래 안 보이는 개념이라 정면도 안에 구분선을 넣으면 오해를 준다(사용자
-// 지적: 규격이 다른 층은 face 폭도 다른데 선만으로는 그게 안 보임 —
-// 이번에 face 기준 폭 차이를 실제로 반영). 관리자 화면과 같은 방향(위쪽이
-// 실외, 아래로 갈수록 실내)으로 층을 세로로 쌓아 그린다 — 치수 숫자는
-// 넣지 않는다.
-function drawMullionPlanCanvas(t){
-  var units=mullionUnits(t);
-  var totalDepth=units.reduce(function(s,u){return s+u.depth;},0)||1;
-  var maxFace=Math.max.apply(null,units.map(function(u){return u.face;}).concat([1]));
-  var H=Math.max(30,Math.min(100,Math.round(totalDepth*0.45)));
-  var W=Math.max(20,Math.min(60,Math.round(maxFace*0.45)));
-  var scaleY=H/totalDepth;
-  var canvas=document.createElement("canvas");canvas.width=W+16;canvas.height=H+16;
-  var ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
-  var y=8;
-  units.forEach(function(u,idx){
-    var uh=Math.max(4,Math.round(u.depth*scaleY));
-    var uw=Math.max(6,Math.round(u.face/maxFace*W));
-    var ux=8+(W-uw)/2;
-    ctx.fillStyle=idx%2?"#a8dff0":"#75c9ec";ctx.fillRect(ux,y,uw,uh);
-    ctx.strokeStyle="#14748a";ctx.lineWidth=1;ctx.strokeRect(ux,y,uw,uh);
-    y+=uh;
-  });
-  return canvas;
-}
-
-function drawPartThumb(t,refHmm){
-  var box=document.createElement("div");
-  box.style.cssText="display:flex;flex-direction:column;align-items:center;gap:4px;margin:4px 10px 8px 0;";
-  var targetH=90, scale=targetH/refHmm;
-  var canvas=document.createElement("canvas"), ctx;
-
+function partSize(t,p){
   if(t.kind==="mullion"){
-    var units=mullionUnits(t);
-    // 통바 face 폭은 창 높이 기준 축척(scale)을 그대로 쓰면 100mm 안팎이라
-    // 전부 최소값에 눌려붙어 규격 차이가 안 보이는 문제가 있었다(사용자
-    // 지적) — face 전용의 별도 축척을 쓴다(평면도와 동일 기준).
-    var face0=units[0]?units[0].face:100;
-    var bw=Math.max(14,Math.min(50,Math.round(face0*0.45)));
-    canvas.width=bw+16;canvas.height=targetH+16;
-    ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
-    var bx=8,by=8;
-    ctx.fillStyle="#75c9ec";ctx.fillRect(bx,by,bw,targetH);
-    ctx.strokeStyle="#14748a";ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,targetH);
-    box.appendChild(el("div","sub","정면"));
-    box.appendChild(canvas);
-    if(units.length>1){
-      box.appendChild(el("div","sub","평면(위에서 봄, 실외 위)"));
-      box.appendChild(drawMullionPlanCanvas(t));
-    }
-    box.appendChild(el("div","sub",escapeHTML(partSubText(t))));
-    return box;
-  } else if(t.kind==="entry"){
-    var ew=Math.max(20,Math.round(900*scale*0.6));
-    canvas.width=ew+16;canvas.height=targetH+16;
-    ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.strokeStyle="#caa06a";ctx.lineWidth=2;ctx.strokeRect(8,8,ew,targetH);
-  } else {
-    var w=parseFloat(t.w)||300, h=parseFloat(t.h)||refHmm;
-    var pw=Math.max(24,Math.round(w*scale)), ph=Math.max(20,Math.round(h*scale));
-    canvas.width=pw+16;canvas.height=targetH+16;
-    ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
-    var rx=8, ry=8; // 창 상단을 기준선(refHmm)에 맞춰 위쪽부터 그린다.
-    ctx.fillStyle="#fff3cf";ctx.strokeStyle="#8a7a4a";ctx.lineWidth=1.5;
-    ctx.fillRect(rx,ry,pw,ph);ctx.strokeRect(rx,ry,pw,ph);
-    ctx.fillStyle="#3a3120";ctx.font="bold 13px system-ui, sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
-
-    if(t.sashType==="unbalanced"){
-      var smallW=Math.min(parseFloat(t.smallW)||0,w);
-      var smallPw=Math.max(6,Math.round(smallW*scale)), mainPw=Math.max(6,pw-smallPw);
-      var dividerX = t.smallSide==="right" ? rx+mainPw : rx+smallPw;
-      ctx.strokeStyle="#8a7a4a";ctx.beginPath();ctx.moveTo(dividerX,ry);ctx.lineTo(dividerX,ry+ph);ctx.stroke();
-      // 언발란스 창은 소형창이 주 사용문(여닫이)이다.
-      var smallCx = t.smallSide==="right" ? rx+mainPw+smallPw/2 : rx+smallPw/2;
-      ctx.fillText("#",smallCx,ry+ph/2);
-    } else if(t.sashType==="normal"){
-      var ratios=PANEL_RATIOS[t.panels]||[1];
-      var sum=ratios.reduce(function(a,b){return a+b;},0);
-      var xs=[rx];ratios.forEach(function(r){xs.push(xs[xs.length-1]+pw*r/sum);});
-      ctx.strokeStyle="#8a7a4a";
-      for(var d=1;d<xs.length-1;d++){ctx.beginPath();ctx.moveTo(xs[d],ry);ctx.lineTo(xs[d],ry+ph);ctx.stroke();}
-      var markIdx=[];
-      if(t.primary==="left")markIdx=[0];
-      else if(t.primary==="right")markIdx=[ratios.length-1];
-      else if(t.primary==="both")markIdx=[0,ratios.length-1];
-      markIdx.forEach(function(idx){ctx.fillText("#",(xs[idx]+xs[idx+1])/2,ry+ph/2);});
-    }
-    // turn/fix/pj/tt: 분할·# 표시 없이 사각형만(관리자 화면도 이 종류들은
-    // panels/primary 개념 자체가 없음).
+    var layers=mullionLayersFor(t), mw=Math.max.apply(null,layers.map(function(v){return v.face;}));
+    var specLabel=t.layers.map(function(r){return r.spec+(r.count>1?" "+r.count+"개":"");}).join("+");
+    return {kind:"mullion",w:mw,h:100,layers:layers,stackDirection:t.stackDirection,fixedW:mw<=40?12:28,label:"통바 "+specLabel};
   }
-  box.appendChild(canvas);
-  box.appendChild(el("div","sub",escapeHTML(partSubText(t))));
-  return box;
+  var dimsMissing=t.kind!=="entry"&&(!parseFloat(t.w)||!parseFloat(t.h));
+  var pw=parseFloat(t.w)||(t.kind==="entry"?900:1000), ph=parseFloat(t.h)||(t.kind==="entry"?2100:1000);
+  var names={normal:"일반 창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
+  var stype=t.kind==="turn"?"turn":(t.sashType||"normal"), isTurnPart=t.kind==="turn"||stype==="turn";
+  var swing=isTurnPart?(t.swing!=="pull"?"push":"pull"):null, handle=isTurnPart?(t.handle==="left"?"left":"right"):null;
+  return {kind:t.kind,w:pw,h:ph,sashType:stype,primary:t.primary,smallW:Number(t.smallW)||0,smallSide:t.smallSide==="right"?"right":"left",
+    dimsMissing:dimsMissing,swing:swing,handle:handle,
+    label:(t.kind==="entry"?"현관":t.kind==="turn"?"터닝도어":stype==="normal"?"창":names[stype])+" "+(dimsMissing?"치수 미입력":Math.round(pw)+"×"+Math.round(ph)),
+    panels:stype==="normal"?(parseInt(t.panels,10)||1):1};
+}
+
+// 관리자 화면 detailText()와 동일 규칙: 몰딩·벽돌·사춤·타일은 있을 때만,
+// 물구멍·방충망은 기본 있음이라 없을 때만 표기.
+function detailTextSimple(p){
+  var d=p.details, values=[requiresFrame(p)?"프레임 "+(p.frame||"X"):"프레임 해당없음"];
+  if(d.molding)values.push("몰딩 "+d.molding);
+  if(d.brick)values.push("벽돌 "+d.brick);
+  if(d.filling)values.push("사춤 있음");
+  if(d.tile)values.push("타일 있음");
+  if(!d.drainHole)values.push("물구멍 없음");
+  if(!d.screen)values.push("방충망 없음");
+  return values.join(" · ");
+}
+
+function wrapCanvasText(ctx,text,maxWidth){
+  var chars=String(text).split(""), lines=[], cur="";
+  chars.forEach(function(ch){
+    var test=cur+ch;
+    if(ctx.measureText(test).width>maxWidth&&cur){lines.push(cur);cur=ch;} else cur=test;
+  });
+  if(cur)lines.push(cur);
+  return lines;
+}
+
+function drawSinglePanel(p){
+  var S=DRAWING_PREVIEW_SCALE, panelW=340, pad=14;
+  var sizes=p.parts.map(function(t){return partSize(t,p);});
+  var frameDepth=frameDepthMm(p.frame), drawDepth=frameDepth||115;
+  var depthScale=60/Math.max(1,drawDepth);
+  var stackExtra=0;
+  sizes.forEach(function(s){
+    if(s.kind!=="mullion"||s.layers.length<=1)return;
+    var stackH=s.layers.reduce(function(n,v){return n+Math.max(2,v.depth*depthScale);},0);
+    if(stackH-60>stackExtra)stackExtra=stackH-60;
+  });
+  var measure=document.createElement("canvas").getContext("2d");measure.font='12px "Malgun Gothic",sans-serif';
+  var footerLines=wrapCanvasText(measure,detailTextSimple(p),panelW-pad*2);
+
+  var drawH=170, topLabelY=8, drawBottom=drawH-30;
+  var topViewH=26+90+stackExtra+10, footH=footerLines.length*17+8;
+  var H=drawH+topViewH+footH;
+
+  var canvas=document.createElement("canvas");canvas.width=panelW*S;canvas.height=H*S;
+  var c=canvas.getContext("2d");c.scale(S,S);
+  c.fillStyle="#fff";c.fillRect(0,0,panelW,H);c.strokeStyle="#ccc";c.lineWidth=1;c.strokeRect(0,0,panelW,H);
+
+  // 정면도 (실내에서 봄)
+  c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 13px "Malgun Gothic",sans-serif';
+  c.fillText("정면도 (실내에서 봄)",pad,topLabelY);
+  var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0);
+  var sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1;
+  var maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}).concat([1]));
+  sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
+  var scale=Math.min((panelW-pad*2-fixedW)/sashTotal,(drawH-70)/maxH);
+  var renderedW=fixedW+sashTotal*scale, dx=(panelW-renderedW)/2, base=drawBottom;
+  sizes.forEach(function(s){
+    var sw=s.kind==="mullion"?s.fixedW:Math.max(8,s.w*scale), sh=Math.max(8,s.h*scale), sy=base-sh;
+    c.fillStyle=s.kind==="mullion"?"#ccecf2":"#fff8e6";c.fillRect(dx,sy,sw,sh);
+    c.strokeStyle=s.kind==="mullion"?"#14748a":"#8a7a4a";c.lineWidth=1.3;c.strokeRect(dx,sy,sw,sh);
+    if(s.kind==="entry"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.strokeStyle="#8a7a4a";c.stroke();}
+    if(s.swing){c.fillStyle="#333";c.textAlign="center";c.textBaseline="middle";c.font='11px "Malgun Gothic"';c.fillText(s.swing==="pull"?"당기는 문":"미는 문",dx+sw/2,sy+sh/2-8);}
+    if(s.handle){var hx=s.handle==="right"?dx+sw-9:dx+9;c.fillStyle="#333";c.textAlign="center";c.textBaseline="middle";c.font='bold 13px "Malgun Gothic"';c.fillText("O",hx,sy+sh/2+7);}
+    if(s.kind==="sash"&&s.sashType==="normal"&&s.panels>1){
+      var ratios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1), total=ratios.reduce(function(a,b){return a+b;},0), at=0;
+      ratios.slice(0,-1).forEach(function(r){at+=r;c.beginPath();c.moveTo(dx+sw*at/total,sy);c.lineTo(dx+sw*at/total,base);c.strokeStyle="#8a7a4a";c.stroke();});
+    }
+    if(s.kind==="sash"&&s.sashType==="unbalanced"){
+      var smallW=Math.max(1,Math.min(s.w-1,s.smallW||s.w*.3)), smallOnRight=s.smallSide==="right";
+      var smallX=smallOnRight?dx+sw*(1-smallW/s.w):dx+sw*smallW/s.w, labelCx=smallOnRight?(smallX+(dx+sw))/2:(dx+smallX)/2;
+      c.beginPath();c.moveTo(smallX,sy);c.lineTo(smallX,base);c.strokeStyle="#8a7a4a";c.stroke();
+      c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 17px "Malgun Gothic"';c.fillText("#",labelCx,sy+sh/2);
+    }
+    if(s.kind==="sash"&&s.sashType==="normal"&&s.primary&&s.primary!=="none"){
+      var primaryPanels=s.primary==="both"?[0,s.panels-1]:[s.primary==="right"?s.panels-1:0];
+      var markRatios=s.panels===3?[1,2,1]:new Array(s.panels).fill(1), markTotal=markRatios.reduce(function(a,b){return a+b;},0);
+      c.fillStyle="#111";c.textAlign="center";c.textBaseline="middle";c.font='bold 17px "Malgun Gothic"';
+      primaryPanels.forEach(function(pi){var before=markRatios.slice(0,pi).reduce(function(a,b){return a+b;},0);c.fillText("#",dx+sw*(before+markRatios[pi]/2)/markTotal,sy+sh/2);});
+    }
+    c.fillStyle=s.dimsMissing?"#c0392b":"#111";c.textAlign="center";c.textBaseline="bottom";c.font=(s.kind==="mullion"?'10px':'12px')+' "Malgun Gothic"';
+    c.fillText(s.label,dx+sw/2,sy-4);
+    dx+=sw;
+  });
+
+  // 평면도(위에서 봄) · 실외측 ↑
+  var topY=drawH;
+  c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(0,topY);c.lineTo(panelW,topY);c.stroke();
+  c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 13px "Malgun Gothic"';
+  c.fillText("평면도(위에서 봄) · 실외측 ↑",pad,topY+8);
+  var geometryW=renderedW*0.9, geometryX=(panelW-geometryW)/2, framePlanY=topY+34;
+  var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm, plotX=geometryX;
+  sizes.forEach(function(s){
+    var gw=s.kind==="mullion"?Math.max(3,s.w*depthScale):Math.max(3,s.w*planScale);
+    if(s.kind==="mullion"){
+      var layerAt=s.stackDirection==="inside-out"?drawDepth:0;
+      s.layers.forEach(function(layer,li){
+        if(s.stackDirection==="inside-out")layerAt-=layer.depth;
+        var lh=Math.max(2,layer.depth*depthScale), layerY=framePlanY+layerAt*depthScale;
+        c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(plotX,layerY,gw,lh);
+        c.strokeStyle="#14748a";c.lineWidth=1;c.strokeRect(plotX,layerY,gw,lh);
+        if(s.stackDirection!=="inside-out")layerAt+=layer.depth;
+      });
+    } else {
+      var fpDepth=drawDepth*depthScale;
+      c.fillStyle="#f6f6f6";c.fillRect(plotX,framePlanY,gw,fpDepth);
+      c.strokeStyle="#111";c.lineWidth=1;c.strokeRect(plotX,framePlanY,gw,fpDepth);
+    }
+    plotX+=gw;
+  });
+
+  // 하단: 프레임/부가옵션 텍스트
+  var footY=topY+34+60+stackExtra+10;
+  c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='12px "Malgun Gothic"';
+  footerLines.forEach(function(line,li){c.fillText(line,pad,footY+li*17);});
+
+  return canvas;
 }
 
 function pinSummary(p){
