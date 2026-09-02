@@ -645,8 +645,8 @@
   var GOOGLE_CLIENT_ID="737327898192-or5i1ofmvef50hga9mrj58v8cjvaopjp.apps.googleusercontent.com",
       DRIVE_ROOT_FOLDER_ID="11QxmRfYpim3rhtDSI1mFTsmTLeLKpyBu",
       // userinfo.email은 "간편입력 설정"에서 이 계정이 관리자 도메인 소속인지
-      // simple_webapp_Code.gs 쪽에서 검증(hd 클레임)할 때만 쓰인다 — Drive 기능
-      // 자체는 기존과 동일하게 동작.
+      // simple_webapp_Code.gs 쪽에서 검증(이메일 도메인 비교)할 때만 쓰인다 —
+      // Drive 기능 자체는 기존과 동일하게 동작.
       DRIVE_SCOPE="https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email",
       driveAccessToken=null,driveTokenClient=null;
   // 간편입력(simple.html)과 완전히 별개인 Apps Script 웹앱 /exec 주소 — 배포 후
@@ -3203,7 +3203,7 @@
   // ---- 간편입력(simple.html) 설정: 허용 전화번호 관리 ----
   // simple_webapp_Code.gs의 admin_listPhones/admin_setPhones를 호출한다. 인증은
   // 이미 확보된 Drive access token(email 스코프 포함)을 그대로 실어 보내고,
-  // 서버가 hd 클레임으로 관리자 도메인인지 검증한다 — 새 로그인 절차 없음.
+  // 서버가 그 토큰의 실제 이메일 도메인으로 관리자인지 검증한다 — 새 로그인 절차 없음.
   var simplePhones = [];
   function renderSimplePhoneList() {
     var host = $("simplephonelist");
