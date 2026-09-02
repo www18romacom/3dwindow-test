@@ -288,6 +288,27 @@ function pinHeightScale(p){
   return maxH||2000;
 }
 
+// 통바 적층(같은/다른 규격이 깊이 방향으로 여러 겹)은 정면에서는 원래
+// 안 보이는 개념이라 정면도 안에 구분선을 넣는 건 오히려 오해를 준다
+// (규격이 서로 다른 층은 폭도 다른데 선만으로는 그게 안 보임). 관리자
+// 화면처럼 층이 2개 이상이면 작은 평면도(위에서 본 모습)를 따로 그려
+// 각 층의 규격 비율대로 옆으로 늘어놓는다 — 치수 숫자는 넣지 않는다.
+function drawMullionPlanCanvas(layers,stackDirection){
+  var segs=[];layers.forEach(function(l){for(var n=0;n<(l.count||1);n++)segs.push(l);});
+  if(stackDirection==="inside-out")segs=segs.slice().reverse();
+  var pad=4,H=22,unit=16,W=Math.max(40,segs.length*unit+pad*2);
+  var canvas=document.createElement("canvas");canvas.width=W;canvas.height=H;
+  var ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,W,H);
+  var totalFace=segs.reduce(function(s,l){return s+(parseFloat(l.spec)||100);},0),x=pad,avail=W-pad*2;
+  segs.forEach(function(l){
+    var w=Math.max(8,avail*(parseFloat(l.spec)||100)/totalFace);
+    ctx.fillStyle="#a8dff0";ctx.fillRect(x,pad,w,H-pad*2);
+    ctx.strokeStyle="#14748a";ctx.lineWidth=1;ctx.strokeRect(x,pad,w,H-pad*2);
+    x+=w;
+  });
+  return canvas;
+}
+
 function drawPartThumb(t,refHmm){
   var box=document.createElement("div");
   box.style.cssText="display:flex;flex-direction:column;align-items:center;gap:4px;margin:4px 10px 8px 0;";
@@ -302,14 +323,14 @@ function drawPartThumb(t,refHmm){
     var bx=8,by=8;
     ctx.fillStyle="#75c9ec";ctx.fillRect(bx,by,bw,targetH);
     ctx.strokeStyle="#14748a";ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,targetH);
-    // 적층(같은 규격 여러 개 또는 서로 다른 층) — 층 수만큼 구분선을 넣어
-    // "쌓여 있다"는 걸 보여준다. 프레임 안에서의 실제 깊이 순서까지는
-    // 표현하지 않고, 층이 여러 개라는 사실만 시각화한다.
+    box.appendChild(canvas);
     var segCount=t.layers.reduce(function(n,l){return n+(l.count||1);},0);
     if(segCount>1){
-      ctx.strokeStyle="#0d5062";
-      for(var s=1;s<segCount;s++){var sy=by+targetH*s/segCount;ctx.beginPath();ctx.moveTo(bx,sy);ctx.lineTo(bx+bw,sy);ctx.stroke();}
+      box.appendChild(el("div","sub","평면(적층)"));
+      box.appendChild(drawMullionPlanCanvas(t.layers,t.stackDirection));
     }
+    box.appendChild(el("div","sub",escapeHTML(partSubText(t))));
+    return box;
   } else if(t.kind==="entry"){
     var ew=Math.max(20,Math.round(900*scale*0.6));
     canvas.width=ew+16;canvas.height=targetH+16;
