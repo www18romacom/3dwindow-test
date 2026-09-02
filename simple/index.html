@@ -394,7 +394,10 @@ function drawSinglePanel(p){
   c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(0,topY);c.lineTo(panelW,topY);c.stroke();
   c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 13px "Malgun Gothic"';
   c.fillText("평면도(위에서 봄) · 실외측 ↑",pad,topY+8);
-  var geometryW=renderedW*0.9, geometryX=(panelW-geometryW)/2, framePlanY=topY+34;
+  // 관리자 화면과 동일: 평면도 본체는 정면도 렌더 폭의 절반만 써서 좌우
+  // 여백에 규격/개수 목록이 들어갈 공간을 남긴다(0.9로 잘못 넣었던 걸
+  // 수정 — 그러면 본체가 거의 패널 전체 폭을 차지해 좌측 목록과 겹침).
+  var geometryW=renderedW/2, geometryX=(panelW-geometryW)/2, framePlanY=topY+34;
   var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm, plotX=geometryX;
   var leftTotals={},rightTotals={},specOrder=[];
   function addTotals(target,rows){(rows||[]).forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
