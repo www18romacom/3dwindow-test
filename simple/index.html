@@ -248,8 +248,9 @@ function openPreview(){
     if(!p.parts.length){
       block.appendChild(el("div","empty","구성 없음"));
     } else {
-      var row=document.createElement("div");row.style.cssText="display:flex;flex-wrap:wrap;";
-      p.parts.forEach(function(t){ row.appendChild(drawPartThumb(t)); });
+      var row=document.createElement("div");row.style.cssText="display:flex;flex-wrap:wrap;align-items:flex-end;";
+      var refH=pinHeightScale(p);
+      p.parts.forEach(function(t){ row.appendChild(drawPartThumb(t,refH)); });
       block.appendChild(row);
     }
     var optText=[p.details.molding?("몰딩 "+p.details.molding):"",p.details.brick?("벽돌 "+p.details.brick):"",p.details.filling?"사춤":"",p.details.tile?"타일":"",p.details.drainHole===false?"물구멍 없음":"",p.details.screen===false?"방충망 없음":""].filter(Boolean).join(" · ");
@@ -263,25 +264,81 @@ function openPreview(){
 // 쪽 도면 디자인이 바뀔 때마다 여기도 매번 맞춰 고쳐야 하는 부담이 생긴다.
 // 최종 정식 도면은 관리자가 이 데이터를 불러온 뒤 그 함수로 다시 만드므로,
 // 여기서는 가볍게 비율만 맞춘 사각형+치수 텍스트로 확인용 미리보기만 그린다.
-function drawPartThumb(t){
+// 다만 짝수 분할, 주 사용문 #, 통바-창 높이 정렬은 관리자 화면과 같은
+// 규칙을 따르게 해서 헷갈리지 않게 한다.
+var PANEL_RATIOS={"2짝":[1,1],"3짝":[1,2,1],"4짝":[1,1,1,1],"고정":[1]};
+
+// 한 번호(핀) 안의 창/통바가 전부 같은 높이 기준(가장 큰 창 높이, 관리자
+// 화면의 "공통 상단선" 규칙과 동일한 발상)을 공유하도록 기준 높이(mm)를 구한다.
+function pinHeightScale(p){
+  var maxH=0;
+  p.parts.forEach(function(t){
+    if(t.kind==="mullion")return;
+    var h=parseFloat(t.h)||(t.kind==="entry"?2100:0);
+    if(h>maxH)maxH=h;
+  });
+  return maxH||2000;
+}
+
+function drawPartThumb(t,refHmm){
   var box=document.createElement("div");
-  box.style.cssText="display:flex;flex-direction:column;align-items:center;gap:4px;margin:4px 10px 8px 0;width:96px;";
-  var canvas=document.createElement("canvas");
-  var maxW=90,maxH=70;canvas.width=maxW;canvas.height=maxH;
-  canvas.style.cssText="background:#232733;border:1px solid #2c313d;border-radius:4px;";
-  var ctx=canvas.getContext("2d");
+  box.style.cssText="display:flex;flex-direction:column;align-items:center;gap:4px;margin:4px 10px 8px 0;";
+  var targetH=90, scale=targetH/refHmm;
+  var canvas=document.createElement("canvas"), ctx;
+
   if(t.kind==="mullion"){
-    var bw=Math.min(maxW*0.3,22);
-    ctx.fillStyle="#75c9ec";ctx.fillRect((maxW-bw)/2,6,bw,maxH-12);
+    var spec=t.layers[0].spec, face=parseFloat(spec)||100;
+    var bw=Math.max(14,Math.min(60,Math.round(face*scale)));
+    canvas.width=bw+16;canvas.height=targetH+16;
+    ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
+    var bx=8,by=8;
+    ctx.fillStyle="#75c9ec";ctx.fillRect(bx,by,bw,targetH);
+    ctx.strokeStyle="#14748a";ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,targetH);
+    // 적층(같은 규격 여러 개 또는 서로 다른 층) — 층 수만큼 구분선을 넣어
+    // "쌓여 있다"는 걸 보여준다. 프레임 안에서의 실제 깊이 순서까지는
+    // 표현하지 않고, 층이 여러 개라는 사실만 시각화한다.
+    var segCount=t.layers.reduce(function(n,l){return n+(l.count||1);},0);
+    if(segCount>1){
+      ctx.strokeStyle="#0d5062";
+      for(var s=1;s<segCount;s++){var sy=by+targetH*s/segCount;ctx.beginPath();ctx.moveTo(bx,sy);ctx.lineTo(bx+bw,sy);ctx.stroke();}
+    }
   } else if(t.kind==="entry"){
-    ctx.strokeStyle="#caa06a";ctx.lineWidth=2;ctx.strokeRect(maxW*0.28,6,maxW*0.44,maxH-12);
+    var ew=Math.max(20,Math.round(900*scale*0.6));
+    canvas.width=ew+16;canvas.height=targetH+16;
+    ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle="#caa06a";ctx.lineWidth=2;ctx.strokeRect(8,8,ew,targetH);
   } else {
-    var w=parseFloat(t.w)||1,h=parseFloat(t.h)||1;
-    var scale=Math.min((maxW-16)/w,(maxH-16)/h);
-    var rw=Math.max(8,w*scale),rh=Math.max(8,h*scale);
-    var rx=(maxW-rw)/2,ry=(maxH-rh)/2;
+    var w=parseFloat(t.w)||300, h=parseFloat(t.h)||refHmm;
+    var pw=Math.max(24,Math.round(w*scale)), ph=Math.max(20,Math.round(h*scale));
+    canvas.width=pw+16;canvas.height=targetH+16;
+    ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
+    var rx=8, ry=8; // 창 상단을 기준선(refHmm)에 맞춰 위쪽부터 그린다.
     ctx.fillStyle="#fff3cf";ctx.strokeStyle="#8a7a4a";ctx.lineWidth=1.5;
-    ctx.fillRect(rx,ry,rw,rh);ctx.strokeRect(rx,ry,rw,rh);
+    ctx.fillRect(rx,ry,pw,ph);ctx.strokeRect(rx,ry,pw,ph);
+    ctx.fillStyle="#3a3120";ctx.font="bold 13px system-ui, sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+
+    if(t.sashType==="unbalanced"){
+      var smallW=Math.min(parseFloat(t.smallW)||0,w);
+      var smallPw=Math.max(6,Math.round(smallW*scale)), mainPw=Math.max(6,pw-smallPw);
+      var dividerX = t.smallSide==="right" ? rx+mainPw : rx+smallPw;
+      ctx.strokeStyle="#8a7a4a";ctx.beginPath();ctx.moveTo(dividerX,ry);ctx.lineTo(dividerX,ry+ph);ctx.stroke();
+      // 언발란스 창은 소형창이 주 사용문(여닫이)이다.
+      var smallCx = t.smallSide==="right" ? rx+mainPw+smallPw/2 : rx+smallPw/2;
+      ctx.fillText("#",smallCx,ry+ph/2);
+    } else if(t.sashType==="normal"){
+      var ratios=PANEL_RATIOS[t.panels]||[1];
+      var sum=ratios.reduce(function(a,b){return a+b;},0);
+      var xs=[rx];ratios.forEach(function(r){xs.push(xs[xs.length-1]+pw*r/sum);});
+      ctx.strokeStyle="#8a7a4a";
+      for(var d=1;d<xs.length-1;d++){ctx.beginPath();ctx.moveTo(xs[d],ry);ctx.lineTo(xs[d],ry+ph);ctx.stroke();}
+      var markIdx=[];
+      if(t.primary==="left")markIdx=[0];
+      else if(t.primary==="right")markIdx=[ratios.length-1];
+      else if(t.primary==="both")markIdx=[0,ratios.length-1];
+      markIdx.forEach(function(idx){ctx.fillText("#",(xs[idx]+xs[idx+1])/2,ry+ph/2);});
+    }
+    // turn/fix/pj/tt: 분할·# 표시 없이 사각형만(관리자 화면도 이 종류들은
+    // panels/primary 개념 자체가 없음).
   }
   box.appendChild(canvas);
   box.appendChild(el("div","sub",escapeHTML(partSubText(t))));
@@ -315,15 +372,22 @@ function escapeHTML(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c
 // ---- 저장 ----
 function doSave(btn){
   if(!state.pins.length){toast("최소 1개 이상 번호를 입력해주세요");return;}
-  btn.disabled=true;
+  // 확인 다이얼로그를 즉시 닫지 않고 버튼에 "저장 중..." 상태를 보여준 채
+  // 결과가 올 때까지 기다린다 — 바로 닫아버리면 저장이 실제로 됐는지 알 수
+  // 없어 다시 눌러 중복 저장하기 쉬웠던 문제를 막기 위함.
+  var origText=btn.textContent;
+  btn.disabled=true;btn.textContent="저장 중…";
   saveDraftLocal();
+  function finish(msg){
+    btn.disabled=false;btn.textContent=origText;
+    toast(msg);
+    $("previewdialog").close();
+  }
   callApi("save",{phone:identity.phone,pin:identity.pin,siteName:state.site||"현장",state:state}).then(function(res){
-    btn.disabled=false;
-    if(res&&res.ok){toast("저장 완료 — 이 기기와 서버 양쪽에 저장됐습니다");}
-    else{toast("서버 저장 실패("+((res&&res.error)||"오류")+") — 이 기기에는 저장돼 있습니다");}
+    if(res&&res.ok) finish("저장 완료 — 이 기기와 서버 양쪽에 저장됐습니다");
+    else finish("서버 저장 실패("+((res&&res.error)||"오류")+") — 이 기기에는 저장돼 있습니다");
   }).catch(function(e){
-    btn.disabled=false;
-    toast(e.message==="NO_URL"?"서버가 아직 설정되지 않아 이 기기에만 저장했습니다":"서버 저장 실패 — 이 기기에는 저장돼 있습니다");
+    finish(e.message==="NO_URL"?"서버가 아직 설정되지 않아 이 기기에만 저장했습니다":"서버 저장 실패 — 이 기기에는 저장돼 있습니다");
   });
 }
 
@@ -555,10 +619,7 @@ function showDialog(dlg){ if(dlg.open)return; if(typeof dlg.showModal==="functio
 $("partclose").addEventListener("click",function(){ $("partdialog").close(); });
 $("previewclose").addEventListener("click",function(){ $("previewdialog").close(); });
 $("previewback").addEventListener("click",function(){ $("previewdialog").close(); });
-$("previewconfirm").addEventListener("click",function(){
-  $("previewdialog").close();
-  doSave($("previewconfirm"));
-});
+$("previewconfirm").addEventListener("click",function(){ doSave(this); });
 
 // ---- 시작 ----
 (function boot(){
