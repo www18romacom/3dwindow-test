@@ -150,7 +150,7 @@ function renderIdentityScreen(){
 
   var f1=el("div","field");
   f1.appendChild(el("label","","전화번호"));
-  var phoneInput=document.createElement("input");phoneInput.type="tel";phoneInput.placeholder="01012345678";phoneInput.value=identity.phone;
+  var phoneInput=document.createElement("input");phoneInput.type="tel";phoneInput.autocomplete="tel";phoneInput.placeholder="01012345678";phoneInput.value=identity.phone;
   phoneInput.addEventListener("input",function(){phoneInput.value=digitsOnly(phoneInput.value,11);});
   f1.appendChild(phoneInput);
   card.appendChild(f1);
