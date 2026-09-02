@@ -344,12 +344,12 @@ function drawSinglePanel(p){
   sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
   var frontScale=Math.min((panelW-pad*2-fixedW)/sashTotal,(drawH-70)/maxH);
   var renderedW=fixedW+sashTotal*frontScale;
-  var geometryW=renderedW/2, geometryX=(panelW-geometryW)/2;
+  // 좌우 여백에 목록을 끼워 넣는 대신(자꾸 좁아서 겹침), 통바 개수는 평면도
+  // 위쪽에 "좌:"/"우:" 글줄로 따로 적고 평면도 본체는 그 아래 중앙에
+  // 넉넉한 폭으로 그린다(사용자 요청 — 줄을 바꿔서 안 겹치게).
+  var geometryW=Math.min(renderedW,panelW-pad*2), geometryX=(panelW-geometryW)/2;
   var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm;
 
-  // 실제로 그리기 전에, 평면도 좌우 규격/개수 목록이 몇 줄이 될지 먼저
-  // 계산한다 — 목록이 길면(사용자 요청) 겹치는 대신 캔버스 세로를 그만큼
-  // 더 키운다.
   var leftTotals={},rightTotals={},specOrder=[],dryX=geometryX;
   function addTotals(target,rows){(rows||[]).forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
   sizes.forEach(function(s){
@@ -359,13 +359,16 @@ function drawSinglePanel(p){
   });
   var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+leftTotals[spec]+"개"};});
   var rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+rightTotals[spec]+"개"};});
-  var specRowH=15,iconSlot=14;
-  var listRows=Math.max(leftRows.length,rightRows.length);
-  // 평면도 내용 높이 = 프레임 깊이 표시 영역(적층 있으면 더 큼)과 좌우
-  // 목록 줄 수 중 더 큰 쪽 — 목록이 길어서 모자라면 여기서 세로가 늘어난다.
-  var planBodyH=Math.max(60+stackExtra, listRows*specRowH+6);
 
   var measure=document.createElement("canvas").getContext("2d");measure.font='12px "Malgun Gothic",sans-serif';
+  var leftText=leftRows.length?("좌: "+leftRows.map(function(r){return r.text;}).join(", ")):"";
+  var rightText=rightRows.length?("우: "+rightRows.map(function(r){return r.text;}).join(", ")):"";
+  var countLines=(leftText?wrapCanvasText(measure,leftText,panelW-pad*2):[]).concat(rightText?wrapCanvasText(measure,rightText,panelW-pad*2):[]);
+  var countH=countLines.length?countLines.length*16+6:0;
+  // 평면도 내용 높이 = 좌우 개수 글줄 높이 + 프레임 깊이 표시 영역(적층
+  // 있으면 더 큼) — 목록이 길어지면(사용자 요청대로) 여기서 세로가 늘어난다.
+  var planBodyH=countH+60+stackExtra;
+
   var footerLines=wrapCanvasText(measure,detailTextSimple(p),panelW-pad*2);
 
   var topViewH=34+planBodyH+14, footH=footerLines.length*17+8;
@@ -417,7 +420,12 @@ function drawSinglePanel(p){
   c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(0,topY);c.lineTo(panelW,topY);c.stroke();
   c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 13px "Malgun Gothic"';
   c.fillText("평면도(위에서 봄) · 실외측 ↑",pad,topY+8);
-  var framePlanY=topY+34, plotX=geometryX;
+  // 통바 개수는 좌우 여백에 끼워 넣지 않고 평면도 위에 "좌:"/"우:" 글줄로
+  // 먼저 적고, 평면도 본체는 그 아래 넉넉한 폭으로 가운데 그린다.
+  var countY=topY+28;
+  c.font='12px "Malgun Gothic"';c.textAlign="left";c.textBaseline="top";c.fillStyle="#333";
+  countLines.forEach(function(line,li){c.fillText(line,pad,countY+li*16);});
+  var framePlanY=countY+countH, plotX=geometryX;
   sizes.forEach(function(s){
     var gw=s.kind==="mullion"?Math.max(3,s.w*depthScale):Math.max(3,s.w*planScale);
     if(s.kind==="mullion"){
@@ -436,15 +444,6 @@ function drawSinglePanel(p){
     }
     plotX+=gw;
   });
-  // 규격 옆에 실제 face:depth 비율 그대로의 작은 도형을 붙여 단면 비율도
-  // 같이 보여준다(관리자 화면과 동일). leftRows/rightRows는 캔버스 높이를
-  // 정하기 전 미리 계산해둔 값을 그대로 쓴다.
-  function mullionIconWH(spec){var m=String(spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=m?Number(m[1]):100,depth=m?Number(m[2]):100,longer=Math.max(face,depth)||1,maxDim=12;return {w:Math.max(3,Math.round(maxDim*face/longer)),h:Math.max(3,Math.round(maxDim*depth/longer))};}
-  function drawMullionIcon(cx,cy,spec){var icon=mullionIconWH(spec);c.fillStyle="#ccecf2";c.strokeStyle="#14748a";c.lineWidth=1;c.fillRect(cx-icon.w/2,cy-icon.h/2,icon.w,icon.h);c.strokeRect(cx-icon.w/2,cy-icon.h/2,icon.w,icon.h);}
-  c.font='11px "Malgun Gothic"';c.textBaseline="middle";
-  var specRowY=framePlanY+10;
-  leftRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(pad+iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="left";c.fillText(item.text,pad+iconSlot+2,cy);});
-  rightRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(panelW-pad-iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="right";c.fillText(item.text,panelW-pad-iconSlot-2,cy);});
 
   // 하단: 프레임/부가옵션 텍스트 — topViewH로 예약해둔 만큼 정확히 내려온
   // 지점에서 시작해 평면도 내용과 절대 겹치지 않는다.
