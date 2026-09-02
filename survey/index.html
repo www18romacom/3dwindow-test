@@ -548,7 +548,7 @@
   </div>
 </dialog>
 
-<dialog id="drawingpreview"><div class="dialog-head"><b>실측도면 미리보기</b><div class="page-tools"><button type="button" id="previewprev" aria-label="이전 페이지">‹</button><span id="previewpage">1 / 1페이지</span><button type="button" id="previewnext" aria-label="다음 페이지">›</button></div><span class="sp"></span><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomreset" aria-label="미리보기 100%">100%</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><div id="drawingpreviewcontent"><img id="drawingpreviewimage" draggable="false" alt="실측도면 출력본 미리보기" style="display:block;width:100%;height:auto"></div></div></dialog>
+<dialog id="drawingpreview"><div class="dialog-head"><b>실측도면 미리보기</b><div class="page-tools"><button type="button" id="previewprev" aria-label="이전 페이지">‹</button><span id="previewpage">1 / 1페이지</span><button type="button" id="previewnext" aria-label="다음 페이지">›</button></div><span class="sp"></span><button type="button" id="previewprint">인쇄</button><div class="zoom-tools"><button type="button" id="previewzoomout" aria-label="미리보기 축소">−</button><button type="button" id="previewzoomreset" aria-label="미리보기 100%">100%</button><button type="button" id="previewzoomin" aria-label="미리보기 확대">＋</button></div><button type="button" class="x" id="closepreview">×</button></div><div class="dialog-body preview-zoom-wrap"><div id="drawingpreviewcontent"><img id="drawingpreviewimage" draggable="false" alt="실측도면 출력본 미리보기" style="display:block;width:100%;height:auto"></div></div></dialog>
 
 <dialog id="savedialog">
   <div class="dialog-head"><b>저장된 현장</b><button type="button" class="x" id="closesaved">×</button></div>
@@ -737,24 +737,30 @@
   }
   // 현장 저장 — 현장 폴더 아래 "현장" 하위 폴더에 JSON(실측 데이터) + 번호 없는 원본
   // 현장평면도 이미지를 저장한다. 같은 이름이 있으면 덮어쓰기/새 이름으로 만들기를 물어본다.
+  // 덮어쓰기를 선택했고 실제로 덮어써질 파일이 있으면(새 폴더는 이 경우가 없음)
+  // 어떤 파일인지 보여주고 한 번 더 확인받는다.
   async function driveSaveSite(){
-    var siteName=state.site,existing=await driveFindFolder(siteName,DRIVE_ROOT_FOLDER_ID),targetName=siteName,siteFolder=null;
+    var siteName=state.site,existing=await driveFindFolder(siteName,DRIVE_ROOT_FOLDER_ID),targetName=siteName,siteFolder=null,isOverwrite=false;
     if(existing){
       var choice=await chooseDriveConflict(siteName);
       if(choice.action==="cancel")return {cancelled:true};
-      if(choice.action==="overwrite")siteFolder=existing;else targetName=choice.name;
+      if(choice.action==="overwrite"){siteFolder=existing;isOverwrite=true;}else targetName=choice.name;
     }
     if(!siteFolder)siteFolder=await driveFindOrCreateFolder(targetName,DRIVE_ROOT_FOLDER_ID);
     var dataFolder=await driveFindOrCreateFolder("현장",siteFolder.id);
     var filePrefix=targetName+"_";
-    var jsonB64=utf8ToBase64(JSON.stringify(state)),jsonName=filePrefix+"실측데이터.json";
-    var existingJson=await driveFindChild(jsonName,dataFolder.id);
-    await driveUploadFile(jsonName,"application/json",jsonB64,dataFolder.id,existingJson?existingJson.id:null);
-    if(state.planData){
-      var mime=dataUrlMime(state.planData),ext=mime.indexOf("png")>=0?"png":(mime.indexOf("jpeg")>=0||mime.indexOf("jpg")>=0?"jpg":"png"),fileName=filePrefix+"현장평면도."+ext;
-      var existingImg=await driveFindChild(fileName,dataFolder.id);
-      await driveUploadFile(fileName,mime,dataUrlToBase64(state.planData),dataFolder.id,existingImg?existingImg.id:null);
+    var jsonName=filePrefix+"실측데이터.json",existingJson=await driveFindChild(jsonName,dataFolder.id);
+    var mime=state.planData?dataUrlMime(state.planData):null;
+    var ext=mime?(mime.indexOf("png")>=0?"png":(mime.indexOf("jpeg")>=0||mime.indexOf("jpg")>=0?"jpg":"png")):null;
+    var fileName=state.planData?filePrefix+"현장평면도."+ext:null;
+    var existingImg=fileName?await driveFindChild(fileName,dataFolder.id):null;
+    if(isOverwrite){
+      var overwriteNames=[existingJson?jsonName:null,existingImg?fileName:null].filter(Boolean);
+      if(overwriteNames.length&&!window.confirm("Google Drive에 이미 있는 다음 파일을 덮어씁니다:\n"+overwriteNames.join("\n")+"\n\n계속할까요?"))return {cancelled:true};
     }
+    var jsonB64=utf8ToBase64(JSON.stringify(state));
+    await driveUploadFile(jsonName,"application/json",jsonB64,dataFolder.id,existingJson?existingJson.id:null);
+    if(state.planData)await driveUploadFile(fileName,mime,dataUrlToBase64(state.planData),dataFolder.id,existingImg?existingImg.id:null);
     return {siteFolderName:targetName};
   }
   // 실측도면 출력본 저장 — 현장 폴더 아래 "도면" 하위 폴더에 번호 찍힌 현장평면도(있으면)와
@@ -3085,9 +3091,20 @@
   $("previewnext").addEventListener("click",function(){showPreviewPage(previewPageIndex+1,true);});
   (function(){var viewport=$("drawingpreview").querySelector(".preview-zoom-wrap"),startX=null,startY=null;viewport.addEventListener("pointerdown",function(e){if(previewZoom>1)return;startX=e.clientX;startY=e.clientY;});viewport.addEventListener("pointerup",function(e){if(startX===null||previewZoom>1)return;var dx=e.clientX-startX,dy=e.clientY-startY;startX=startY=null;if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy))showPreviewPage(previewPageIndex+(dx<0?1:-1),true);});viewport.addEventListener("pointercancel",function(){startX=startY=null;});})();
   $("closepreview").addEventListener("click",function(){$("drawingpreview").close();previewPages=[];previewPageStates=[];previewHasSitePlan=false;});
+  // 인쇄 창에 이미지 페이지들을 채워 넣는다. printdrawing/previewprint 둘 다 공용.
+  function writePrintDocument(w, imgs) {
+    var html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>' + escapeHTML(state.site || "실측도면") +
+      '</title><style>*{box-sizing:border-box}body{margin:0}@page{margin:6mm}' +
+      '.page{width:100%;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;page-break-after:always;page-break-inside:avoid}' +
+      '.page:last-child{page-break-after:auto}.page img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block}</style></head><body>' +
+      imgs.map(function (src) { return '<div class="page"><img src="' + src + '"></div>'; }).join('') +
+      '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script></body></html>';
+    w.document.open(); w.document.write(html); w.document.close();
+  }
   $("printdrawing").addEventListener("click", async function () {
     // 미리보기와 동일한 내용(현장도면+실측도면 페이지)을 그대로 인쇄한다 —
     // 예전 표 형태 출력(buildDrawingHTML)은 미리보기와 내용이 달라 혼란을 줬다.
+    // window.open은 팝업 차단을 피하려고 비동기 작업 전에 먼저 호출한다.
     var w = window.open("", "_blank");
     if (!w) { toast("인쇄 창이 차단되었습니다"); return; }
     try {
@@ -3095,14 +3112,16 @@
       try { var siteCanvas = await buildSitePlanCanvas(); imgs.push(siteCanvas.toDataURL("image/png")); } catch (e) { /* 현장 평면도 없으면 생략 */ }
       var drawingPages = await buildDrawingPages();
       drawingPages.forEach(function (c) { imgs.push(c.toDataURL("image/png")); });
-      var html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>' + escapeHTML(state.site || "실측도면") +
-        '</title><style>*{box-sizing:border-box}body{margin:0}@page{margin:6mm}' +
-        '.page{width:100%;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;page-break-after:always;page-break-inside:avoid}' +
-        '.page:last-child{page-break-after:auto}.page img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block}</style></head><body>' +
-        imgs.map(function (src) { return '<div class="page"><img src="' + src + '"></div>'; }).join('') +
-        '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},200)})<\/script></body></html>';
-      w.document.open(); w.document.write(html); w.document.close();
+      writePrintDocument(w, imgs);
     } catch (e) { w.close(); toast("인쇄용 화면을 만들지 못했습니다: " + (e.message || e)); }
+  });
+  // 미리보기 다이얼로그 안에서 바로 인쇄 — 이미 화면에 띄운 previewPages를
+  // 그대로 재사용해 다시 그릴 필요 없이 즉시 인쇄 창을 연다.
+  $("previewprint").addEventListener("click", function () {
+    if (!previewPages.length) { toast("먼저 미리보기를 열어주세요"); return; }
+    var w = window.open("", "_blank");
+    if (!w) { toast("인쇄 창이 차단되었습니다"); return; }
+    writePrintDocument(w, previewPages);
   });
 
   // 로컬 개발 화면은 관리자 테스트로 열고, 웹 배포 시에는 홈페이지 로그인 코드가
