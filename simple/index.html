@@ -27,6 +27,8 @@ button.ghost{background:transparent;}
 .seg{display:flex;gap:6px;flex-wrap:wrap;}
 .seg button{flex:1;min-width:76px;}
 .seg button.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+.seg-compact{flex-wrap:nowrap;}
+.seg-compact button{min-width:0;min-height:40px;padding:0 4px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pinlist{display:flex;flex-direction:column;gap:10px;margin:10px 0;}
 .pinrow{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;align-items:center;gap:8px;}
 .pinrow.dragging{opacity:.55;}
@@ -102,7 +104,7 @@ function callApi(action, payload){
 // ---- 관리자 실측입력.html과 호환되는 최소 데이터 모델 ----
 var FRAME_TYPES=["B/F115","B/F140","B/F235","B/F250","B/FWA"];
 var MULLION_SPECS=["100×100","40×105","105×40"];
-var SASH_TYPES=[["normal","일반 창"],["unbalanced","언발란스 창"],["turn","터닝도어"],["fix","FIX창"],["pj","PJ창"],["tt","T/T창"]];
+var SASH_TYPES=[["normal","일반"],["unbalanced","언발란스"],["turn","터닝도어"],["fix","FIX"],["pj","PJ"],["tt","T/T"]];
 var SASH_TYPE_NAMES={normal:"창",unbalanced:"언발란스 창",turn:"터닝도어",fix:"FIX창",pj:"PJ창",tt:"T/T창"};
 var PANEL_TYPES=["2짝","3짝","4짝","고정"];
 var PRIMARY_TYPES=[["left","왼쪽"],["right","오른쪽"],["both","양쪽"],["none","없음"]];
@@ -543,7 +545,9 @@ function openPartEditor(p,t,k){
   } else {
     var typeField=el("div","field");
     typeField.appendChild(el("label","","종류"));
-    typeField.appendChild(segButtons(SASH_TYPES,t.sashType,function(v){t.sashType=v;saveDraftLocal();rebuild();}));
+    var typeSeg=segButtons(SASH_TYPES,t.sashType,function(v){t.sashType=v;saveDraftLocal();rebuild();});
+    typeSeg.classList.add("seg-compact");
+    typeField.appendChild(typeSeg);
     body.appendChild(typeField);
 
     var dimsRow=el("div","row field");
