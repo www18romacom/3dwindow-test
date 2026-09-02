@@ -336,11 +336,39 @@ function drawSinglePanel(p){
     var stackH=s.layers.reduce(function(n,v){return n+Math.max(2,v.depth*depthScale);},0);
     if(stackH-60>stackExtra)stackExtra=stackH-60;
   });
+
+  var drawH=170, topLabelY=8, drawBottom=drawH-30;
+  var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0);
+  var sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1;
+  var maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}).concat([1]));
+  sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
+  var frontScale=Math.min((panelW-pad*2-fixedW)/sashTotal,(drawH-70)/maxH);
+  var renderedW=fixedW+sashTotal*frontScale;
+  var geometryW=renderedW/2, geometryX=(panelW-geometryW)/2;
+  var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm;
+
+  // 실제로 그리기 전에, 평면도 좌우 규격/개수 목록이 몇 줄이 될지 먼저
+  // 계산한다 — 목록이 길면(사용자 요청) 겹치는 대신 캔버스 세로를 그만큼
+  // 더 키운다.
+  var leftTotals={},rightTotals={},specOrder=[],dryX=geometryX;
+  function addTotals(target,rows){(rows||[]).forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
+  sizes.forEach(function(s){
+    var gw=s.kind==="mullion"?Math.max(3,s.w*depthScale):Math.max(3,s.w*planScale);
+    if(s.kind==="mullion")addTotals((dryX+gw/2)<panelW/2?leftTotals:rightTotals,s.rows);
+    dryX+=gw;
+  });
+  var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+leftTotals[spec]+"개"};});
+  var rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+rightTotals[spec]+"개"};});
+  var specRowH=15,iconSlot=14;
+  var listRows=Math.max(leftRows.length,rightRows.length);
+  // 평면도 내용 높이 = 프레임 깊이 표시 영역(적층 있으면 더 큼)과 좌우
+  // 목록 줄 수 중 더 큰 쪽 — 목록이 길어서 모자라면 여기서 세로가 늘어난다.
+  var planBodyH=Math.max(60+stackExtra, listRows*specRowH+6);
+
   var measure=document.createElement("canvas").getContext("2d");measure.font='12px "Malgun Gothic",sans-serif';
   var footerLines=wrapCanvasText(measure,detailTextSimple(p),panelW-pad*2);
 
-  var drawH=170, topLabelY=8, drawBottom=drawH-30;
-  var topViewH=26+90+stackExtra+10, footH=footerLines.length*17+8;
+  var topViewH=34+planBodyH+14, footH=footerLines.length*17+8;
   var H=drawH+topViewH+footH;
 
   var canvas=document.createElement("canvas");canvas.width=panelW*S;canvas.height=H*S;
@@ -350,14 +378,9 @@ function drawSinglePanel(p){
   // 정면도 (실내에서 봄)
   c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 13px "Malgun Gothic",sans-serif';
   c.fillText("정면도 (실내에서 봄)",pad,topLabelY);
-  var fixedW=sizes.reduce(function(n,s){return n+(s.fixedW||0);},0);
-  var sashTotal=sizes.reduce(function(n,s){return n+(s.kind==="mullion"?0:s.w);},0)||1;
-  var maxH=Math.max.apply(null,sizes.map(function(s){return s.h;}).concat([1]));
-  sizes.forEach(function(s){if(s.kind==="mullion")s.h=maxH;});
-  var scale=Math.min((panelW-pad*2-fixedW)/sashTotal,(drawH-70)/maxH);
-  var renderedW=fixedW+sashTotal*scale, dx=(panelW-renderedW)/2, base=drawBottom;
+  var dx=(panelW-renderedW)/2, base=drawBottom;
   sizes.forEach(function(s){
-    var sw=s.kind==="mullion"?s.fixedW:Math.max(8,s.w*scale), sh=Math.max(8,s.h*scale), sy=base-sh;
+    var sw=s.kind==="mullion"?s.fixedW:Math.max(8,s.w*frontScale), sh=Math.max(8,s.h*frontScale), sy=base-sh;
     c.fillStyle=s.kind==="mullion"?"#ccecf2":"#fff8e6";c.fillRect(dx,sy,sw,sh);
     c.strokeStyle=s.kind==="mullion"?"#14748a":"#8a7a4a";c.lineWidth=1.3;c.strokeRect(dx,sy,sw,sh);
     if(s.kind==="entry"){c.beginPath();c.moveTo(dx,base);c.lineTo(dx+sw,sy);c.strokeStyle="#8a7a4a";c.stroke();}
@@ -394,13 +417,7 @@ function drawSinglePanel(p){
   c.strokeStyle="#999";c.lineWidth=1;c.beginPath();c.moveTo(0,topY);c.lineTo(panelW,topY);c.stroke();
   c.fillStyle="#555";c.textAlign="left";c.textBaseline="top";c.font='bold 13px "Malgun Gothic"';
   c.fillText("평면도(위에서 봄) · 실외측 ↑",pad,topY+8);
-  // 관리자 화면과 동일: 평면도 본체는 정면도 렌더 폭의 절반만 써서 좌우
-  // 여백에 규격/개수 목록이 들어갈 공간을 남긴다(0.9로 잘못 넣었던 걸
-  // 수정 — 그러면 본체가 거의 패널 전체 폭을 차지해 좌측 목록과 겹침).
-  var geometryW=renderedW/2, geometryX=(panelW-geometryW)/2, framePlanY=topY+34;
-  var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm, plotX=geometryX;
-  var leftTotals={},rightTotals={},specOrder=[];
-  function addTotals(target,rows){(rows||[]).forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
+  var framePlanY=topY+34, plotX=geometryX;
   sizes.forEach(function(s){
     var gw=s.kind==="mullion"?Math.max(3,s.w*depthScale):Math.max(3,s.w*planScale);
     if(s.kind==="mullion"){
@@ -412,10 +429,6 @@ function drawSinglePanel(p){
         c.strokeStyle="#14748a";c.lineWidth=1;c.strokeRect(plotX,layerY,gw,lh);
         if(s.stackDirection!=="inside-out")layerAt+=layer.depth;
       });
-      // 통바 규격·개수는 정면도가 아니라 평면도 좌우 목록에서만 보여준다
-      // (사용자 요청) — 이 통바가 패널 가운데 기준 왼쪽/오른쪽 어디 있는지로
-      // 나눠 담는다. 관리자 화면과 동일한 규칙.
-      addTotals((plotX+gw/2)<panelW/2?leftTotals:rightTotals,s.rows);
     } else {
       var fpDepth=drawDepth*depthScale;
       c.fillStyle="#f6f6f6";c.fillRect(plotX,framePlanY,gw,fpDepth);
@@ -424,18 +437,18 @@ function drawSinglePanel(p){
     plotX+=gw;
   });
   // 규격 옆에 실제 face:depth 비율 그대로의 작은 도형을 붙여 단면 비율도
-  // 같이 보여준다(관리자 화면과 동일).
+  // 같이 보여준다(관리자 화면과 동일). leftRows/rightRows는 캔버스 높이를
+  // 정하기 전 미리 계산해둔 값을 그대로 쓴다.
   function mullionIconWH(spec){var m=String(spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/),face=m?Number(m[1]):100,depth=m?Number(m[2]):100,longer=Math.max(face,depth)||1,maxDim=12;return {w:Math.max(3,Math.round(maxDim*face/longer)),h:Math.max(3,Math.round(maxDim*depth/longer))};}
   function drawMullionIcon(cx,cy,spec){var icon=mullionIconWH(spec);c.fillStyle="#ccecf2";c.strokeStyle="#14748a";c.lineWidth=1;c.fillRect(cx-icon.w/2,cy-icon.h/2,icon.w,icon.h);c.strokeRect(cx-icon.w/2,cy-icon.h/2,icon.w,icon.h);}
-  var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+leftTotals[spec]+"개"};});
-  var rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+rightTotals[spec]+"개"};});
   c.font='11px "Malgun Gothic"';c.textBaseline="middle";
-  var specRowH=15,iconSlot=14,specRowY=framePlanY+10;
+  var specRowY=framePlanY+10;
   leftRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(pad+iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="left";c.fillText(item.text,pad+iconSlot+2,cy);});
   rightRows.forEach(function(item,n){var cy=specRowY+n*specRowH;drawMullionIcon(panelW-pad-iconSlot/2,cy,item.spec);c.fillStyle="#111";c.textAlign="right";c.fillText(item.text,panelW-pad-iconSlot-2,cy);});
 
-  // 하단: 프레임/부가옵션 텍스트
-  var footY=topY+34+60+stackExtra+10;
+  // 하단: 프레임/부가옵션 텍스트 — topViewH로 예약해둔 만큼 정확히 내려온
+  // 지점에서 시작해 평면도 내용과 절대 겹치지 않는다.
+  var footY=topY+topViewH;
   c.fillStyle="#333";c.textAlign="left";c.textBaseline="top";c.font='12px "Malgun Gothic"';
   footerLines.forEach(function(line,li){c.fillText(line,pad,footY+li*17);});
 
