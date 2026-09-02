@@ -288,23 +288,44 @@ function pinHeightScale(p){
   return maxH||2000;
 }
 
-// 통바 적층(같은/다른 규격이 깊이 방향으로 여러 겹)은 정면에서는 원래
-// 안 보이는 개념이라 정면도 안에 구분선을 넣는 건 오히려 오해를 준다
-// (규격이 서로 다른 층은 폭도 다른데 선만으로는 그게 안 보임). 관리자
-// 화면처럼 층이 2개 이상이면 작은 평면도(위에서 본 모습)를 따로 그려
-// 각 층의 규격 비율대로 옆으로 늘어놓는다 — 치수 숫자는 넣지 않는다.
-function drawMullionPlanCanvas(layers,stackDirection){
-  var segs=[];layers.forEach(function(l){for(var n=0;n<(l.count||1);n++)segs.push(l);});
-  if(stackDirection==="inside-out")segs=segs.slice().reverse();
-  var pad=4,H=22,unit=16,W=Math.max(40,segs.length*unit+pad*2);
-  var canvas=document.createElement("canvas");canvas.width=W;canvas.height=H;
-  var ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,W,H);
-  var totalFace=segs.reduce(function(s,l){return s+(parseFloat(l.spec)||100);},0),x=pad,avail=W-pad*2;
-  segs.forEach(function(l){
-    var w=Math.max(8,avail*(parseFloat(l.spec)||100)/totalFace);
-    ctx.fillStyle="#a8dff0";ctx.fillRect(x,pad,w,H-pad*2);
-    ctx.strokeStyle="#14748a";ctx.lineWidth=1;ctx.strokeRect(x,pad,w,H-pad*2);
-    x+=w;
+// spec 문자열("100×100","40×105","105×40")을 face(정면에서 보이는 폭)와
+// depth(프레임 깊이 방향 두께)로 분해 — 관리자 화면의 mullionLayers()와
+// 정확히 같은 규칙(첫 숫자=face, 둘째 숫자=depth)을 그대로 따른다. 예를 들어
+// "40×105"와 "105×40"은 face/depth가 서로 바뀐 별개 규격이라 겉보기엔
+// 숫자가 같아도 실제 폭은 다르다.
+function mullionUnits(t){
+  var units=[];
+  (t.layers||[]).forEach(function(row){
+    var m=String(row.spec).match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/);
+    var face=m?Number(m[1]):100, depth=m?Number(m[2]):100;
+    for(var i=0;i<(row.count||1);i++) units.push({face:face,depth:depth});
+  });
+  return t.stackDirection==="inside-out" ? units.slice().reverse() : units;
+}
+
+// 통바 적층(같은/다른 규격이 프레임 깊이 방향으로 여러 겹)은 정면에서는
+// 원래 안 보이는 개념이라 정면도 안에 구분선을 넣으면 오해를 준다(사용자
+// 지적: 규격이 다른 층은 face 폭도 다른데 선만으로는 그게 안 보임 —
+// 이번에 face 기준 폭 차이를 실제로 반영). 관리자 화면과 같은 방향(위쪽이
+// 실외, 아래로 갈수록 실내)으로 층을 세로로 쌓아 그린다 — 치수 숫자는
+// 넣지 않는다.
+function drawMullionPlanCanvas(t){
+  var units=mullionUnits(t);
+  var totalDepth=units.reduce(function(s,u){return s+u.depth;},0)||1;
+  var maxFace=Math.max.apply(null,units.map(function(u){return u.face;}).concat([1]));
+  var H=Math.max(30,Math.min(100,Math.round(totalDepth*0.45)));
+  var W=Math.max(20,Math.min(60,Math.round(maxFace*0.45)));
+  var scaleY=H/totalDepth;
+  var canvas=document.createElement("canvas");canvas.width=W+16;canvas.height=H+16;
+  var ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
+  var y=8;
+  units.forEach(function(u,idx){
+    var uh=Math.max(4,Math.round(u.depth*scaleY));
+    var uw=Math.max(6,Math.round(u.face/maxFace*W));
+    var ux=8+(W-uw)/2;
+    ctx.fillStyle=idx%2?"#a8dff0":"#75c9ec";ctx.fillRect(ux,y,uw,uh);
+    ctx.strokeStyle="#14748a";ctx.lineWidth=1;ctx.strokeRect(ux,y,uw,uh);
+    y+=uh;
   });
   return canvas;
 }
@@ -316,18 +337,22 @@ function drawPartThumb(t,refHmm){
   var canvas=document.createElement("canvas"), ctx;
 
   if(t.kind==="mullion"){
-    var spec=t.layers[0].spec, face=parseFloat(spec)||100;
-    var bw=Math.max(14,Math.min(60,Math.round(face*scale)));
+    var units=mullionUnits(t);
+    // 통바 face 폭은 창 높이 기준 축척(scale)을 그대로 쓰면 100mm 안팎이라
+    // 전부 최소값에 눌려붙어 규격 차이가 안 보이는 문제가 있었다(사용자
+    // 지적) — face 전용의 별도 축척을 쓴다(평면도와 동일 기준).
+    var face0=units[0]?units[0].face:100;
+    var bw=Math.max(14,Math.min(50,Math.round(face0*0.45)));
     canvas.width=bw+16;canvas.height=targetH+16;
     ctx=canvas.getContext("2d");ctx.fillStyle="#232733";ctx.fillRect(0,0,canvas.width,canvas.height);
     var bx=8,by=8;
     ctx.fillStyle="#75c9ec";ctx.fillRect(bx,by,bw,targetH);
     ctx.strokeStyle="#14748a";ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,targetH);
+    box.appendChild(el("div","sub","정면"));
     box.appendChild(canvas);
-    var segCount=t.layers.reduce(function(n,l){return n+(l.count||1);},0);
-    if(segCount>1){
-      box.appendChild(el("div","sub","평면(적층)"));
-      box.appendChild(drawMullionPlanCanvas(t.layers,t.stackDirection));
+    if(units.length>1){
+      box.appendChild(el("div","sub","평면(위에서 봄, 실외 위)"));
+      box.appendChild(drawMullionPlanCanvas(t));
     }
     box.appendChild(el("div","sub",escapeHTML(partSubText(t))));
     return box;
@@ -549,20 +574,44 @@ function openPartEditor(p,t,k){
   body.innerHTML="";
 
   if(t.kind==="mullion"){
-    var specField=el("div","field");
-    specField.appendChild(el("label","","규격"));
-    specField.appendChild(segButtons(MULLION_SPECS.map(function(v){return [v,v];}),t.layers[0].spec,function(v){t.layers[0].spec=v;t.spec=v;saveDraftLocal();}));
-    body.appendChild(specField);
-    var countField=el("div","field");
-    countField.appendChild(el("label","","수량"));
-    var countInput=document.createElement("input");countInput.type="number";countInput.min="1";countInput.value=t.layers[0].count;
-    countInput.addEventListener("input",function(){var v=parseInt(countInput.value,10)||1;t.layers[0].count=v;t.count=v;saveDraftLocal();});
-    countField.appendChild(countInput);
-    body.appendChild(countField);
+    // 통바는 같은 위치에 규격이 다른 층을 여러 개 쌓을 수 있다(예: 100×100
+    // 2개 + 40×105 2개) — "통바 추가"로 층을 늘리고 층마다 규격·수량을
+    // 따로 정한다. 목록 순서가 곧 실외→실내 순서(적층 방향에 따라 뒤집힘).
     var dirField=el("div","field");
     dirField.appendChild(el("label","","적층 방향"));
     dirField.appendChild(segButtons([["outside-in","실외 → 실내"],["inside-out","실내 → 실외"]],t.stackDirection,function(v){t.stackDirection=v;saveDraftLocal();}));
     body.appendChild(dirField);
+
+    var layersHost=el("div","field");
+    body.appendChild(layersHost);
+    function refreshLayers(){
+      layersHost.innerHTML="";
+      layersHost.appendChild(el("label","","적층 구성(목록 순서 = 실외 → 실내 방향 기준)"));
+      t.layers.forEach(function(l,li){
+        var block=document.createElement("div");
+        block.style.cssText="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;";
+        var head=document.createElement("div");head.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;";
+        head.appendChild(el("b","",(li+1)+"번째 층"));
+        if(t.layers.length>1){
+          var rm=document.createElement("button");rm.className="danger";rm.textContent="삭제";
+          rm.addEventListener("click",function(){t.layers.splice(li,1);saveDraftLocal();refreshLayers();});
+          head.appendChild(rm);
+        }
+        block.appendChild(head);
+        block.appendChild(segButtons(MULLION_SPECS.map(function(v){return [v,v];}),l.spec,function(v){l.spec=v;saveDraftLocal();}));
+        var cf=el("div","field");cf.style.marginTop="6px";
+        cf.appendChild(el("label","","수량"));
+        var ci=document.createElement("input");ci.type="number";ci.min="1";ci.value=l.count;
+        ci.addEventListener("input",function(){l.count=parseInt(ci.value,10)||1;saveDraftLocal();});
+        cf.appendChild(ci);
+        block.appendChild(cf);
+        layersHost.appendChild(block);
+      });
+      var addLayerBtn=document.createElement("button");addLayerBtn.style.width="100%";addLayerBtn.textContent="+ 통바 추가(다른 규격 한 층 더)";
+      addLayerBtn.addEventListener("click",function(){t.layers.push({spec:MULLION_SPECS[0],count:1});saveDraftLocal();refreshLayers();});
+      layersHost.appendChild(addLayerBtn);
+    }
+    refreshLayers();
   } else {
     var typeField=el("div","field");
     typeField.appendChild(el("label","","종류"));
