@@ -114,7 +114,7 @@ var PRIMARY_TYPES=[["left","왼쪽"],["right","오른쪽"],["both","양쪽"],["n
 
 function todayLocal(){var d=new Date();function p(n){return n<10?"0"+n:""+n;}return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());}
 function normalizedDetails(v){var d=v||{};return {molding:d.molding||"",filling:!!d.filling,tile:!!d.tile,drainHole:d.drainHole!==false,screen:d.screen!==false,brick:d.brick||""};}
-function newState(){return {site:"",surveyDate:todayLocal(),siteSetup:{},overallNotes:"",lifting:{method:"",other:""},planName:"",planData:"",pins:[],scale:null,flipV:false,flipH:false,wallEdits:{add:[],remove:[]}};}
+function newState(){return {site:"",draftId:null,surveyDate:todayLocal(),siteSetup:{},overallNotes:"",lifting:{method:"",other:""},planName:"",planData:"",pins:[],scale:null,flipV:false,flipH:false,wallEdits:{add:[],remove:[]}};}
 function newPin(){return {name:"",frame:"",notes:"",composition:"",details:normalizedDetails(),parts:[],x:0.5,y:0.5,angle:0,placementMode:"free",wallLock:null};}
 function newSash(type){return {kind:"sash",sashType:type||"normal",w:"0",h:"0",panels:"2짝",primary:"right",smallW:"0",smallSide:"left",addon:null};}
 function newMullion(){return {kind:"mullion",spec:MULLION_SPECS[0],count:1,stackDirection:"outside-in",layers:[{spec:MULLION_SPECS[0],count:1}]};}
@@ -122,11 +122,17 @@ function newEntry(){return {kind:"entry",w:"900",h:"2100",drawInDrawing:false};}
 function requiresFrame(p){return !!(p&&p.parts&&p.parts.some(function(t){return t.kind==="sash"||t.kind==="turn";}));}
 
 // ---- 로컬 저장(이 기기 임시 작업본) ----
-var LS_STATE="yk-simple-state-v1", LS_IDENTITY="yk-simple-identity-v1";
+var LS_STATE="yk-simple-state-v1", LS_IDENTITY="yk-simple-identity-v1", LS_PENDING="yk-simple-pending-v1";
 function saveDraftLocal(){try{localStorage.setItem(LS_STATE, JSON.stringify(state));}catch(e){}}
 function loadDraftLocal(){try{var v=localStorage.getItem(LS_STATE);return v?JSON.parse(v):null;}catch(e){return null;}}
 function saveIdentityLocal(){try{localStorage.setItem(LS_IDENTITY, JSON.stringify(identity));}catch(e){}}
 function loadIdentityLocal(){try{var v=localStorage.getItem(LS_IDENTITY);return v?JSON.parse(v):null;}catch(e){return null;}}
+// 저장 요청 도중 응답이 유실돼 사용자가 "저장"을 다시 눌러도 서버가 같은
+// 요청으로 인식해 중복 폴더를 만들지 않도록 하는 멱등키. 성공하기 전까지는
+// 기기에 남겨둬서 새로고침 후 재시도해도 같은 값을 재사용한다.
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
+var pendingSaveId=(function(){try{return localStorage.getItem(LS_PENDING)||null;}catch(e){return null;}})();
+function setPendingSaveId(v){pendingSaveId=v;try{if(v)localStorage.setItem(LS_PENDING,v);else localStorage.removeItem(LS_PENDING);}catch(e){}}
 
 // ---- 상태 ----
 var state=newState();
@@ -170,9 +176,27 @@ function renderIdentityScreen(){
   startBtn.addEventListener("click",function(){
     if(!phoneInput.value||pinInput.value.length!==4){toast("전화번호와 4자리 확인번호를 입력해주세요");return;}
     identity={phone:phoneInput.value,pin:pinInput.value};saveIdentityLocal();
-    state=newState();saveDraftLocal();
+    state=newState();saveDraftLocal();setPendingSaveId(null);
     screen="main";render();
   });
+  function applyLoadedItem(item){
+    state=item.state||newState();
+    saveIdentityLocal();saveDraftLocal();setPendingSaveId(null);
+    screen="main";render();
+    toast("불러왔습니다 — "+(item.siteName||""));
+  }
+  function renderLoadPicker(items){
+    var host=$("loadpicker");if(!host)return;
+    host.innerHTML="";
+    host.appendChild(el("div","hint","작업이 여러 개 있습니다. 이어서 할 작업을 골라주세요."));
+    items.forEach(function(it){
+      var b=document.createElement("button");
+      b.style.cssText="width:100%;margin-top:6px;text-align:left;";
+      b.textContent=(it.siteName||"현장")+" — "+(it.savedAt?String(it.savedAt).slice(0,16).replace("T"," "):"");
+      b.addEventListener("click",function(){applyLoadedItem(it);});
+      host.appendChild(b);
+    });
+  }
   var loadBtn=document.createElement("button");loadBtn.textContent="이전 저장 불러오기";
   loadBtn.addEventListener("click",function(){
     if(!phoneInput.value||pinInput.value.length!==4){toast("전화번호와 4자리 확인번호를 입력해주세요");return;}
@@ -181,10 +205,8 @@ function renderIdentityScreen(){
     callApi("load",{phone:identity.phone,pin:identity.pin}).then(function(res){
       loadBtn.disabled=false;
       if(res&&res.ok&&res.items&&res.items.length){
-        state=res.items[0].state||newState();
-        saveIdentityLocal();saveDraftLocal();
-        screen="main";render();
-        toast("불러왔습니다 — "+(res.items[0].siteName||""));
+        if(res.items.length===1) applyLoadedItem(res.items[0]);
+        else renderLoadPicker(res.items);
       }else{
         toast((res&&res.error)||"일치하는 저장 내용이 없습니다");
       }
@@ -195,6 +217,7 @@ function renderIdentityScreen(){
   });
   row.appendChild(startBtn);row.appendChild(loadBtn);
   card.appendChild(row);
+  var pickerHost=el("div","");pickerHost.id="loadpicker";card.appendChild(pickerHost);
   app.appendChild(card);
 }
 
@@ -230,7 +253,7 @@ function renderMainScreen(){
   var newSiteBtn=document.createElement("button");newSiteBtn.className="ghost";newSiteBtn.textContent="새 현장 시작";
   newSiteBtn.addEventListener("click",function(){
     if(!confirm("현재 입력을 지우고 새 현장을 시작할까요? (저장 안 한 내용은 사라집니다)"))return;
-    state=newState();saveDraftLocal();render();
+    state=newState();saveDraftLocal();setPendingSaveId(null);render();
   });
   var previewBtn=document.createElement("button");previewBtn.textContent="미리보기";
   previewBtn.addEventListener("click",function(){
@@ -497,6 +520,11 @@ function renderPinRow(p,i){
 function escapeHTML(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 
 // ---- 저장 ----
+// draftId: 이 작업이 서버에 처음 저장된 뒤부터 계속 들고 다니는 불변 식별자.
+// 있으면 서버가 "같은 작업 갱신"으로 보고 기존 폴더/파일을 그대로 덮어써서
+// (새 폴더를 또 만들지 않음) 재저장할 때마다 이름이 계속 늘어나던 문제를
+// 막는다. clientRequestId는 저장 응답이 유실됐을 때 재시도해도 서버가 같은
+// 요청으로 인식해 중복 폴더를 안 만들게 하는 멱등키.
 function doSave(btn){
   if(!state.pins.length){toast("최소 1개 이상 번호를 입력해주세요");return;}
   // 확인 다이얼로그를 즉시 닫지 않고 버튼에 "저장 중..." 상태를 보여준 채
@@ -505,14 +533,36 @@ function doSave(btn){
   var origText=btn.textContent;
   btn.disabled=true;btn.textContent="저장 중…";
   saveDraftLocal();
+  if(!pendingSaveId) setPendingSaveId(genId());
   function finish(msg){
     btn.disabled=false;btn.textContent=origText;
     toast(msg);
     $("previewdialog").close();
   }
-  callApi("save",{phone:identity.phone,pin:identity.pin,siteName:state.site||"현장",state:state}).then(function(res){
-    if(res&&res.ok) finish("저장 완료 — 이 기기와 서버 양쪽에 저장됐습니다");
-    else finish("서버 저장 실패("+((res&&res.error)||"오류")+") — 이 기기에는 저장돼 있습니다");
+  function onSaved(res){
+    state.draftId=res.draftId; state.site=res.siteName;
+    setPendingSaveId(null);
+    saveDraftLocal();
+    render(); // 서버가 이름 충돌 등으로 현장명을 바꿨을 수 있어 화면(현장명 입력란)을 최신 상태로 다시 그린다
+    finish("저장 완료 — 이 기기와 서버 양쪽에 저장됐습니다"+(res.recoveryNote?" ("+res.recoveryNote+")":""));
+  }
+  function attempt(force){
+    return callApi("save",{phone:identity.phone,pin:identity.pin,siteName:state.site||"현장",draftId:state.draftId||null,clientRequestId:pendingSaveId,force:!!force,state:state});
+  }
+  attempt(false).then(function(res){
+    if(res&&res.ok){ onSaved(res); return; }
+    if(res&&res.code==="CONFLICT"){
+      if(confirm((res.error||"다른 경로에서 이미 수정된 것 같습니다.")+"\n그래도 이 기기 내용으로 덮어쓸까요?")){
+        attempt(true).then(function(res2){
+          if(res2&&res2.ok) onSaved(res2);
+          else finish("서버 저장 실패("+((res2&&res2.error)||"오류")+") — 이 기기에는 저장돼 있습니다");
+        }).catch(function(){finish("서버 저장 실패 — 이 기기에는 저장돼 있습니다");});
+        return;
+      }
+      finish("저장을 취소했습니다 — 이 기기에는 저장돼 있습니다");
+      return;
+    }
+    finish("서버 저장 실패("+((res&&res.error)||"오류")+") — 이 기기에는 저장돼 있습니다");
   }).catch(function(e){
     finish(e.message==="NO_URL"?"서버가 아직 설정되지 않아 이 기기에만 저장했습니다":"서버 저장 실패 — 이 기기에는 저장돼 있습니다");
   });
