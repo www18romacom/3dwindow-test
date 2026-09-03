@@ -775,7 +775,15 @@ function openPartEditor(p,t,k){
       if(t.sashType==="normal"){
         var panelField=el("div","field");
         panelField.appendChild(el("label","","짝수"));
-        panelField.appendChild(segButtons(PANEL_TYPES.map(function(v){return [v,v];}),t.panels,function(v){t.panels=v;saveDraftLocal();}));
+        // 관리자 화면(실측입력.html)의 applyPanelRule()과 동일: 3짝은 항상
+        // 양쪽(맨 끝 두 짝)이 주 사용문이고, 고정은 주 사용문 없음 — 사용자가
+        // 매번 손으로 맞출 필요 없이 자동으로 정해진다.
+        panelField.appendChild(segButtons(PANEL_TYPES.map(function(v){return [v,v];}),t.panels,function(v){
+          t.panels=v;
+          if(v==="3짝")t.primary="both";
+          else if(v==="고정")t.primary="none";
+          saveDraftLocal();rebuild();
+        }));
         extraHost.appendChild(panelField);
         var primField=el("div","field");
         primField.appendChild(el("label","","주 사용문"));
