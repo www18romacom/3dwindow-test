@@ -716,6 +716,32 @@
     if(!res.ok)throw new Error("Drive 파일을 읽지 못했습니다("+res.status+")");
     return res.text();
   }
+  // 현장명을 직접 수정할 수 있게 되면서(readonly 해제), 다시 저장할 때 이름이
+  // 바뀌어 있으면 새 폴더를 만드는 대신 원래 폴더 자체를 rename해야 한다 —
+  // 그러려면 이 state가 어느 Drive 폴더에서 왔는지(state.driveFolderId)를
+  // 알아야 하므로 폴더 메타 조회/이름변경 헬퍼를 추가한다.
+  async function driveGetMeta(id){
+    return driveApiJson("https://www.googleapis.com/drive/v3/files/"+id+"?fields=id,name,trashed&supportsAllDrives=true");
+  }
+  async function driveRename(id,newName){
+    return driveApiJson("https://www.googleapis.com/drive/v3/files/"+id+"?fields=id,name&supportsAllDrives=true",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:newName})});
+  }
+  // parentId 안에서 "oldPrefix"로 시작하는 파일들(실측데이터.json, 현장평면도
+  // 이미지, 실측도면 출력본 등)을 찾아 "newPrefix"로 이름을 맞춘다 — 폴더를
+  // rename한 뒤 그 안 파일명도 같이 따라가게 하기 위함(파일 ID는 그대로라
+  // 기존 링크·재조회는 안 끊긴다).
+  async function driveRenamePrefixedFiles(parentId,oldPrefix,newPrefix){
+    if(!parentId||oldPrefix===newPrefix)return;
+    var q="'"+parentId+"' in parents and trashed=false and name contains '"+driveQueryEscape(oldPrefix)+"'";
+    var url="https://www.googleapis.com/drive/v3/files?q="+encodeURIComponent(q)+"&fields="+encodeURIComponent("files(id,name)")+"&spaces=drive&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives";
+    var data=await driveApiJson(url),files=data.files||[];
+    for(var i=0;i<files.length;i++){
+      var f=files[i];
+      if(f.name.indexOf(oldPrefix)===0){
+        try{await driveRename(f.id,newPrefix+f.name.slice(oldPrefix.length));}catch(e){ /* 하나 실패해도 나머지·저장은 계속 진행 */ }
+      }
+    }
+  }
   async function driveShareFilePublic(fileId){
     return driveApiJson("https://www.googleapis.com/drive/v3/files/"+fileId+"/permissions?supportsAllDrives=true",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({role:"reader",type:"anyone"})});
   }
@@ -766,13 +792,52 @@
   // 덮어쓰기를 선택했고 실제로 덮어써질 파일이 있으면(새 폴더는 이 경우가 없음)
   // 어떤 파일인지 보여주고 한 번 더 확인받는다.
   async function driveSaveSite(){
-    var siteName=state.site,existing=await driveFindFolder(siteName,DRIVE_ROOT_FOLDER_ID),targetName=siteName,siteFolder=null,isOverwrite=false;
-    if(existing){
-      var choice=await chooseDriveConflict(siteName);
-      if(choice.action==="cancel")return {cancelled:true};
-      if(choice.action==="overwrite"){siteFolder=existing;isOverwrite=true;}else targetName=choice.name;
+    var siteName=state.site,targetName=siteName,siteFolder=null,isOverwrite=false,oldName=null;
+
+    // 이 state가 이미 특정 Drive 폴더에서 왔으면(불러왔거나 예전에 저장한 적
+    // 있으면) 이름이 바뀌었어도 새 폴더를 만들지 않고 그 폴더 자체를
+    // rename한다 — 이름만 readonly를 풀었을 뿐 실제 rename이 안 되던 문제 수정.
+    if(state.driveFolderId){
+      try{
+        var known=await driveGetMeta(state.driveFolderId);
+        if(known&&!known.trashed){
+          oldName=known.name;
+          if(known.name===targetName){
+            siteFolder={id:state.driveFolderId,name:known.name};
+          }else{
+            var conflict=await driveFindFolder(targetName,DRIVE_ROOT_FOLDER_ID);
+            if(conflict&&conflict.id!==state.driveFolderId){
+              var choiceR=await chooseDriveConflict(targetName);
+              if(choiceR.action==="cancel")return {cancelled:true};
+              if(choiceR.action==="overwrite"){siteFolder=conflict;isOverwrite=true;}else targetName=choiceR.name;
+            }
+            if(!siteFolder){
+              await driveRename(state.driveFolderId,targetName);
+              var oldPrefix=oldName+"_",newPrefix=targetName+"_";
+              var dataFolderExisting=await driveFindFolder("현장",state.driveFolderId);
+              if(dataFolderExisting)await driveRenamePrefixedFiles(dataFolderExisting.id,oldPrefix,newPrefix);
+              var drawFolderExisting=await driveFindFolder("도면",state.driveFolderId);
+              if(drawFolderExisting)await driveRenamePrefixedFiles(drawFolderExisting.id,oldPrefix,newPrefix);
+              siteFolder={id:state.driveFolderId,name:targetName};
+            }
+          }
+        }
+      }catch(e){ /* 연결된 폴더를 못 찾으면(삭제 등) 아래 이름 기반 방식으로 폴백 */ }
     }
-    if(!siteFolder)siteFolder=await driveFindOrCreateFolder(targetName,DRIVE_ROOT_FOLDER_ID);
+
+    if(!siteFolder){
+      var existing=await driveFindFolder(targetName,DRIVE_ROOT_FOLDER_ID);
+      if(existing){
+        var choice=await chooseDriveConflict(targetName);
+        if(choice.action==="cancel")return {cancelled:true};
+        if(choice.action==="overwrite"){siteFolder=existing;isOverwrite=true;}else targetName=choice.name;
+      }
+      if(!siteFolder)siteFolder=await driveFindOrCreateFolder(targetName,DRIVE_ROOT_FOLDER_ID);
+    }
+
+    state.driveFolderId=siteFolder.id;
+    state.site=targetName; // 이름 충돌로 실제 저장된 이름이 바뀌었을 수 있으니 화면 값도 맞춘다
+    $("site").value=targetName;
     var dataFolder=await driveFindOrCreateFolder("현장",siteFolder.id);
     var filePrefix=targetName+"_";
     var jsonName=filePrefix+"실측데이터.json",existingJson=await driveFindChild(jsonName,dataFolder.id);
@@ -792,7 +857,16 @@
   // 실측도면 출력본 저장 — 현장 폴더 아래 "도면" 하위 폴더에 번호 찍힌 현장평면도(있으면)와
   // 실측도면 페이지들을 저장한다. 현장 폴더가 아직 없으면 함께 만든다.
   async function driveSaveDrawing(pages){
-    var siteName=state.site||generatedSiteName(),siteFolder=await driveFindOrCreateFolder(siteName,DRIVE_ROOT_FOLDER_ID);
+    var siteName=state.site||generatedSiteName(),siteFolder=null;
+    // 현장 저장으로 이미 연결된 폴더가 있으면 그걸 그대로 쓴다(이름 기반으로
+    // 새로 찾다가 현장 저장에서 이미 rename된 폴더와 어긋나는 것을 방지).
+    if(state.driveFolderId){
+      try{
+        var known=await driveGetMeta(state.driveFolderId);
+        if(known&&!known.trashed){siteFolder={id:state.driveFolderId,name:known.name};siteName=known.name;}
+      }catch(e){ siteFolder=null; }
+    }
+    if(!siteFolder){siteFolder=await driveFindOrCreateFolder(siteName,DRIVE_ROOT_FOLDER_ID);state.driveFolderId=siteFolder.id;}
     var drawFolder=await driveFindOrCreateFolder("도면",siteFolder.id),filePrefix=siteName+"_";
     var sitePlanName=filePrefix+"현장평면도.png";
     var pageNames=pages.map(function(_,pi){return pages.length>1?(filePrefix+"실측도면_"+(pi+1)+".png"):(filePrefix+"실측도면.png");});
@@ -3349,7 +3423,7 @@
         });
         div.appendChild(site); div.appendChild(date); div.appendChild(open); host.appendChild(div);
       });
-      var driveTitle=document.createElement("div");driveTitle.className="cap2";driveTitle.style.marginTop="14px";driveTitle.textContent="Google Drive";host.appendChild(driveTitle);try{var driveRows=await driveListFolders(DRIVE_ROOT_FOLDER_ID);if(!driveRows.length){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive에 저장된 현장이 없습니다.</div>');}driveRows.forEach(function(row){var rowName=row.name,div=document.createElement("div");div.className="saved-row";var site=document.createElement("b");site.textContent=rowName;var date=document.createElement("span");date.className="saved-date";date.textContent=row.modifiedTime?String(row.modifiedTime).slice(0,10):"Drive";var open=document.createElement("button");open.type="button";open.textContent="열기";open.addEventListener("click",async function(){open.disabled=true;try{var dataFolder=await driveFindFolder("현장",row.id);if(!dataFolder)throw new Error("현장 데이터 폴더를 찾을 수 없습니다");var jsonFile=await driveFindChild(rowName+"_실측데이터.json",dataFolder.id);if(!jsonFile)throw new Error("실측 데이터 파일을 찾을 수 없습니다");var text=await driveDownloadText(jsonFile.id),saved=JSON.parse(text);applySavedState(saved);$("savedialog").close();toast(rowName+" 현장을 Google Drive에서 불러왔습니다");}catch(e){toast("Drive 현장을 읽지 못했습니다: "+e.message);}finally{open.disabled=false;}});div.appendChild(site);div.appendChild(date);div.appendChild(open);host.appendChild(div);});}catch(e){host.insertAdjacentHTML("beforeend",'<div class="empty">Drive 연결 실패: '+e.message+'</div>');}
+      var driveTitle=document.createElement("div");driveTitle.className="cap2";driveTitle.style.marginTop="14px";driveTitle.textContent="Google Drive";host.appendChild(driveTitle);try{var driveRows=await driveListFolders(DRIVE_ROOT_FOLDER_ID);if(!driveRows.length){host.insertAdjacentHTML("beforeend",'<div class="empty">Google Drive에 저장된 현장이 없습니다.</div>');}driveRows.forEach(function(row){var rowName=row.name,div=document.createElement("div");div.className="saved-row";var site=document.createElement("b");site.textContent=rowName;var date=document.createElement("span");date.className="saved-date";date.textContent=row.modifiedTime?String(row.modifiedTime).slice(0,10):"Drive";var open=document.createElement("button");open.type="button";open.textContent="열기";open.addEventListener("click",async function(){open.disabled=true;try{var dataFolder=await driveFindFolder("현장",row.id);if(!dataFolder)throw new Error("현장 데이터 폴더를 찾을 수 없습니다");var jsonFile=await driveFindChild(rowName+"_실측데이터.json",dataFolder.id);if(!jsonFile)throw new Error("실측 데이터 파일을 찾을 수 없습니다");var text=await driveDownloadText(jsonFile.id),saved=JSON.parse(text);applySavedState(saved);state.driveFolderId=row.id;$("savedialog").close();toast(rowName+" 현장을 Google Drive에서 불러왔습니다");}catch(e){toast("Drive 현장을 읽지 못했습니다: "+e.message);}finally{open.disabled=false;}});div.appendChild(site);div.appendChild(date);div.appendChild(open);host.appendChild(div);});}catch(e){host.insertAdjacentHTML("beforeend",'<div class="empty">Drive 연결 실패: '+e.message+'</div>');}
     } catch (e) { host.innerHTML = '<div class="empty">저장 목록을 불러오지 못했습니다.</div>'; }
   }
   $("load").addEventListener("click", showSavedSurveys);
