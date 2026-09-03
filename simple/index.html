@@ -78,6 +78,11 @@ dialog::backdrop{background:rgba(0,0,0,.55);}
   </div>
 </dialog>
 
+<dialog id="loaddialog">
+  <div class="dhead"><b>현장 불러오기</b><button type="button" id="loadclose">×</button></div>
+  <div class="dbody" id="loaddialogbody"></div>
+</dialog>
+
 <script>
 (function(){
 "use strict";
@@ -179,46 +184,54 @@ function renderIdentityScreen(){
     state=newState();saveDraftLocal();setPendingSaveId(null);
     screen="main";render();
   });
-  function applyLoadedItem(item){
-    state=item.state||newState();
-    saveIdentityLocal();saveDraftLocal();setPendingSaveId(null);
-    screen="main";render();
-    toast("불러왔습니다 — "+(item.siteName||""));
-  }
-  function renderLoadPicker(items){
-    var host=$("loadpicker");if(!host)return;
-    host.innerHTML="";
-    host.appendChild(el("div","hint","작업이 여러 개 있습니다. 이어서 할 작업을 골라주세요."));
-    items.forEach(function(it){
-      var b=document.createElement("button");
-      b.style.cssText="width:100%;margin-top:6px;text-align:left;";
-      b.textContent=(it.siteName||"현장")+" — "+(it.savedAt?String(it.savedAt).slice(0,16).replace("T"," "):"");
-      b.addEventListener("click",function(){applyLoadedItem(it);});
-      host.appendChild(b);
-    });
-  }
   var loadBtn=document.createElement("button");loadBtn.textContent="이전 저장 불러오기";
   loadBtn.addEventListener("click",function(){
     if(!phoneInput.value||pinInput.value.length!==4){toast("전화번호와 4자리 확인번호를 입력해주세요");return;}
-    identity={phone:phoneInput.value,pin:pinInput.value};
-    loadBtn.disabled=true;
-    callApi("load",{phone:identity.phone,pin:identity.pin}).then(function(res){
-      loadBtn.disabled=false;
-      if(res&&res.ok&&res.items&&res.items.length){
-        if(res.items.length===1) applyLoadedItem(res.items[0]);
-        else renderLoadPicker(res.items);
-      }else{
-        toast((res&&res.error)||"일치하는 저장 내용이 없습니다");
-      }
-    }).catch(function(e){
-      loadBtn.disabled=false;
-      toast(e.message==="NO_URL"?"아직 서버가 설정되지 않았습니다 — 이 기기에서 새로 시작해주세요":"불러오기 실패: "+(e.message||e));
-    });
+    identity={phone:phoneInput.value,pin:pinInput.value};saveIdentityLocal();
+    runLoad(loadBtn);
   });
   row.appendChild(startBtn);row.appendChild(loadBtn);
   card.appendChild(row);
-  var pickerHost=el("div","");pickerHost.id="loadpicker";card.appendChild(pickerHost);
   app.appendChild(card);
+}
+
+// ---- 불러오기(식별화면·메인화면 공용) ----
+// 서버에서 항목을 가져와 1개면 바로 적용하고, 여러 개면 다이얼로그에서
+// 고르게 한다. 이미 다른 현장을 열어 작업 중일 때도(메인화면의 "불러오기"
+// 버튼) 같은 로직으로 다른 저장본으로 바로 전환할 수 있다.
+function applyLoadedItem(item){
+  state=item.state||newState();
+  saveDraftLocal();setPendingSaveId(null);
+  screen="main";render();
+  toast("불러왔습니다 — "+(item.siteName||""));
+}
+function showLoadPicker(items){
+  var body=$("loaddialogbody");body.innerHTML="";
+  body.appendChild(el("div","hint","작업이 여러 개 있습니다. 이어서 할 작업을 골라주세요."));
+  items.forEach(function(it){
+    var b=document.createElement("button");
+    b.style.cssText="width:100%;margin-top:6px;text-align:left;";
+    b.textContent=(it.siteName||"현장")+" — "+(it.savedAt?String(it.savedAt).slice(0,16).replace("T"," "):"");
+    b.addEventListener("click",function(){ $("loaddialog").close(); applyLoadedItem(it); });
+    body.appendChild(b);
+  });
+  showDialog($("loaddialog"));
+}
+function runLoad(btn){
+  var origText=btn.textContent;
+  btn.disabled=true;btn.textContent="불러오는 중…";
+  callApi("load",{phone:identity.phone,pin:identity.pin}).then(function(res){
+    btn.disabled=false;btn.textContent=origText;
+    if(res&&res.ok&&res.items&&res.items.length){
+      if(res.items.length===1) applyLoadedItem(res.items[0]);
+      else showLoadPicker(res.items);
+    }else{
+      toast((res&&res.error)||"일치하는 저장 내용이 없습니다");
+    }
+  }).catch(function(e){
+    btn.disabled=false;btn.textContent=origText;
+    toast(e.message==="NO_URL"?"아직 서버가 설정되지 않았습니다":"불러오기 실패: "+(e.message||e));
+  });
 }
 
 // ---- 화면 2: 현장명 + 번호 목록 ----
@@ -255,6 +268,11 @@ function renderMainScreen(){
     if(!confirm("현재 입력을 지우고 새 현장을 시작할까요? (저장 안 한 내용은 사라집니다)"))return;
     state=newState();saveDraftLocal();setPendingSaveId(null);render();
   });
+  var loadBtn=document.createElement("button");loadBtn.className="ghost";loadBtn.textContent="불러오기";
+  loadBtn.addEventListener("click",function(){
+    if(state.pins.length&&!confirm("다른 저장본을 불러오면 현재 화면의 저장 안 한 내용은 사라집니다. 계속할까요?"))return;
+    runLoad(loadBtn);
+  });
   var previewBtn=document.createElement("button");previewBtn.textContent="미리보기";
   previewBtn.addEventListener("click",function(){
     if(!state.pins.length){toast("먼저 번호를 추가해주세요");return;}
@@ -265,7 +283,7 @@ function renderMainScreen(){
     if(!state.pins.length){toast("최소 1개 이상 번호를 입력해주세요");return;}
     openPreview();
   });
-  footer.appendChild(newSiteBtn);footer.appendChild(previewBtn);footer.appendChild(saveBtn);
+  footer.appendChild(newSiteBtn);footer.appendChild(loadBtn);footer.appendChild(previewBtn);footer.appendChild(saveBtn);
   app.appendChild(footer);
 }
 
@@ -877,6 +895,7 @@ function showDialog(dlg){ if(dlg.open)return; if(typeof dlg.showModal==="functio
 $("partclose").addEventListener("click",function(){ $("partdialog").close(); });
 $("previewclose").addEventListener("click",function(){ $("previewdialog").close(); });
 $("previewback").addEventListener("click",function(){ $("previewdialog").close(); });
+$("loadclose").addEventListener("click",function(){ $("loaddialog").close(); });
 $("previewconfirm").addEventListener("click",function(){ doSave(this); });
 
 // ---- 시작 ----
