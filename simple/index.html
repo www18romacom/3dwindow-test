@@ -91,6 +91,17 @@ dialog::backdrop{background:rgba(0,0,0,.55);}
   <div class="dbody" id="loaddialogbody"></div>
 </dialog>
 
+<dialog id="resumedialog">
+  <div class="dhead"><b>이어서 하시겠습니까?</b></div>
+  <div class="dbody">
+    <div class="hint">직전에 작업하던 내용이 남아있습니다 — <b id="resumesite"></b></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button type="button" id="resumecontinue" class="primary" style="flex:1;">이어서 하기</button>
+      <button type="button" id="resumenew" style="flex:1;">새로 시작</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 (function(){
 "use strict";
@@ -925,6 +936,17 @@ $("previewclose").addEventListener("click",function(){ $("previewdialog").close(
 $("previewback").addEventListener("click",function(){ $("previewdialog").close(); });
 $("loadclose").addEventListener("click",function(){ $("loaddialog").close(); });
 $("previewconfirm").addEventListener("click",function(){ doSave(this); });
+$("resumecontinue").addEventListener("click",function(){ $("resumedialog").close(); });
+$("resumenew").addEventListener("click",function(){
+  $("resumedialog").close();
+  state=newState();saveDraftLocal();setPendingSaveId(null);render();
+});
+
+// 데스크톱 브라우저에서 입력 중 실수로 탭을 닫으면 경고를 띄운다(모바일/카톡
+// 인앱 브라우저는 이 이벤트를 대부분 무시하므로 어디까지나 보조 안전장치).
+window.addEventListener("beforeunload",function(e){
+  if(screen==="main"&&state.pins&&state.pins.length){ e.preventDefault(); e.returnValue=""; }
+});
 
 // ---- 시작 ----
 (function boot(){
@@ -936,6 +958,13 @@ $("previewconfirm").addEventListener("click",function(){ doSave(this); });
     screen="identity";
   }
   render();
+  // 직전 작업이 실제로 내용이 있을 때만 "이어서/새로" 선택을 물어본다 —
+  // 빈 상태(방금 새 현장 시작 등)까지 매번 물어보면 번거로움만 커진다.
+  var hasContent = screen==="main" && ((state.pins&&state.pins.length) || (state.site&&state.site.trim()));
+  if(hasContent){
+    $("resumesite").textContent = (state.site&&state.site.trim())||("번호 "+state.pins.length+"개");
+    showDialog($("resumedialog"));
+  }
 })();
 
 })();

@@ -594,6 +594,7 @@
 </dialog>
 <dialog id="driveconflict"><div class="dialog-head"><b>Google Drive에 같은 이름의 현장이 있습니다</b></div><div class="dialog-body"><div id="driveconflictfiles" class="cap2"></div><label>새로 만들 경우 폴더 이름<input type="text" id="driveversionname"></label><p>저장 방법을 선택해주세요.</p><div class="btnrow"><button type="button" class="primary" id="driveoverwrite">덮어쓰기</button><button type="button" id="driveversion">새로 만들기</button><button type="button" id="drivecancel">취소</button></div></div></dialog>
 <dialog id="partdetail"><div class="dialog-head"><b id="partdetailtitle">구성 세부입력</b><button type="button" class="primary" id="partdetaildone">완료</button></div><div class="dialog-body" id="partdetailbody"></div></dialog>
+<dialog id="resumedialog"><div class="dialog-head"><b>이어서 하시겠습니까?</b></div><div class="dialog-body"><p>직전에 작업하던 내용이 남아있습니다 — <b id="resumesite"></b></p><div class="btnrow"><button type="button" class="primary" id="resumecontinue">이어서 하기</button><button type="button" id="resumenew">새로 시작</button></div></div></dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="busyoverlay" class="busy-overlay" role="status" aria-live="assertive" hidden>
@@ -1294,6 +1295,7 @@
                   planData: s.planData || "", pins: s.pins,
                   scale: s.scale && (s.scale.mmPerPixel || s.scale.mmPerFracX) ? s.scale : null,
                   flipV: !!s.flipV, flipH: !!s.flipH,
+                  driveFolderId: s.driveFolderId || null,
                   wallEdits: s.wallEdits || { add: [], remove: [] } };
         if (!Array.isArray(state.wallEdits.add)) state.wallEdits.add = [];
         if (!Array.isArray(state.wallEdits.remove)) state.wallEdits.remove = [];
@@ -1581,22 +1583,29 @@
     });
   });
 
-  $("resetall").addEventListener("click", function () {
-    if (!confirm("기초입력·현장 평면도·번호·벽 보정을 모두 초기화하고 새 현장을 시작할까요? 저장하지 않은 내용은 되돌릴 수 없습니다.")) return;
-    var backup = JSON.parse(JSON.stringify(state)), backupSel = sel;
+  // 전체 초기화(새 현장 시작) — 버튼 클릭 시와, 시작 시 "이어서/새로" 선택에서
+  // "새로 시작"을 골랐을 때 둘 다 이 로직을 공유한다.
+  function resetToNewSite() {
     state.site = ""; state.surveyDate = todayLocal(); state.siteSetup = {}; state.overallNotes = "";
     state.lifting = { method: "", other: "" }; state.planName = ""; state.planData = ""; state.pins = [];
     state.scale = null; state.flipV = false; state.flipH = false; state.wallEdits = { add: [], remove: [] };
+    state.driveFolderId = null;
     sel = null; planPixels = null; planZoom = 1;
     $("plan").src = ""; $("stage").hidden = true; $("planviewtools").hidden = true; $("ph").hidden = false; $("drop").classList.remove("hasimg");
     $("site").value = state.site; $("surveydate").value = state.surveyDate;
     fillGlobalInputs(); fillSetup(false); updateScaleHint();
     persist(); render(); refreshDone();
+  }
+  $("resetall").addEventListener("click", function () {
+    if (!confirm("기초입력·현장 평면도·번호·벽 보정을 모두 초기화하고 새 현장을 시작할까요? 저장하지 않은 내용은 되돌릴 수 없습니다.")) return;
+    var backup = JSON.parse(JSON.stringify(state)), backupSel = sel;
+    resetToNewSite();
     showUndo("전체 초기화했습니다", function () {
       state.site = backup.site; state.surveyDate = backup.surveyDate; state.siteSetup = backup.siteSetup;
       state.overallNotes = backup.overallNotes; state.lifting = backup.lifting; state.planName = backup.planName;
       state.planData = backup.planData; state.pins = backup.pins; state.scale = backup.scale;
       state.flipV = backup.flipV; state.flipH = backup.flipH; state.wallEdits = backup.wallEdits;
+      state.driveFolderId = backup.driveFolderId || null;
       sel = backupSel;
       $("site").value = state.site; $("surveydate").value = state.surveyDate;
       fillGlobalInputs(); fillSetup(!!state.site); updateScaleHint();
@@ -3527,6 +3536,12 @@
     r.readAsText(f);
   });
 
+  // 데스크톱 브라우저에서 입력 중 실수로 탭을 닫으면 경고를 띄운다(모바일/카톡
+  // 인앱 브라우저는 이 이벤트를 대부분 무시하므로 어디까지나 보조 안전장치).
+  window.addEventListener("beforeunload", function (e) {
+    if (state.pins && state.pins.length) { e.preventDefault(); e.returnValue = ""; }
+  });
+
   /* ---------------- 시작 ---------------- */
   restore();
   state.siteSetup = normalizedSetup(state.siteSetup);
@@ -3537,6 +3552,13 @@
   updateScaleHint();
   if (state.planData) showPlan(state.planData, state.planName);
   render();
+  // 직전 작업이 실제로 내용이 있을 때만 "이어서/새로" 선택을 물어본다.
+  if (state.site || (state.pins && state.pins.length)) {
+    $("resumesite").textContent = state.site || ("번호 " + state.pins.length + "개");
+    $("resumecontinue").onclick = function () { $("resumedialog").close(); };
+    $("resumenew").onclick = function () { $("resumedialog").close(); resetToNewSite(); };
+    $("resumedialog").showModal();
+  }
 })();
 </script>
 </body>
