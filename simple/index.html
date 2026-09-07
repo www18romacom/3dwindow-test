@@ -54,6 +54,11 @@ dialog::backdrop{background:rgba(0,0,0,.55);}
 .dbody{padding:14px 16px;max-height:70vh;overflow:auto;}
 .toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:#000;color:#fff;padding:10px 16px;border-radius:8px;font-size:14px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center;}
 .toast.show{opacity:.94;}
+.busyoverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:80;}
+.busyoverlay[hidden]{display:none;}
+.busybox{background:var(--panel);color:var(--ink);border-radius:14px;padding:20px 26px;display:flex;align-items:center;gap:12px;font-size:15px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.25);}
+.busyspin{width:20px;height:20px;border-radius:50%;flex:none;border:3px solid var(--line);border-top-color:var(--ink);animation:busyspin .8s linear infinite;}
+@keyframes busyspin{to{transform:rotate(360deg);}}
 .hint{font-size:12px;color:var(--ink2);margin-top:6px;}
 .sub{font-size:12px;color:var(--ink2);}
 .empty{color:var(--ink2);font-size:13px;text-align:center;padding:18px 0;}
@@ -63,6 +68,9 @@ dialog::backdrop{background:rgba(0,0,0,.55);}
 <header><b>창호 실측 간편입력</b><span class="who" id="whoLabel"></span></header>
 <main id="app"></main>
 <div class="toast" id="toast"></div>
+<div class="busyoverlay" id="busyoverlay" role="status" aria-live="assertive" hidden>
+  <div class="busybox"><div class="busyspin"></div><span id="busytext"></span></div>
+</div>
 
 <dialog id="partdialog">
   <div class="dhead"><b id="partdialogtitle">구성 입력</b><button type="button" id="partclose">×</button></div>
@@ -91,6 +99,8 @@ var $=function(id){return document.getElementById(id);};
 // ---- 표시/토스트 ----
 var toastTimer=null;
 function toast(msg){var t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(function(){t.classList.remove("show");},2400);}
+function showBusy(msg){$("busytext").textContent=msg;$("busyoverlay").hidden=false;}
+function hideBusy(){$("busyoverlay").hidden=true;}
 
 // ---- 저장 서버(Apps Script) 설정 ----
 // 배포 후 이 값에 새 Apps Script 웹앱의 /exec 주소를 넣는다. 비어있으면
@@ -220,8 +230,9 @@ function showLoadPicker(items){
 function runLoad(btn){
   var origText=btn.textContent;
   btn.disabled=true;btn.textContent="불러오는 중…";
+  showBusy("서버에서 불러오는 중…");
   callApi("load",{phone:identity.phone,pin:identity.pin}).then(function(res){
-    btn.disabled=false;btn.textContent=origText;
+    btn.disabled=false;btn.textContent=origText;hideBusy();
     if(res&&res.ok&&res.items&&res.items.length){
       if(res.items.length===1) applyLoadedItem(res.items[0]);
       else showLoadPicker(res.items);
@@ -229,7 +240,7 @@ function runLoad(btn){
       toast((res&&res.error)||"일치하는 저장 내용이 없습니다");
     }
   }).catch(function(e){
-    btn.disabled=false;btn.textContent=origText;
+    btn.disabled=false;btn.textContent=origText;hideBusy();
     toast(e.message==="NO_URL"?"아직 서버가 설정되지 않았습니다":"불러오기 실패: "+(e.message||e));
   });
 }
@@ -550,10 +561,12 @@ function doSave(btn){
   // 없어 다시 눌러 중복 저장하기 쉬웠던 문제를 막기 위함.
   var origText=btn.textContent;
   btn.disabled=true;btn.textContent="저장 중…";
+  showBusy("서버에 저장하는 중…");
   saveDraftLocal();
   if(!pendingSaveId) setPendingSaveId(genId());
   function finish(msg){
     btn.disabled=false;btn.textContent=origText;
+    hideBusy();
     toast(msg);
     $("previewdialog").close();
   }
@@ -570,7 +583,9 @@ function doSave(btn){
   attempt(false).then(function(res){
     if(res&&res.ok){ onSaved(res); return; }
     if(res&&res.code==="CONFLICT"){
+      hideBusy();
       if(confirm((res.error||"다른 경로에서 이미 수정된 것 같습니다.")+"\n그래도 이 기기 내용으로 덮어쓸까요?")){
+        showBusy("서버에 저장하는 중…");
         attempt(true).then(function(res2){
           if(res2&&res2.ok) onSaved(res2);
           else finish("서버 저장 실패("+((res2&&res2.error)||"오류")+") — 이 기기에는 저장돼 있습니다");
