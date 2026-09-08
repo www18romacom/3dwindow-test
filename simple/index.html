@@ -145,6 +145,33 @@ function newPin(){return {name:"",frame:"",notes:"",composition:"",details:norma
 function newSash(type){return {kind:"sash",sashType:type||"normal",w:"0",h:"0",panels:"2짝",primary:"right",smallW:"0",smallSide:"left",addon:null};}
 function newMullion(){return {kind:"mullion",spec:MULLION_SPECS[0],count:1,stackDirection:"outside-in",layers:[{spec:MULLION_SPECS[0],count:1}]};}
 function newEntry(){return {kind:"entry",w:"900",h:"2100",drawInDrawing:false};}
+
+// ---- 서버/localStorage에서 불러온 state 정규화 ----
+// 관리자 도구가 만들었거나 예전 버전이 저장한 state는 필드가 없거나 형식이
+// 다를 수 있다(예: parts/details/lifting/wallEdits 누락). newState()/newPin()
+// 기본값 위에 실제 값만 얹어 항상 완전한 형태로 맞춰서, 이후 p.parts.length나
+// p.details.molding 같은 접근에서 런타임 오류가 나지 않게 한다.
+function normalizePin(v){
+  var p=v||{};
+  return {
+    name:p.name||"", frame:p.frame||"", notes:p.notes||"", composition:p.composition||"",
+    details:normalizedDetails(p.details),
+    parts:Array.isArray(p.parts)?p.parts:[],
+    x:typeof p.x==="number"?p.x:0.5, y:typeof p.y==="number"?p.y:0.5,
+    angle:typeof p.angle==="number"?p.angle:0,
+    placementMode:p.placementMode||"free",
+    wallLock:p.wallLock||null
+  };
+}
+function normalizeLoadedState(raw){
+  var base=newState(), r=raw||{};
+  var out=Object.assign({}, base, r);
+  out.siteSetup=(r.siteSetup&&typeof r.siteSetup==="object")?r.siteSetup:base.siteSetup;
+  out.lifting=(r.lifting&&typeof r.lifting==="object")?{method:r.lifting.method||"",other:r.lifting.other||""}:base.lifting;
+  out.wallEdits=(r.wallEdits&&typeof r.wallEdits==="object")?{add:Array.isArray(r.wallEdits.add)?r.wallEdits.add:[],remove:Array.isArray(r.wallEdits.remove)?r.wallEdits.remove:[]}:base.wallEdits;
+  out.pins=Array.isArray(r.pins)?r.pins.map(normalizePin):[];
+  return out;
+}
 function requiresFrame(p){return !!(p&&p.parts&&p.parts.some(function(t){return t.kind==="sash"||t.kind==="turn";}));}
 
 // ---- 로컬 저장(이 기기 임시 작업본) ----
@@ -171,7 +198,7 @@ function render(){
   else renderMainScreen();
 }
 
-function el(tag,cls,html){var e=document.createElement(tag);if(cls)e.className=cls;if(html!==undefined)e.innerHTML=html;return e;}
+function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 
 function digitsOnly(v,max){return String(v||"").replace(/[^0-9]/g,"").slice(0,max||30);}
 
@@ -221,7 +248,7 @@ function renderIdentityScreen(){
 // 고르게 한다. 이미 다른 현장을 열어 작업 중일 때도(메인화면의 "불러오기"
 // 버튼) 같은 로직으로 다른 저장본으로 바로 전환할 수 있다.
 function applyLoadedItem(item){
-  state=item.state||newState();
+  state=normalizeLoadedState(item.state);
   saveDraftLocal();setPendingSaveId(null);
   screen="main";render();
   toast("불러왔습니다 — "+(item.siteName||""));
@@ -316,7 +343,7 @@ function openPreview(){
     var block=el("div","card");
     block.style.marginBottom="10px";
     var head=el("div","",""); head.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;";
-    head.appendChild(el("b","",(i+1)+"번"+(p.name?(" · "+escapeHTML(p.name)):"")));
+    head.appendChild(el("b","",(i+1)+"번"+(p.name?(" · "+p.name):"")));
     if(requiresFrame(p)) head.appendChild(el("span","sub","프레임 "+(p.frame||"미선택")));
     block.appendChild(head);
     if(!p.parts.length){
@@ -547,17 +574,15 @@ function renderPinRow(p,i){
   row.appendChild(dragHandle());
   var bodyEl=el("div","body");
   var top=el("div","top");
-  var label=el("b","",(i+1)+"번"+(p.name?(" · "+escapeHTML(p.name)):""));
+  var label=el("b","",(i+1)+"번"+(p.name?(" · "+p.name):""));
   top.appendChild(label);
   var openBtn=document.createElement("button");openBtn.textContent="편집";openBtn.addEventListener("click",function(){openPinDetail(i);});
   top.appendChild(openBtn);
   bodyEl.appendChild(top);
-  bodyEl.appendChild(el("div","sub",escapeHTML(pinSummary(p))+(requiresFrame(p)?(" · 프레임 "+(p.frame||"미선택")):"")));
+  bodyEl.appendChild(el("div","sub",pinSummary(p)+(requiresFrame(p)?(" · 프레임 "+(p.frame||"미선택")):"")));
   row.appendChild(bodyEl);
   return row;
 }
-
-function escapeHTML(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 
 // ---- 저장 ----
 // draftId: 이 작업이 서버에 처음 저장된 뒤부터 계속 들고 다니는 불변 식별자.
@@ -953,7 +978,7 @@ window.addEventListener("beforeunload",function(e){
   var savedIdentity=loadIdentityLocal();
   var savedState=loadDraftLocal();
   if(savedIdentity&&savedIdentity.phone&&savedState){
-    identity=savedIdentity;state=savedState;screen="main";
+    identity=savedIdentity;state=normalizeLoadedState(savedState);screen="main";
   } else {
     screen="identity";
   }
