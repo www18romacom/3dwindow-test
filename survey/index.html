@@ -1142,7 +1142,13 @@
       return (names[st]||"창")+" "+(t.w||0)+"x"+(t.h||0)+(st==="normal"?" - "+(t.panels||"2짝"):st==="unbalanced"?" - 소형창 폭 "+(t.smallW||0)+" ("+(t.smallSide==="right"?"오른쪽":"왼쪽")+")":"")+(addon?" - 덧창 "+addon.w+"x"+addon.h:"");
     }).join(" + ");
   }
-  function syncComposition(p) { p.composition=compositionSummary(p); var i=state.pins.indexOf(p),el=document.querySelector('textarea[data-composition-pin="'+i+'"]');if(el)el.value=p.composition; }
+  // 사용자가 "창호 구성 문자열"을 직접 고친 뒤(p.compositionManual=true)에는
+  // 치수·짝수 등이 바뀌어도 자동 요약으로 덮어쓰지 않는다 — "자동으로
+  // 되돌리기"를 눌러야만 다시 자동 계산으로 돌아간다.
+  function syncComposition(p) {
+    if (p.compositionManual) return;
+    p.composition=compositionSummary(p); var i=state.pins.indexOf(p),el=document.querySelector('textarea[data-composition-pin="'+i+'"]');if(el)el.value=p.composition;
+  }
   var DETAIL_FIELDS = [["molding","몰딩"],["filling","사춤"],["tile","타일"],["drainHole","물구멍"],["screen","방충망"],["brick","벽돌"]];
   var DETAIL_DEFAULT_ON = { drainHole: true, screen: true };
   function normalizedDetails(v) {
@@ -1349,6 +1355,7 @@
           if (typeof p.frame !== "string") p.frame = "";
           if (typeof p.notes !== "string") p.notes = "";
           if (typeof p.composition !== "string") p.composition = "";
+          if (typeof p.compositionManual !== "boolean") p.compositionManual = false;
           if(isEntryPin(p)&&typeof p.drawInDrawing!=="boolean")p.drawInDrawing=!!(p.parts.filter(function(t){return t.kind==="entry";})[0]||{}).drawInDrawing;
           p.details = normalizedDetails(p.details);
           if (typeof p.angle !== "number") p.angle = 0;
@@ -2177,8 +2184,28 @@
     if (!isEntryPin(p)) {
       syncComposition(p);
       var comp = document.createElement("div"); comp.className = "frame-row";
-      var compInput = document.createElement("textarea"); compInput.value = p.composition; compInput.readOnly = true; compInput.dataset.compositionPin=i;
-      comp.appendChild(labeled("창호 구성 문자열 · 자동 요약", compInput)); body.appendChild(comp);
+      var compHead = document.createElement("div");
+      compHead.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+      var compLabel = document.createElement("span"); compLabel.className = "lab";
+      var compReset = document.createElement("button"); compReset.type = "button"; compReset.textContent = "자동으로 되돌리기";
+      compReset.style.cssText = "font-size:12px;padding:2px 8px;";
+      var compInput = document.createElement("textarea"); compInput.value = p.composition; compInput.dataset.compositionPin=i;
+      // 직접 수정하면 그 순간부터 "수동 모드"로 바뀌어(p.compositionManual=true,
+      // syncComposition()에서 존중됨) 이후 치수/짝수 등을 고쳐도 자동으로
+      // 덮어써지지 않는다. "자동으로 되돌리기"를 눌러야만 다시 자동 계산.
+      function updateCompHead() {
+        compLabel.textContent = "창호 구성 문자열" + (p.compositionManual ? " · 직접 입력됨" : " · 자동 요약");
+        compReset.hidden = !p.compositionManual;
+      }
+      updateCompHead();
+      compInput.addEventListener("input", function () {
+        p.composition = compInput.value; p.compositionManual = true; persist(); updateCompHead();
+      });
+      compReset.addEventListener("click", function () {
+        p.compositionManual = false; syncComposition(p); compInput.value = p.composition; persist(); updateCompHead();
+      });
+      compHead.appendChild(compLabel); compHead.appendChild(compReset);
+      comp.appendChild(compHead); comp.appendChild(compInput); body.appendChild(comp);
     }
     // ---- 3D 미리보기 ----
     var m3wrap = document.createElement("div");
@@ -3498,6 +3525,7 @@
       if (typeof p.frame !== "string") p.frame = "";
       if (typeof p.notes !== "string") p.notes = "";
       if (typeof p.composition !== "string") p.composition = "";
+      if (typeof p.compositionManual !== "boolean") p.compositionManual = false;
       p.details = normalizedDetails(p.details);
       if (!Array.isArray(p.parts)) p.parts = [];
       if (Array.isArray(p.parts)) p.parts.forEach(function (t) {
