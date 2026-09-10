@@ -3225,9 +3225,16 @@
       var planTotalMm=sizes.reduce(function(n,s){return n+(s.w||0);},0)||1, planScale=geometryW/planTotalMm;
       function addTotals(target,rows){rows.forEach(function(row){if(specOrder.indexOf(row.spec)<0)specOrder.push(row.spec);target[row.spec]=(target[row.spec]||0)+row.count;});}
       var plotX=geometryX;
+      // 좌/우 구분은 화면 픽셀 중앙(x+panelW/2)과 비교하는 방식이었으나, 축척이
+      // 서로 다른 정면도 폭 기준으로 가운데 정렬된 탓에 실제 구성 순서와
+      // 어긋나 잘못 분류되는 경우가 있었다(예: 왼쪽 통바 3개 중 일부가 오른쪽
+      // 합계로 잘못 들어감). 픽셀 위치 대신 구성 순서 자체로 판단한다 — 첫
+      // 번째 창/현관보다 앞에 있는 통바는 왼쪽, 그 뒤는 오른쪽.
+      var firstNonMullionIdx=-1;
+      sizes.forEach(function(s,idx){if(s.kind!=="mullion"&&firstNonMullionIdx<0)firstNonMullionIdx=idx;});
       // 통바는 창 폭 축척이 아니라 프레임 깊이와 같은 축척(depthScale)을 폭에도 써서
       // 실제 face:depth 비율 그대로 그린다(정사각형 통바는 정사각형으로 보이게).
-      sizes.forEach(function(s){var gx=plotX,gw=s.kind==="mullion"?Math.max(4,s.w*depthScale):Math.max(4,s.w*planScale);plotX+=gw;if(s.kind==="mullion"){var layerAt=s.stackDirection==="inside-out"?drawDepth:0;s.layers.forEach(function(layer,li){if(s.stackDirection==="inside-out")layerAt-=layer.depth;var lh=Math.max(2,layer.depth*depthScale),layerY=framePlanY+layerAt*depthScale;c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);if(s.stackDirection!=="inside-out")layerAt+=layer.depth;});addTotals((gx+gw/2)<x+panelW/2?leftTotals:rightTotals,s.rows);}else{var framePlanDepth=drawDepth*depthScale;c.fillStyle="#f6f6f6";c.fillRect(gx,framePlanY,gw,framePlanDepth);c.strokeStyle="#111";c.strokeRect(gx,framePlanY,gw,framePlanDepth);if(s.addon){var addonDepth=(frameDepthMm(s.addon.frame)||drawDepth)*depthScale,addonY=framePlanY+(drawDepth+20)*depthScale;c.fillStyle="#d9f1e9";c.fillRect(gx,addonY,gw,addonDepth);c.strokeStyle="#2f8577";c.strokeRect(gx,addonY,gw,addonDepth);}}});
+      sizes.forEach(function(s,idx){var gx=plotX,gw=s.kind==="mullion"?Math.max(4,s.w*depthScale):Math.max(4,s.w*planScale);plotX+=gw;if(s.kind==="mullion"){var layerAt=s.stackDirection==="inside-out"?drawDepth:0;s.layers.forEach(function(layer,li){if(s.stackDirection==="inside-out")layerAt-=layer.depth;var lh=Math.max(2,layer.depth*depthScale),layerY=framePlanY+layerAt*depthScale;c.fillStyle=li%2?"#a9dce6":"#ccecf2";c.fillRect(gx,layerY,gw,lh);c.strokeStyle="#14748a";c.strokeRect(gx,layerY,gw,lh);if(s.stackDirection!=="inside-out")layerAt+=layer.depth;});addTotals((firstNonMullionIdx<0||idx<firstNonMullionIdx)?leftTotals:rightTotals,s.rows);}else{var framePlanDepth=drawDepth*depthScale;c.fillStyle="#f6f6f6";c.fillRect(gx,framePlanY,gw,framePlanDepth);c.strokeStyle="#111";c.strokeRect(gx,framePlanY,gw,framePlanDepth);if(s.addon){var addonDepth=(frameDepthMm(s.addon.frame)||drawDepth)*depthScale,addonY=framePlanY+(drawDepth+20)*depthScale;c.fillStyle="#d9f1e9";c.fillRect(gx,addonY,gw,addonDepth);c.strokeStyle="#2f8577";c.strokeRect(gx,addonY,gw,addonDepth);}}});
       var leftRows=specOrder.filter(function(spec){return leftTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+leftTotals[spec]+"개"};}),rightRows=specOrder.filter(function(spec){return rightTotals[spec];}).map(function(spec){return {spec:spec,text:spec+" "+rightTotals[spec]+"개"};});
       // 규격 목록 앞뒤에 실제 face:depth 비율 그대로의 작은 도형을 붙여, 평면도
       // 본체(창 폭 축척이라 통바가 눌려 보임)와 별개로 실제 단면 비율을 보여준다.
