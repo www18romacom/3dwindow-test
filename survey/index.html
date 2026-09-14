@@ -528,10 +528,14 @@
       <input type="date" id="surveydate">
 
       <div class="site-fields" style="margin-top:12px">
-        <label class="field">양중방법
-          <select id="liftingmethod">
-            <option value="">미정</option><option>사다리차</option><option>윈치</option><option>엘리베이터</option><option>계단 운반</option><option value="기타">기타</option>
-          </select>
+        <label class="field wide">양중방법(복수 선택 가능)
+          <div id="liftingmethods" style="display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:2px;">
+            <label class="chk"><input type="checkbox" value="사다리차">사다리차</label>
+            <label class="chk"><input type="checkbox" value="유압윈치">유압윈치</label>
+            <label class="chk"><input type="checkbox" value="세대윈치">세대윈치</label>
+            <label class="chk"><input type="checkbox" value="스카이차">스카이차</label>
+            <label class="chk"><input type="checkbox" value="기타">기타</label>
+          </div>
         </label>
         <label class="field" id="liftingotherwrap" hidden>기타 양중방법<input type="text" id="liftingother" placeholder="양중방법 직접 입력" autocomplete="off"></label>
         <label class="field wide">전체 특이사항<textarea id="overallnotes" placeholder="현장 전체에 적용되는 특이사항" rows="3" autocomplete="off"></textarea></label>
@@ -651,7 +655,7 @@
     var d = new Date(), z = function (v) { return String(v).padStart(2, "0"); };
     return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
   }
-  var state = { site: "", surveyDate: todayLocal(), siteSetup: {}, overallNotes: "", lifting: { method: "", other: "" }, planName: "", planData: "", pins: [], scale: null,
+  var state = { site: "", surveyDate: todayLocal(), siteSetup: {}, overallNotes: "", lifting: { methods: [], other: "" }, planName: "", planData: "", pins: [], scale: null,
                 flipV: false, flipH: false, wallEdits: { add: [], remove: [] } };
   var sel = null;
   var openPartDetailState = null;
@@ -1011,24 +1015,35 @@
     var people = [s.manager || "박", vendor || "LX", s.vendorName || "와이케이"].map(function(v){return v.trim();}).filter(Boolean);
     return [compactDate(state.surveyDate), "[실측]", "(" + people.join("-") + ")", s.address.trim(), s.note.trim() ? "(" + s.note.trim() + ")" : ""].filter(Boolean).join(" ").replace(/[\\/:*?\"<>|\x00-\x1f]/g, "_");
   }
+  // 양중방법은 복수 선택 가능하도록 methods 배열로 관리한다. 예전 데이터(단일
+  // 문자열 method)와 예전 "윈치" 명칭(→유압윈치로 개명)도 그대로 불러와지도록
+  // 여기서 이관한다.
   function normalizedLifting(v) {
-    var src=v||{}, method=typeof src.method==="string"?src.method:"", other=typeof src.other==="string"?src.other:"";
-    return { method: method, other: other };
+    var src=v||{}, other=typeof src.other==="string"?src.other:"", methods;
+    if (Array.isArray(src.methods)) methods=src.methods.filter(function(m){return typeof m==="string"&&m;});
+    else if (typeof src.method==="string"&&src.method) methods=[src.method];
+    else methods=[];
+    methods=methods.map(function(m){return m==="윈치"?"유압윈치":m;});
+    return { methods: methods, other: other };
   }
   function liftingText() {
-    var l=normalizedLifting(state.lifting), value=l.method==="기타"?l.other:l.method;
-    return value ? "양중: "+value : "";
+    var l=normalizedLifting(state.lifting);
+    var labels=l.methods.map(function(m){return m==="기타"?(l.other||"기타"):m;});
+    return labels.length ? "양중: "+labels.join(", ") : "";
   }
   function syncGlobalInputs() {
     state.overallNotes=$("overallnotes").value || "";
-    state.lifting={method:$("liftingmethod").value || "",other:$("liftingother").value || ""};
-    $("liftingotherwrap").hidden=state.lifting.method!=="기타";
+    var methods=Array.from($("liftingmethods").querySelectorAll('input[type="checkbox"]:checked')).map(function(cb){return cb.value;});
+    state.lifting={methods:methods,other:$("liftingother").value || ""};
+    $("liftingotherwrap").hidden=methods.indexOf("기타")<0;
   }
   function fillGlobalInputs() {
     state.overallNotes=typeof state.overallNotes==="string"?state.overallNotes:"";
     state.lifting=normalizedLifting(state.lifting);
-    $("overallnotes").value=state.overallNotes; $("liftingmethod").value=state.lifting.method; $("liftingother").value=state.lifting.other;
-    $("liftingotherwrap").hidden=state.lifting.method!=="기타";
+    $("overallnotes").value=state.overallNotes;
+    Array.from($("liftingmethods").querySelectorAll('input[type="checkbox"]')).forEach(function(cb){cb.checked=state.lifting.methods.indexOf(cb.value)>=0;});
+    $("liftingother").value=state.lifting.other;
+    $("liftingotherwrap").hidden=state.lifting.methods.indexOf("기타")<0;
   }
   function setupFromInputs() {
     state.surveyDate = $("setupdate").value || todayLocal();
@@ -1085,8 +1100,11 @@
   $("basetext").addEventListener("input", parseBaseText);
   $("applysite").addEventListener("click", function(){ setupFromInputs(); var name = generatedSiteName(); if (!state.siteSetup.address.trim()) { toast("현장주소를 확인해주세요"); $("setupaddress").focus(); return; } $("site").value = state.site = name; $("surveydate").value = state.surveyDate; persist(); fillSetup(true); toast("기초입력을 적용했습니다"); });
   $("editsitesetup").addEventListener("click", function(){ fillSetup(false); $("basetext").focus(); });
-  ["overallnotes","liftingmethod","liftingother"].forEach(function(id){
-    $(id).addEventListener(id==="liftingmethod"?"change":"input",function(){syncGlobalInputs();persist();});
+  ["overallnotes","liftingother"].forEach(function(id){
+    $(id).addEventListener("input",function(){syncGlobalInputs();persist();});
+  });
+  Array.from($("liftingmethods").querySelectorAll('input[type="checkbox"]')).forEach(function(cb){
+    cb.addEventListener("change",function(){syncGlobalInputs();persist();});
   });
 
   // 현장 평면도를 화면에 뒤집어 보여줄 때(상하/좌우), 저장되는 좌표는 항상 "원본 이미지
@@ -1627,7 +1645,7 @@
   // "새로 시작"을 골랐을 때 둘 다 이 로직을 공유한다.
   function resetToNewSite() {
     state.site = ""; state.surveyDate = todayLocal(); state.siteSetup = {}; state.overallNotes = "";
-    state.lifting = { method: "", other: "" }; state.planName = ""; state.planData = ""; state.pins = [];
+    state.lifting = { methods: [], other: "" }; state.planName = ""; state.planData = ""; state.pins = [];
     state.scale = null; state.flipV = false; state.flipH = false; state.wallEdits = { add: [], remove: [] };
     state.driveFolderId = null;
     sel = null; planPixels = null; planZoom = 1;
