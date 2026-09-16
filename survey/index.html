@@ -3001,8 +3001,12 @@
       var walls = new THREE.InstancedMesh(wallGeo, wallMat, wallPieces.length), matrix = new THREE.Matrix4();
       wallPieces.forEach(function (piece, idx) {
         var wx = piece.n % structure.gw, wy = Math.floor(piece.n / structure.gw);
+        // 평면도가 상하/좌우 반전 표시 중이면(state.flipH/flipV), 벽 그리드도 화면에
+        // 보이는 대로 좌표를 미러링해서 3D에 반영한다 — 그리드 감지 자체(openingAt)는
+        // 원본 좌표계 그대로 두고, 실제로 배치하는 이 시점에서만 뒤집는다.
+        var mwx = state.flipH ? (structure.gw - 1 - wx) : wx, mwy = state.flipV ? (structure.gh - 1 - wy) : wy;
         matrix.makeScale(cellW * 1.08, piece.h, cellD * 1.08);
-        matrix.setPosition((wx + .5) * cellW, piece.y, (wy + .5) * cellD); walls.setMatrixAt(idx, matrix);
+        matrix.setPosition((mwx + .5) * cellW, piece.y, (mwy + .5) * cellD); walls.setMatrixAt(idx, matrix);
       });
       walls.instanceMatrix.needsUpdate = true;
       scene.add(walls);
@@ -3021,10 +3025,16 @@
       });
       var hasDoor = p.parts.some(function (t) { return t.kind === "turn" || (t.kind === "sash" && t.sashType === "turn") || t.kind === "entry"; });
       var baseY = hasDoor ? 0 : Math.max(0, 2.4 - geo.height * mm);
-      group.position.set(p.x * planWmm * mm, baseY, p.y * planHmm * mm);
+      // 평면도가 상하/좌우 반전 표시 중이면 번호 위치도 화면에 보이는 대로(dispX/dispY)
+      // 미러링해서 배치한다 — 그래야 3D가 화면에서 보정한 방향과 일치한다.
+      var px3d = dispX(p.x), py3d = dispY(p.y);
+      group.position.set(px3d * planWmm * mm, baseY, py3d * planHmm * mm);
       if ((p.angle || 0) === 90) group.rotation.y = -Math.PI / 2;
-      // 통바/창 구성 순서는 언제나 실내에서 바라본 왼쪽부터 유지한다.
-      var pOutside = outsideSignForPin(p), wallFrameDepth=(frameDepthMm(p.frame)||(hasDoor?140:140))*mm;
+      // 통바/창 구성 순서는 언제나 실내에서 바라본 왼쪽부터 유지한다. outsideSignForPin()은
+      // 반전 전(원본) 좌표 기준이라, 반전 중인 축(각도 90도면 좌우/flipH, 아니면 상하/flipV)이면
+      // 부호를 뒤집어 화면과 일치시킨다.
+      var pOutsideRaw = outsideSignForPin(p), pOutsideFlip=(p.angle||0)===90?state.flipH:state.flipV;
+      var pOutside = pOutsideFlip ? -pOutsideRaw : pOutsideRaw, wallFrameDepth=(frameDepthMm(p.frame)||(hasDoor?140:140))*mm;
       // 번호 위치의 벽선은 창틀 실외면이다. 프레임 중심은 여기서 실내 방향으로 반 깊이 이동한다.
       if((p.angle||0)===90)group.position.x+=pOutside*wallFrameDepth/2;
       else group.position.z+=-pOutside*wallFrameDepth/2;
@@ -3033,7 +3043,7 @@
       var labelName = p.name || ((pinIndex + 1) + "번");
       var frameName = isEntryPin(p) ? "현관문" : (requiresFrame(p) ? (p.frame || "프레임 미선택") : "통바");
       var labelText = labelName + " · " + frameName + " · " + Math.round(geo.width) + "×" + Math.round(geo.height);
-      var labelPos = [p.x * planWmm * mm, baseY + geo.height * mm + .95, p.y * planHmm * mm];
+      var labelPos = [px3d * planWmm * mm, baseY + geo.height * mm + .95, py3d * planHmm * mm];
       var label = makeLabelSprite(THREE, labelText);
       label.position.set(labelPos[0], labelPos[1], labelPos[2]);
       scene.add(label);
