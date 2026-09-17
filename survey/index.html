@@ -2937,9 +2937,16 @@
     var textW = Math.ceil(ctx.measureText(text).width), padX = 22;
     c.width = Math.max(180, textW + padX * 2); c.height = 82;
     ctx.font = "700 34px system-ui, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = accent || "#4f5961"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
-    ctx.fillStyle = accent || "#20262b"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    if (accent) {
+      ctx.fillStyle = accent; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.strokeStyle = accent; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+      ctx.fillStyle = "#fff";
+    } else {
+      ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.strokeStyle = "#4f5961"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+      ctx.fillStyle = "#20262b";
+    }
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(text, c.width / 2, c.height / 2);
     var mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true });
     var s = new THREE.Sprite(mat); s.scale.set(c.width * .0051, .42, 1); s.renderOrder = 10; return s;
