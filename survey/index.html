@@ -2931,15 +2931,15 @@
     return { gw: gw, gh: gh, mask: mask, entrance: entrance };
   }
 
-  function makeLabelSprite(THREE, text) {
+  function makeLabelSprite(THREE, text, accent) {
     var c = document.createElement("canvas"), ctx = c.getContext("2d");
     ctx.font = "700 34px system-ui, sans-serif";
     var textW = Math.ceil(ctx.measureText(text).width), padX = 22;
     c.width = Math.max(180, textW + padX * 2); c.height = 82;
     ctx.font = "700 34px system-ui, sans-serif";
     ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = "#4f5961"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
-    ctx.fillStyle = "#20262b"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.strokeStyle = accent || "#4f5961"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+    ctx.fillStyle = accent || "#20262b"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(text, c.width / 2, c.height / 2);
     var mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true });
     var s = new THREE.Sprite(mat); s.scale.set(c.width * .0051, .42, 1); s.renderOrder = 10; return s;
@@ -3063,9 +3063,12 @@
       scene.add(group);
       var labelName = p.name || ((pinIndex + 1) + "번");
       var frameName = isEntryPin(p) ? "현관문" : (requiresFrame(p) ? (p.frame || "프레임 미선택") : "통바");
-      var labelText = labelName + " · " + frameName + " · " + Math.round(geo.width) + "×" + Math.round(geo.height);
+      // 현관은 정면도·평면도에 실측 치수로 그려지는 대상이 아니라 항상 고정된
+      // 기본값(900×2100)일 뿐이라 3D 라벨에서도 수치가 의미 없다 — 이름만
+      // 다른 색으로 눈에 띄게 보여준다.
+      var labelText = isEntryPin(p) ? labelName : (labelName + " · " + frameName + " · " + Math.round(geo.width) + "×" + Math.round(geo.height));
       var labelPos = [px3d * planWmm * mm, baseY + geo.height * mm + .95, py3d * planHmm * mm];
-      var label = makeLabelSprite(THREE, labelText);
+      var label = makeLabelSprite(THREE, labelText, isEntryPin(p) ? "#287a68" : null);
       label.position.set(labelPos[0], labelPos[1], labelPos[2]);
       scene.add(label);
       labelData.push([labelText, labelPos]);
