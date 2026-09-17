@@ -301,6 +301,7 @@
     margin: 4px 0 0 58px; font-size: 12px; color: var(--ink-3);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .op-sum.op-sum-entry { color: #287a68; font-weight: 700; }
   .op.open .op-sum { display: none; }
 
   .op-body { display: none; padding: 0 12px 12px; }
@@ -1796,6 +1797,9 @@
   }
   function summarize(p) {
     if (!p.parts.length) return "구성 선택 전";
+    // 정면도·평면도에 표시하지 않기로 한 현관(기본값)은 900×2100 같은 고정
+    // 수치가 어차피 도면에 안 나와 의미가 없으므로, 치수 대신 "현관"만 보여준다.
+    if (isEntryPin(p) && !p.drawInDrawing) return "현관";
     var s = sizedParts(p);
     var base = (s.length && hasSize(s[0])) ? (s[0].w + "×" + s[0].h) : "치수 미입력";
     var extra = p.parts.length > 1 ? (" 외 " + (p.parts.length - 1) + "개 구성") : "";
@@ -2066,7 +2070,8 @@
     head.appendChild(row);
 
     var sum = document.createElement("div");
-    sum.className = "op-sum"; sum.textContent = summarize(p);
+    sum.className = "op-sum" + (isEntryPin(p) && !p.drawInDrawing ? " op-sum-entry" : "");
+    sum.textContent = summarize(p);
     head.appendChild(sum);
 
     // 행 전체 클릭 = 펼치기/접기 토글(VS Code와 동일). 이름 입력창 클릭은 예외(펼치기만, 편집 중 접히지 않게).
@@ -2533,7 +2538,7 @@
         var b = op.querySelector(".no");
         if (b) b.classList.toggle("done", d);
         var s = op.querySelector(".op-sum");
-        if (s) s.textContent = summarize(p);
+        if (s) { s.textContent = summarize(p); s.classList.toggle("op-sum-entry", isEntryPin(p) && !p.drawInDrawing); }
       }
     });
 
