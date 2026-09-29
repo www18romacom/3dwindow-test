@@ -2506,7 +2506,7 @@
     return {layout:layout,width:layout.width*pxPerMm,depth:layout.depth*pxPerMm};
   }
   function drawPlanStructureCanvas(ctx,p,cx,cy,planW,planH,img){
-    var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth,interiorAxis=-outsideSignForPin(p);ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.scale(1,interiorAxis);ctx.translate(-view.width/2,0);
+    var view=planOverlayPixels(p,planW,planH,img),sx=view.width/view.layout.width,sy=view.depth/view.layout.depth,interiorAxis=-outsideSignForPin(p);ctx.save();ctx.translate(cx,cy);ctx.rotate((p.angle||0)*Math.PI/180);ctx.scale(interiorAxis,interiorAxis);ctx.translate(-view.width/2,0);
     view.layout.items.forEach(function(item){if(item.kind!=="mullion"){ctx.fillStyle="#fffdf2";ctx.fillRect(item.x*sx,item.y*sy,item.w*sx,item.depth*sy);ctx.strokeStyle="#555";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,item.y*sy,item.w*sx,item.depth*sy);if(item.addon){ctx.fillStyle="#d9f1e9";ctx.fillRect(item.x*sx,item.addon.y*sy,item.w*sx,item.addon.depth*sy);ctx.strokeStyle="#2f8577";ctx.strokeRect(item.x*sx,item.addon.y*sy,item.w*sx,item.addon.depth*sy);}return;}item.layers.forEach(function(layer){ctx.fillStyle=layer.label==="100×100"?"#75c9ec":"#c8ebfa";ctx.fillRect(item.x*sx,layer.y*sy,layer.face*sx,layer.depth*sy);ctx.strokeStyle="#14748a";ctx.lineWidth=1.5;ctx.strokeRect(item.x*sx,layer.y*sy,layer.face*sx,layer.depth*sy);});});ctx.restore();
   }
   function refreshSpanBar(i) {
@@ -2514,7 +2514,7 @@
     if (!p || !bar) return;
     var view=planOverlayPixels(p,$("stage").clientWidth,$("stage").clientHeight,$("plan"));
     var sy=view.depth/view.layout.depth,offset=view.layout.minY*sy,interiorAxis=-outsideSignForPin(p);
-    bar.style.width=view.width+"px";bar.style.height=view.depth+"px";bar.style.transform="rotate("+(p.angle||0)+"deg) scale(1,"+interiorAxis+") translate(-50%, "+offset+"px)";bar.style.transformOrigin="0 0";drawPlanStructureSvg(bar,view.layout);
+    bar.style.width=view.width+"px";bar.style.height=view.depth+"px";bar.style.transform="rotate("+(p.angle||0)+"deg) scale("+interiorAxis+","+interiorAxis+") translate(-50%, "+offset+"px)";bar.style.transformOrigin="0 0";drawPlanStructureSvg(bar,view.layout);
   }
 
   function refreshDone() {
