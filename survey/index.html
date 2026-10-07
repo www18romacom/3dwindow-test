@@ -2592,7 +2592,11 @@
           var rr = rotatePoint90(face, 0, steps);
           origin = [origin[0] + rr[0], origin[1] + rr[1]];
         }
-        steps += corner.turnDir === "left" ? 1 : -1;
+        // 실제 렌더링을 실내 시점 기준으로 확인한 결과 "왼쪽"이 안쪽(실내 방향)으로,
+        // "오른쪽"이 바깥쪽(실외 방향)으로 꺾여 사용자 기대(왼쪽=바깥쪽/멀어짐,
+        // 오른쪽=안쪽/가까워짐)와 반대로 나와 회전 방향만 뒤집음(2026-10-07). 저장된
+        // turnDir 값·라벨("왼쪽"/"오른쪽")은 그대로 두고 그 값이 만드는 실제 회전만 교체.
+        steps += corner.turnDir === "left" ? -1 : 1;
       }
     });
     var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -2871,7 +2875,9 @@
           var postMat = (face === 100 && depth === 100) ? "mullion100" : "mullion40105";
           boxes.push(transformBoxBy90({ mat: postMat, pos: [0, maxH / 2, 0], size: [face, maxH, depth] }, origin, steps));
         }
-        steps += corner.turnDir === "left" ? 1 : -1;
+        // 평면도 쪽과 동일한 사유로 회전 방향만 뒤집음(2026-10-07) — 위 planStructureSegments
+        // 주석 참고.
+        steps += corner.turnDir === "left" ? -1 : 1;
       }
     });
     var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
