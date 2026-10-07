@@ -2926,17 +2926,39 @@
     scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a80, 1.15));
     var d1 = new THREE.DirectionalLight(0xffffff, 1.05); d1.position.set(1, 1.6, 2.2); scene.add(d1);
 
-    var cw = geo.width * mm, ch = geo.height * mm, cx = cw / 2, cy = ch / 2;
+    // 코너 블록으로 꺾인 구간은 Z축(깊이) 쪽으로도 상자가 뻗어나가는데, 예전 계산은
+    // X/Y만 보고 중심·거리를 잡아서(2026-10-07, 코너 추가 직후 발견) 그 구간이 카메라
+    // 중심에서 벗어나거나 극단적으로 얇게(거의 옆모습으로) 보였다. 실제 상자들의 X/Z
+    // 바운딩 박스를 직접 재서 중심·거리를 잡는다 — 코너가 없으면 zExt가 프레임 두께
+    // 수준(작음)이라 아래 식이 기존 결과와 거의 같아진다(회귀 없음).
+    var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    geo.boxes.forEach(function (b) {
+      var hx = b.size[0] / 2, hz = b.size[2] / 2;
+      minX = Math.min(minX, b.pos[0] - hx); maxX = Math.max(maxX, b.pos[0] + hx);
+      minZ = Math.min(minZ, b.pos[2] - hz); maxZ = Math.max(maxZ, b.pos[2] + hz);
+    });
+    var ch = geo.height * mm, cy = ch / 2;
+    var cx = (minX + maxX) / 2 * mm, cz = (minZ + maxZ) / 2 * mm;
+    var xExt = Math.max(1, maxX - minX) * mm, zExt = Math.max(1, maxZ - minZ) * mm;
+    var diag = Math.hypot(xExt, zExt);
     var cam = new THREE.PerspectiveCamera(32, W / H, 0.01, 50);
-    // 살짝 정면(사시)보다 각도를 더 줘서 통바·터닝도어처럼 깊이(Z)가 있는
-    // 구성도 형태가 드러나게 함(2026-08-18, 터닝도어 리프가 거의 안 보이던 문제 수정).
-    var dist = Math.max(cw, ch) * 1.55 + 0.4;
-    cam.position.set(cx - cw * 0.38, cy + ch * 0.2, dist);
-    cam.lookAt(cx, cy, 0);
+    // 살짝 정면(사시)보다 각도를 더 줘서 통바·터닝도어·코너처럼 깊이(Z)가 있는
+    // 구성도 형태가 드러나게 함(2026-08-18, 터닝도어 리프가 거의 안 보이던 문제 수정 +
+    // 2026-10-07 코너 대응 보강). 코너로 꺾인 구간은 Z축(깊이)으로 상당히 뻗어나가는데,
+    // 거의 정면에서 보면 그 구간이 카메라 시선과 거의 평행해져 얇은 옆모습으로만 보인다
+    // (평면상 "꺾인 모양"은 눈높이가 아니라 위에서 봐야 드러나는 것과 같은 이치) — 깊이가
+    // 프레임 두께(약 150mm) 수준을 뚜렷이 넘어서면(=실제 코너가 있으면) 카메라를 더 높은
+    // 각도로 기울여 두 구간이 한 화면에 들어오게 한다. 코너가 없으면 depthRatio≈0이라
+    // 기존 결과와 같아진다(회귀 없음).
+    var depthRatio = Math.min(1, Math.max(0, (zExt - 0.15) / Math.max(xExt, 0.001)));
+    var elevRatio = 0.2 + depthRatio * 0.65;
+    var dist = Math.max(diag, ch) * 1.55 + 0.4;
+    cam.position.set(cx - xExt * 0.38, cy + ch * elevRatio, cz + zExt * 0.38 + dist * 0.7);
+    cam.lookAt(cx, cy, cz);
 
     var controls = new OrbitControls(cam, renderer.domElement);
     controls.enableDamping = true; controls.enablePan = false;
-    controls.target.set(cx, cy, 0);
+    controls.target.set(cx, cy, cz);
     controls.minDistance = dist * 0.45; controls.maxDistance = dist * 2.4;
 
     var raf = null, disposed = false;
