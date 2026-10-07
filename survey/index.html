@@ -2845,7 +2845,12 @@
     var r = rotatePoint90(box.pos[0], box.pos[2], steps);
     var size = box.size.slice();
     if ((((steps % 4) + 4) % 4) % 2 === 1) { var tmp = size[0]; size[0] = size[2]; size[2] = tmp; }
-    return { mat: box.mat, pos: [origin[0] + r[0], box.pos[1], origin[1] + r[1]], size: size, rotY: (box.rotY || 0) + steps * Math.PI / 2 };
+    // size에서 가로/깊이를 이미 바꿔(swap) 90도 꺾인 모양을 반영했으므로, 여기서 메시에
+    // steps*90도 회전까지 추가로 걸면 이중 회전이 되어 크기 교체 효과가 상쇄되고 원래
+    // 방향(꺾이기 전 크기)으로 되돌아가 버린다(2026-10-07, 코너 뒤 구간이 앞 구간 한가운데를
+    // 가로질러 겹쳐 보이던 버그의 원인). steps 회전은 size 교체만으로 충분하므로 여기서는
+    // 더하지 않고, 터닝도어처럼 원래부터 있던 자체 회전각(rotY)만 그대로 넘긴다.
+    return { mat: box.mat, pos: [origin[0] + r[0], box.pos[1], origin[1] + r[1]], size: size, rotY: box.rotY || 0 };
   }
   function opGeometryBoxesWithCorners(p) {
     var split = splitPartsAtCorners(p.parts || []);
